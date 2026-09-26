@@ -4,7 +4,7 @@ import type { CheerioAPI } from 'cheerio';
 import { z } from 'zod';
 import { env } from '../env.js';
 import type { RecipeDraft } from './draft.js';
-import { ImportError } from './errors.js';
+import { ImportError, NoRecipeFoundError } from './errors.js';
 
 /**
  * Fallback for pages without structured recipe data, and for pasted text:
@@ -21,7 +21,11 @@ const section = z.object({
 });
 
 const extraction = z.object({
-  found: z.boolean().describe('false if the text does not contain a recipe'),
+  found: z
+    .boolean()
+    .describe(
+      'true if the text gives ingredients or steps for a dish, even informally (e.g. a social media caption); false if it only mentions or describes food',
+    ),
   title: z.string(),
   description: z.string().nullable().describe('One or two sentences, or null'),
   servings: z.string().nullable(),
@@ -78,12 +82,24 @@ export async function extractWithAi(text: string, sourceUrl: string | null): Pro
     ],
   });
 
+  console.info(
+    JSON.stringify({
+      msg: 'ai recipe extraction',
+      model: response.model,
+      found: response.parsed_output?.found ?? null,
+      stopReason: response.stop_reason,
+      inputTokens: response.usage.input_tokens,
+      outputTokens: response.usage.output_tokens,
+      source: sourceUrl,
+    }),
+  );
+
   if (response.stop_reason === 'refusal') {
     throw new ImportError('The AI declined to process this page.');
   }
   const result = response.parsed_output;
   if (!result) throw new ImportError("The AI couldn't read a recipe from this page.");
-  if (!result.found) throw new ImportError("Couldn't find a recipe on this page.");
+  if (!result.found) throw new NoRecipeFoundError("Couldn't find a recipe on this page.");
 
   const nonNegative = (n: number | null) => (n != null && n > 0 ? n : null);
   return {
