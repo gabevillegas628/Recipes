@@ -1,16 +1,18 @@
 import { useQueryClient } from '@tanstack/react-query';
-import { NavLink, Outlet } from 'react-router-dom';
+import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { api } from '../api';
+import { signOut } from '../session';
 import type { User } from '../types';
 
 export function Layout({ user }: { user: User }) {
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
 
   async function logout() {
     if (!confirm(`Log out ${user.name}?`)) return;
     await api.logout();
-    queryClient.clear();
-    queryClient.setQueryData(['me'], null);
+    signOut(queryClient);
+    navigate('/', { replace: true });
   }
 
   return (
