@@ -49,6 +49,13 @@ function RecipeView({ recipe }: { recipe: Recipe }) {
     <article className="page recipe">
       {img && <img className="hero" src={img} alt="" />}
 
+      {recipe.needsReview && (
+        <div className="banner">
+          AI pulled this recipe from a page without structured data. Give it a once-over; saving
+          it from Edit clears this note.
+        </div>
+      )}
+
       <h1 className="recipe-title">{recipe.title}</h1>
       {recipe.description && <p className="recipe-desc">{recipe.description}</p>}
 

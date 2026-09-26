@@ -17,4 +17,7 @@ export const env = {
   uploadDir: path.resolve(process.env.UPLOAD_DIR ?? '../uploads'),
   /** Built React app, served by this server in production. */
   webDist: path.resolve(process.env.WEB_DIST ?? '../web/dist'),
+  /** Optional. Enables AI extraction for pages without structured recipe data and for pasted text. */
+  anthropicApiKey: process.env.ANTHROPIC_API_KEY || null,
+  anthropicModel: process.env.ANTHROPIC_MODEL || 'claude-opus-5',
 };

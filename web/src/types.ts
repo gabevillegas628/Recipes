@@ -15,6 +15,7 @@ export interface RecipeSummary {
   cookMinutes: number | null;
   totalMinutes: number | null;
   favorite: boolean;
+  needsReview: boolean;
   createdAt: string;
   tags: string[];
 }
@@ -29,7 +30,46 @@ export interface Recipe extends RecipeSummary {
   updatedAt: string;
 }
 
-export type RecipeInput = Omit<Recipe, 'id' | 'image' | 'createdAt' | 'updatedAt'>;
+export type RecipeInput = Omit<Recipe, 'id' | 'image' | 'needsReview' | 'createdAt' | 'updatedAt'> & {
+  /** Omit to keep the current image, a URL to download a new one, or null to remove it. */
+  imageUrl?: string | null;
+};
+
+/** A recipe extracted from a link or pasted text, not yet saved. */
+export interface RecipeDraft {
+  title: string;
+  description: string | null;
+  sourceUrl: string | null;
+  imageUrl: string | null;
+  servings: string | null;
+  prepMinutes: number | null;
+  cookMinutes: number | null;
+  totalMinutes: number | null;
+  ingredients: Section[];
+  instructions: Section[];
+  notes: string | null;
+  tags: string[];
+}
+
+export type ImportMethod = 'jsonld' | 'microdata' | 'ai';
+
+export interface ImportResult {
+  draft: RecipeDraft;
+  method: ImportMethod;
+  duplicateOf: { id: string; title: string } | null;
+}
+
+export type ImportStatus = 'PENDING' | 'RUNNING' | 'DONE' | 'DUPLICATE' | 'FAILED';
+
+export interface ImportJob {
+  id: string;
+  url: string;
+  status: ImportStatus;
+  method: ImportMethod | null;
+  error: string | null;
+  recipe: { id: string; title: string } | null;
+  createdAt: string;
+}
 
 export interface User {
   id: string;

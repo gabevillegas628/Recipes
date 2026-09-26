@@ -25,6 +25,10 @@ export function Layout({ user }: { user: User }) {
           <BookIcon />
           <span>Recipes</span>
         </NavLink>
+        <NavLink to="/import" className="tab">
+          <LinkIcon />
+          <span>Import</span>
+        </NavLink>
         <NavLink to="/new" className="tab">
           <PlusIcon />
           <span>Add</span>
@@ -55,6 +59,15 @@ function BookIcon() {
     <svg {...iconProps}>
       <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20V3H6.5A2.5 2.5 0 0 0 4 5.5z" />
       <path d="M4 19.5A2.5 2.5 0 0 0 6.5 22H20v-5" />
+    </svg>
+  );
+}
+
+function LinkIcon() {
+  return (
+    <svg {...iconProps}>
+      <path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7" />
+      <path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7" />
     </svg>
   );
 }

@@ -1,9 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useState, type FormEvent } from 'react';
+import { useState, type FormEvent, type ReactNode } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { api } from '../api';
+import { api, imageUrl } from '../api';
 import { sectionsToText, textToSections } from '../sections';
-import type { Recipe, RecipeInput } from '../types';
+import type { Recipe, RecipeDraft, RecipeInput } from '../types';
 
 export function RecipeEditPage() {
   const { id } = useParams<{ id: string }>();
@@ -15,7 +15,12 @@ export function RecipeEditPage() {
 
   if (id && existing.isPending) return null;
   if (existing.error) return <p className="page error">{existing.error.message}</p>;
-  return <RecipeForm key={id ?? 'new'} recipe={existing.data} />;
+  return (
+    <div className="page">
+      <h1 className="form-title">{existing.data ? 'Edit recipe' : 'New recipe'}</h1>
+      <RecipeForm key={id ?? 'new'} recipe={existing.data} />
+    </div>
+  );
 }
 
 interface FormState {
@@ -30,9 +35,13 @@ interface FormState {
   notes: string;
   tags: string;
   sourceUrl: string;
+  /** A new image to download on save. */
+  imageUrl: string;
 }
 
-function toForm(r?: Recipe): FormState {
+type Initial = (Recipe | RecipeDraft) | undefined;
+
+function toForm(r: Initial): FormState {
   return {
     title: r?.title ?? '',
     description: r?.description ?? '',
@@ -45,24 +54,44 @@ function toForm(r?: Recipe): FormState {
     notes: r?.notes ?? '',
     tags: r?.tags.join(', ') ?? '',
     sourceUrl: r?.sourceUrl ?? '',
+    imageUrl: r && 'imageUrl' in r ? (r.imageUrl ?? '') : '',
   };
 }
 
 const toInt = (s: string) => (s.trim() ? Math.max(0, Math.round(Number(s))) || null : null);
 
-function RecipeForm({ recipe }: { recipe?: Recipe }) {
+/**
+ * Create/edit form. Pass `recipe` to edit an existing one, or `draft` to review
+ * an imported recipe before saving it.
+ */
+export function RecipeForm({
+  recipe,
+  draft,
+  onCancel,
+  banner,
+}: {
+  recipe?: Recipe;
+  draft?: RecipeDraft;
+  onCancel?: () => void;
+  banner?: ReactNode;
+}) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const [form, setForm] = useState<FormState>(() => toForm(recipe));
+  const [form, setForm] = useState<FormState>(() => toForm(recipe ?? draft));
+  const [removeImage, setRemoveImage] = useState(false);
   const set = (key: keyof FormState) => (e: { target: { value: string } }) =>
     setForm((f) => ({ ...f, [key]: e.target.value }));
 
+  const currentImage = recipe && !removeImage ? imageUrl(recipe.image) : null;
+  const preview = form.imageUrl.trim() || currentImage;
+
   const save = useMutation({
     mutationFn: () => {
+      const newImage = form.imageUrl.trim();
       const input: RecipeInput = {
         title: form.title,
         description: form.description || null,
-        source: recipe?.source ?? 'MANUAL',
+        source: recipe?.source ?? (draft ? (draft.sourceUrl ? 'URL' : 'MANUAL') : 'MANUAL'),
         sourceUrl: form.sourceUrl || null,
         servings: form.servings || null,
         prepMinutes: toInt(form.prepMinutes),
@@ -73,6 +102,7 @@ function RecipeForm({ recipe }: { recipe?: Recipe }) {
         notes: form.notes || null,
         favorite: recipe?.favorite ?? false,
         tags: form.tags.split(','),
+        imageUrl: newImage ? newImage : removeImage ? null : undefined,
       };
       return recipe ? api.updateRecipe(recipe.id, input) : api.createRecipe(input);
     },
@@ -90,8 +120,24 @@ function RecipeForm({ recipe }: { recipe?: Recipe }) {
   }
 
   return (
-    <form className="page form" onSubmit={submit}>
-      <h1>{recipe ? 'Edit recipe' : 'New recipe'}</h1>
+    <form className="form" onSubmit={submit}>
+      {banner}
+
+      {preview && (
+        <div className="image-preview">
+          <img src={preview} alt="" />
+          <button
+            type="button"
+            className="btn btn-small"
+            onClick={() => {
+              setForm((f) => ({ ...f, imageUrl: '' }));
+              if (recipe?.image) setRemoveImage(true);
+            }}
+          >
+            Remove photo
+          </button>
+        </div>
+      )}
 
       <label className="field">
         <span>Title</span>
@@ -155,10 +201,16 @@ function RecipeForm({ recipe }: { recipe?: Recipe }) {
         <input type="url" value={form.sourceUrl} onChange={set('sourceUrl')} />
       </label>
 
+      <label className="field">
+        <span>Photo link</span>
+        <small>Paste an image address to use as the photo.</small>
+        <input type="url" value={form.imageUrl} onChange={set('imageUrl')} />
+      </label>
+
       {save.error && <p className="error">{save.error.message}</p>}
 
       <div className="form-actions">
-        <button type="button" className="btn" onClick={() => navigate(-1)}>
+        <button type="button" className="btn" onClick={onCancel ?? (() => navigate(-1))}>
           Cancel
         </button>
         <button className="btn btn-primary" disabled={save.isPending}>

@@ -1,7 +1,7 @@
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { api, imageUrl } from '../api';
+import { api, thumbUrl } from '../api';
 import { displayTime } from '../sections';
 import type { RecipeSummary } from '../types';
 
@@ -87,7 +87,7 @@ export function RecipeListPage() {
 }
 
 function RecipeRow({ recipe }: { recipe: RecipeSummary }) {
-  const img = imageUrl(recipe.image);
+  const img = thumbUrl(recipe.image);
   const time = displayTime(recipe);
   return (
     <li>

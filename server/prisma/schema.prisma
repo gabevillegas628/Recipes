@@ -16,6 +16,7 @@ model User {
   passwordHash String
   createdAt    DateTime @default(now())
   recipes      Recipe[]
+  importJobs   ImportJob[]
 }
 
 enum RecipeSource {
@@ -42,13 +43,43 @@ model Recipe {
   instructions Json         @default("[]")
   notes        String?
   favorite     Boolean      @default(false)
+  /// Set when the recipe was extracted by AI rather than structured data; cleared on the next manual save.
+  needsReview  Boolean      @default(false)
   tags         Tag[]
   createdBy    User?        @relation(fields: [createdById], references: [id], onDelete: SetNull)
   createdById  String?
   createdAt    DateTime     @default(now())
   updatedAt    DateTime     @updatedAt
+  importJobs   ImportJob[]
 
   @@index([createdAt])
+  @@index([sourceUrl])
+}
+
+enum ImportStatus {
+  PENDING
+  RUNNING
+  DONE
+  DUPLICATE
+  FAILED
+}
+
+/// One URL from a bulk import. Processed in the background by the import worker.
+model ImportJob {
+  id          String       @id @default(cuid())
+  url         String
+  status      ImportStatus @default(PENDING)
+  /// How the recipe was found: jsonld | microdata | ai
+  method      String?
+  error       String?
+  recipe      Recipe?      @relation(fields: [recipeId], references: [id], onDelete: SetNull)
+  recipeId    String?
+  createdBy   User?        @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  createdById String?
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  @@index([status, createdAt])
 }
 
 model Tag {

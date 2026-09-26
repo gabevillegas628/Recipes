@@ -460,12 +460,171 @@ button {
 
 /* ---------- Form ---------- */
 
-.form h1 {
-  margin-bottom: 16px;
-}
-
 .form-actions {
   display: flex;
   justify-content: flex-end;
   gap: 8px;
+}
+
+.form-title {
+  margin-bottom: 16px;
+}
+
+.btn-small {
+  min-height: 34px;
+  padding: 0 12px;
+  font-size: 14px;
+}
+
+/* ---------- Import ---------- */
+
+.banner {
+  padding: 10px 12px;
+  margin-bottom: 16px;
+  border-radius: var(--radius);
+  background: var(--accent-soft);
+  font-size: 15px;
+}
+
+.segmented {
+  display: flex;
+  padding: 3px;
+  margin-bottom: 16px;
+  border-radius: 999px;
+  background: var(--border);
+}
+
+.segmented button {
+  flex: 1;
+  min-height: 38px;
+  border: 0;
+  border-radius: 999px;
+  background: none;
+  font-size: 15px;
+  cursor: pointer;
+}
+
+.segmented button.on {
+  background: var(--surface);
+  font-weight: 600;
+}
+
+.import-more {
+  margin-top: 32px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+
+.import-more p {
+  margin: 0 0 8px;
+}
+
+.image-preview {
+  position: relative;
+  margin-bottom: 16px;
+}
+
+.image-preview img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+  border-radius: var(--radius);
+  background: var(--border);
+}
+
+.image-preview .btn {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+}
+
+.jobs {
+  margin-top: 24px;
+}
+
+.jobs-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.jobs-header p {
+  margin: 0;
+  font-size: 14px;
+}
+
+.job-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.job {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.job-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.job-title {
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.job-url {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.job-note {
+  font-size: 13px;
+}
+
+.status {
+  flex: none;
+  width: 92px;
+  padding: 2px 0;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  text-align: center;
+  background: var(--border);
+  color: var(--muted);
+}
+
+.status-running {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.status-done {
+  background: #dcefdc;
+  color: #2d6a2f;
+}
+
+.status-failed {
+  background: #f8dcda;
+  color: var(--danger);
+}
+
+@media (prefers-color-scheme: dark) {
+  .status-done {
+    background: #1f3a21;
+    color: #8fd18f;
+  }
+  .status-failed {
+    background: #432220;
+  }
 }

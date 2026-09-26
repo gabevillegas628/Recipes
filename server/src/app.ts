@@ -4,7 +4,9 @@ import fastifyStatic from '@fastify/static';
 import Fastify from 'fastify';
 import { loadSession } from './auth.js';
 import { env } from './env.js';
+import { resumeImportJobs } from './import/worker.js';
 import { authRoutes } from './routes/auth.js';
+import { importRoutes } from './routes/import.js';
 import { recipeRoutes } from './routes/recipes.js';
 
 export async function buildApp() {
@@ -17,6 +19,8 @@ export async function buildApp() {
   app.get('/api/health', async () => ({ ok: true }));
   await app.register(authRoutes);
   await app.register(recipeRoutes);
+  await app.register(importRoutes);
+  app.addHook('onReady', resumeImportJobs);
 
   // Recipe images from the upload dir (a Railway volume in production).
   fs.mkdirSync(env.uploadDir, { recursive: true });
@@ -32,7 +36,8 @@ export async function buildApp() {
   if (fs.existsSync(env.webDist)) {
     await app.register(fastifyStatic, { root: env.webDist, prefix: '/', wildcard: false });
     app.setNotFoundHandler((request, reply) => {
-      if (request.method === 'GET' && !request.url.startsWith('/api/')) {
+      const isAsset = request.url.startsWith('/api/') || request.url.startsWith('/images/');
+      if (request.method === 'GET' && !isAsset) {
         return reply.sendFile('index.html');
       }
       return reply.code(404).send({ error: 'Not found' });

@@ -9,6 +9,8 @@ const section = z.object({
   items: z.array(z.string().trim()).transform((items) => items.filter(Boolean)),
 });
 
+export type Section = z.infer<typeof section>;
+
 const optionalText = z
   .string()
   .trim()
@@ -36,6 +38,8 @@ export const recipeInput = z.object({
   instructions: z.array(section).default([]),
   notes: optionalText,
   favorite: z.boolean().default(false),
+  /** Omit to keep the current image, a URL to download a new one, or null to remove it. */
+  imageUrl: z.url({ protocol: /^https?$/ }).nullable().optional(),
   tags: z
     .array(z.string())
     .default([])

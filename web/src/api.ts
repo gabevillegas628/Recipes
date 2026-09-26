@@ -1,4 +1,12 @@
-import type { Recipe, RecipeInput, RecipeSummary, TagCount, User } from './types';
+import type {
+  ImportJob,
+  ImportResult,
+  Recipe,
+  RecipeInput,
+  RecipeSummary,
+  TagCount,
+  User,
+} from './types';
 
 export class ApiError extends Error {
   constructor(
@@ -45,8 +53,23 @@ export const api = {
     request<{ favorite: boolean }>(`/api/recipes/${id}/favorite`, json('PATCH', { favorite })),
   deleteRecipe: (id: string) => request<void>(`/api/recipes/${id}`, { method: 'DELETE' }),
   listTags: () => request<TagCount[]>('/api/tags'),
+
+  importConfig: () => request<{ aiEnabled: boolean }>('/api/import/config'),
+  importUrl: (url: string) => request<ImportResult>('/api/import/url', json('POST', { url })),
+  importText: (text: string, url?: string) =>
+    request<ImportResult>('/api/import/text', json('POST', { text, url })),
+  bulkImport: (text: string) =>
+    request<{ queued: number; invalid: string[] }>('/api/import/bulk', json('POST', { text })),
+  listImportJobs: () => request<ImportJob[]>('/api/import/jobs'),
+  retryImportJob: (id: string) =>
+    request<{ ok: true }>(`/api/import/jobs/${id}/retry`, { method: 'POST' }),
+  clearImportJobs: () => request<{ deleted: number }>('/api/import/jobs', { method: 'DELETE' }),
 };
 
 export function imageUrl(image: string | null) {
   return image ? `/images/${image}` : null;
+}
+
+export function thumbUrl(image: string | null) {
+  return image ? `/images/${image.replace(/\.webp$/, '-thumb.webp')}` : null;
 }
