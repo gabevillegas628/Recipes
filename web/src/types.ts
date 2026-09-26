@@ -71,6 +71,10 @@ export interface ImportJob {
   createdAt: string;
 }
 
+export type ConnectorStatus =
+  | { enabled: false }
+  | { enabled: true; createdAt: string; lastUsedAt: string | null };
+
 export interface User {
   id: string;
   name: string;

@@ -1,4 +1,5 @@
 import type {
+  ConnectorStatus,
   ImportJob,
   ImportResult,
   Recipe,
@@ -64,6 +65,11 @@ export const api = {
   retryImportJob: (id: string) =>
     request<{ ok: true }>(`/api/import/jobs/${id}/retry`, { method: 'POST' }),
   clearImportJobs: () => request<{ deleted: number }>('/api/import/jobs', { method: 'DELETE' }),
+
+  connectorStatus: () => request<ConnectorStatus>('/api/connector'),
+  generateConnector: () =>
+    request<ConnectorStatus & { url: string }>('/api/connector', { method: 'POST' }),
+  disableConnector: () => request<ConnectorStatus>('/api/connector', { method: 'DELETE' }),
 };
 
 export function imageUrl(image: string | null) {

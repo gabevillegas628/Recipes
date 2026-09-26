@@ -4,7 +4,14 @@ import { requireAuth } from '../auth.js';
 import { prisma } from '../db.js';
 import type { Prisma } from '../generated/prisma/client.js';
 import { recipeInput } from '../recipeInput.js';
-import { createRecipe, deleteRecipe, serialize, updateRecipe, withTags } from '../recipes.js';
+import {
+  createRecipe,
+  deleteRecipe,
+  searchWhere,
+  serialize,
+  updateRecipe,
+  withTags,
+} from '../recipes.js';
 
 const listQuery = z.object({
   q: z.string().trim().optional(),
@@ -20,14 +27,7 @@ export async function recipeRoutes(app: FastifyInstance) {
   app.get('/api/recipes', async (request) => {
     const { q, tag, favorite } = listQuery.parse(request.query);
 
-    const where: Prisma.RecipeWhereInput = {};
-    if (q) {
-      where.OR = [
-        { title: { contains: q, mode: 'insensitive' } },
-        { description: { contains: q, mode: 'insensitive' } },
-        { tags: { some: { name: { contains: q.toLowerCase() } } } },
-      ];
-    }
+    const where: Prisma.RecipeWhereInput = { AND: q ? await searchWhere(q) : [] };
     if (tag) where.tags = { some: { name: tag } };
     if (favorite) where.favorite = true;
 

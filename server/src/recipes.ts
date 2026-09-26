@@ -1,4 +1,5 @@
 import { prisma } from './db.js';
+import type { Prisma } from './generated/prisma/client.js';
 import { deleteImage, saveImageFromUrl } from './images.js';
 import type { RecipeInput } from './recipeInput.js';
 
@@ -11,6 +12,31 @@ export const withTags = { tags: { select: { name: true }, orderBy: { name: 'asc'
 
 export function serialize<T extends { tags: { name: string }[] }>(recipe: T) {
   return { ...recipe, tags: recipe.tags.map((t) => t.name) };
+}
+
+/**
+ * Filter for a free-text search: every word must appear in the title, description,
+ * notes, a tag, or an ingredient line.
+ */
+export async function searchWhere(query: string): Promise<Prisma.RecipeWhereInput[]> {
+  const words = query.trim().split(/\s+/).filter(Boolean).slice(0, 8);
+  return Promise.all(
+    words.map(async (word) => {
+      // Ingredients are JSON, so match against their text form.
+      const pattern = `%${word.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
+      const ingredientHits = await prisma.$queryRaw<{ id: string }[]>`
+        SELECT id FROM "Recipe" WHERE "ingredients"::text ILIKE ${pattern}`;
+      return {
+        OR: [
+          { title: { contains: word, mode: 'insensitive' } },
+          { description: { contains: word, mode: 'insensitive' } },
+          { notes: { contains: word, mode: 'insensitive' } },
+          { tags: { some: { name: { contains: word.toLowerCase() } } } },
+          { id: { in: ingredientHits.map((r) => r.id) } },
+        ],
+      } satisfies Prisma.RecipeWhereInput;
+    }),
+  );
 }
 
 function fields(input: RecipeInput) {

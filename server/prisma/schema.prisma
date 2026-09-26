@@ -10,13 +10,14 @@ datasource db {
 }
 
 model User {
-  id           String   @id @default(cuid())
-  email        String   @unique
-  name         String
-  passwordHash String
-  createdAt    DateTime @default(now())
-  recipes      Recipe[]
-  importJobs   ImportJob[]
+  id              String           @id @default(cuid())
+  email           String           @unique
+  name            String
+  passwordHash    String
+  createdAt       DateTime         @default(now())
+  recipes         Recipe[]
+  importJobs      ImportJob[]
+  connectorTokens ConnectorToken[]
 }
 
 enum RecipeSource {
@@ -86,4 +87,15 @@ model Tag {
   id      String   @id @default(cuid())
   name    String   @unique
   recipes Recipe[]
+}
+
+/// Secret for the Claude connector URL (/mcp/<token>). Only a SHA-256 hash is stored;
+/// the token itself is shown once when generated.
+model ConnectorToken {
+  id          String    @id @default(cuid())
+  tokenHash   String    @unique
+  createdBy   User?     @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  createdById String?
+  createdAt   DateTime  @default(now())
+  lastUsedAt  DateTime?
 }

@@ -8,6 +8,7 @@ import { LoginPage } from './pages/LoginPage';
 import { RecipeDetailPage } from './pages/RecipeDetailPage';
 import { RecipeEditPage } from './pages/RecipeEditPage';
 import { RecipeListPage } from './pages/RecipeListPage';
+import { SettingsPage } from './pages/SettingsPage';
 
 export function App() {
   const me = useQuery({ queryKey: ['me'], queryFn: api.me });
@@ -24,6 +25,7 @@ export function App() {
         <Route path="import/bulk" element={<BulkImportPage />} />
         <Route path="r/:id" element={<RecipeDetailPage />} />
         <Route path="r/:id/edit" element={<RecipeEditPage />} />
+        <Route path="settings" element={<SettingsPage user={me.data} />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>

@@ -20,4 +20,6 @@ export const env = {
   /** Optional. Enables AI extraction for pages without structured recipe data and for pasted text. */
   anthropicApiKey: process.env.ANTHROPIC_API_KEY || null,
   anthropicModel: process.env.ANTHROPIC_MODEL || 'claude-opus-5',
+  /** Public base URL for links (connector URL, recipe links for Claude). Defaults to the request's host. */
+  publicUrl: process.env.PUBLIC_URL?.replace(/\/$/, '') || null,
 };

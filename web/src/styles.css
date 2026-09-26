@@ -628,3 +628,78 @@ button {
     background: #432220;
   }
 }
+
+/* ---------- Settings ---------- */
+
+.settings-section {
+  padding: 16px 0 24px;
+  border-bottom: 1px solid var(--border);
+}
+
+.settings-section h2 {
+  font-size: 19px;
+  margin-bottom: 8px;
+}
+
+.settings-section p {
+  margin: 0 0 12px;
+}
+
+.settings-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.connector-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 15px;
+}
+
+.dot {
+  flex: none;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--border);
+}
+
+.dot-on {
+  background: #3a9a3e;
+}
+
+.new-link {
+  padding: 12px;
+  margin-bottom: 12px;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  background: var(--accent-soft);
+}
+
+.copy-row {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.copy-row input {
+  flex: 1;
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 13px;
+}
+
+.steps {
+  margin: 0 0 12px;
+  padding-left: 20px;
+}
+
+.steps li {
+  margin-bottom: 6px;
+}

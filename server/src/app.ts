@@ -7,10 +7,23 @@ import { env } from './env.js';
 import { resumeImportJobs } from './import/worker.js';
 import { authRoutes } from './routes/auth.js';
 import { importRoutes } from './routes/import.js';
+import { mcpRoutes } from './routes/mcp.js';
 import { recipeRoutes } from './routes/recipes.js';
 
 export async function buildApp() {
-  const app = Fastify({ logger: true, trustProxy: true });
+  const app = Fastify({
+    trustProxy: true,
+    logger: {
+      serializers: {
+        // Keep the MCP connector's secret token out of the logs.
+        req: (req) => ({
+          method: req.method,
+          url: req.url.replace(/^\/mcp\/[^/?]+/, '/mcp/[token]'),
+          remoteAddress: req.ip,
+        }),
+      },
+    },
+  });
 
   await app.register(cookie, { secret: env.sessionSecret });
   app.decorateRequest('userId', null);
@@ -20,6 +33,7 @@ export async function buildApp() {
   await app.register(authRoutes);
   await app.register(recipeRoutes);
   await app.register(importRoutes);
+  await app.register(mcpRoutes);
   app.addHook('onReady', resumeImportJobs);
 
   // Recipe images from the upload dir (a Railway volume in production).

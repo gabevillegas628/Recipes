@@ -1,6 +1,6 @@
 # Recipes
 
-A personal recipe box. Mobile-first, with import from recipe links and a Claude connector (MCP) planned.
+A personal recipe box. Mobile-first, with import from recipe links, plus a Claude connector (MCP) so recipes from Claude chats can be saved straight into it.
 
 - `server/`: Fastify + Prisma (Postgres) API. In production it also serves the built web app and recipe images.
 - `web/`: React + Vite app.
@@ -38,6 +38,24 @@ Prints what the importer extracts from each link without saving anything.
 
 Bulk imports are queued as `ImportJob` rows and processed one at a time by an in-process worker. Links that match an existing recipe's source URL, after tracking parameters are removed, are marked as duplicates.
 
+## Claude connector (MCP)
+
+The server exposes an MCP endpoint at `/mcp/<token>` with these tools:
+
+| Tool | What it does |
+|---|---|
+| `save_recipe` | Saves a recipe from the conversation, with an optional `imageUrl` that the server downloads |
+| `import_recipe_from_url` | Imports a recipe page through the same pipeline as the web app |
+| `search_recipes` | Searches titles, descriptions, notes, tags and ingredients |
+| `get_recipe` | Returns a full recipe |
+| `update_recipe` | Partial update: only the fields you pass change |
+
+There's deliberately no delete tool.
+
+To set it up, open **Settings** in the app (the account tab) and choose **Set up connector**. That generates the link and shows it once, with a copy button and instructions for adding it in Claude under **Settings → Connectors → Add custom connector**.
+
+The token in the URL is the only auth, so treat the link like a password: anyone who has it can read and add recipes. **Generate a new link** revokes the old one, and **Turn off** disables the connector. Only a SHA-256 hash of the token is stored, and it's redacted from request logs.
+
 ### Changing the schema
 
 Edit `server/prisma/schema.prisma`, then run `npm run db:migrate -w server -- --name what_changed`. Commit the new folder under `server/prisma/migrations/`.
@@ -49,19 +67,21 @@ Edit `server/prisma/schema.prisma`, then run `npm run db:migrate -w server -- --
    - `DATABASE_URL` = `${{Postgres.DATABASE_URL}}`
    - `SESSION_SECRET` = a long random string
    - `NODE_ENV` = `production`
-   - `UPLOAD_DIR` = `/data/uploads`
+   - `UPLOAD_DIR` = `<volume mount>/uploads`, e.g. `/app/data/uploads`
+   - `PORT` = `8080` (and point the public domain at port 8080)
    - `ANTHROPIC_API_KEY` = optional, enables AI extraction
-3. Attach a **volume** to the app service, mounted at `/data`.
-4. Under Networking, generate a public domain.
+3. Attach a **volume** to the app service, for example at `/app/data`.
+4. Under Networking, generate a public domain that targets port 8080.
+5. Leave **Custom Start Command** empty (or set it to `npm start`). If Railway auto-detects the workspaces, it may fill in `npm run dev --workspace=web`, which runs the Vite dev server instead of the app.
 
 `railway.json` sets the build (`npm run build`), start (`npm start`, which runs `prisma migrate deploy` first) and health check (`/api/health`).
 
 ### Creating users in production
 
-Log in to the Railway CLI, then run the script from your machine against the production database. Use the Postgres service's **public** URL (`DATABASE_PUBLIC_URL`), because the internal one only resolves inside Railway:
+The production database is only reachable inside Railway, so run the compiled script in the app container. With the Railway CLI linked to the app service:
 
 ```sh
-DATABASE_URL="<DATABASE_PUBLIC_URL>" npm run user:create -- you@example.com "Your Name" "password"
+railway ssh -- node server/dist/scripts/createUser.js you@example.com "Your Name" "password"
 ```
 
 Running the script again with the same email resets that user's password.

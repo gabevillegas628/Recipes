@@ -1,20 +1,7 @@
-import { useQueryClient } from '@tanstack/react-query';
-import { NavLink, Outlet, useNavigate } from 'react-router-dom';
-import { api } from '../api';
-import { signOut } from '../session';
+import { NavLink, Outlet } from 'react-router-dom';
 import type { User } from '../types';
 
 export function Layout({ user }: { user: User }) {
-  const queryClient = useQueryClient();
-  const navigate = useNavigate();
-
-  async function logout() {
-    if (!confirm(`Log out ${user.name}?`)) return;
-    await api.logout();
-    signOut(queryClient);
-    navigate('/', { replace: true });
-  }
-
   return (
     <div className="app">
       <main className="main">
@@ -33,10 +20,10 @@ export function Layout({ user }: { user: User }) {
           <PlusIcon />
           <span>Add</span>
         </NavLink>
-        <button type="button" className="tab" onClick={logout}>
+        <NavLink to="/settings" className="tab">
           <UserIcon />
           <span>{user.name}</span>
-        </button>
+        </NavLink>
       </nav>
     </div>
   );
