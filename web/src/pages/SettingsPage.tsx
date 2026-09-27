@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { api } from '../api';
 import { ChangePassword, PeopleSection } from '../components/UserSettings';
 import { signOut } from '../session';
+import { SHORTCUT_NAME, useTimers } from '../timers';
 import type { ConnectorStatus, User } from '../types';
 
 export function SettingsPage({ user }: { user: User }) {
@@ -258,6 +259,7 @@ function PhoneSection() {
               import screen in Safari (log in there once).
             </li>
           </ol>
+          <TimerSetup />
         </>
       )}
 
@@ -315,5 +317,38 @@ function CopyField({ value }: { value: string }) {
         {copied ? 'Copied' : 'Copy'}
       </button>
     </div>
+  );
+}
+
+/** iPhone only: send step timers to the Clock app through a Shortcut. */
+function TimerSetup() {
+  const { mode, setMode } = useTimers();
+  return (
+    <>
+      <h3>Timers</h3>
+      <p>
+        Times in recipe steps (like “simmer 20 minutes”) are buttons that start a timer. The app's
+        own timer rings while the app is open (cook mode keeps the screen on). To use the iPhone's
+        Clock app instead, so it rings even when locked, set up one more Shortcut:
+      </p>
+      <ol className="steps">
+        <li>
+          In <strong>Shortcuts</strong>, tap <strong>+</strong> and name it exactly “{SHORTCUT_NAME}”.
+        </li>
+        <li>
+          Add the action <strong>Start Timer</strong>. Tap its duration, choose the{' '}
+          <strong>Shortcut Input</strong> variable, and set the unit to <strong>seconds</strong>.
+        </li>
+        <li>Turn on the switch below. The first time, iOS asks to allow the Shortcut to run.</li>
+      </ol>
+      <label className="checkbox">
+        <input
+          type="checkbox"
+          checked={mode === 'shortcut'}
+          onChange={(e) => setMode(e.target.checked ? 'shortcut' : 'app')}
+        />
+        On this phone, start timers in the Clock app
+      </label>
+    </>
   );
 }

@@ -73,6 +73,33 @@ export interface ImportJob {
   createdAt: string;
 }
 
+export interface PlanItem {
+  id: string;
+  scale: number;
+  createdAt: string;
+  cookedAt: string | null;
+  addedBy: { name: string } | null;
+  recipe: {
+    id: string;
+    title: string;
+    image: string | null;
+    servings: string | null;
+    totalMinutes: number | null;
+    prepMinutes: number | null;
+    cookMinutes: number | null;
+    ingredients: Section[];
+  };
+}
+
+export interface GroceryItem {
+  id: string;
+  text: string;
+  aisle: string | null;
+  checked: boolean;
+  createdAt: string;
+  recipe: { id: string; title: string } | null;
+}
+
 export type ConnectorStatus =
   | { enabled: false }
   | { enabled: true; createdAt: string; lastUsedAt: string | null };

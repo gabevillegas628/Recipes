@@ -1,7 +1,9 @@
 import { useQuery } from '@tanstack/react-query';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { api } from '../api';
+import { StepText } from '../components/StepText';
+import { scaleIngredient } from '../scale';
 import type { Recipe } from '../types';
 import { useWakeLock } from '../useWakeLock';
 
@@ -39,6 +41,8 @@ function saveStep(id: string, step: number) {
 
 function CookMode({ recipe }: { recipe: Recipe }) {
   const navigate = useNavigate();
+  const [params] = useSearchParams();
+  const scale = Number(params.get('scale')) || 1;
   const wakeLock = useWakeLock({ auto: true });
   const steps = useMemo<Step[]>(
     () => recipe.instructions.flatMap((s) => s.items.map((text) => ({ text, section: s.title }))),
@@ -58,7 +62,10 @@ function CookMode({ recipe }: { recipe: Recipe }) {
     [last, recipe.id],
   );
 
-  const exit = useCallback(() => navigate(`/r/${recipe.id}`, { replace: true }), [navigate, recipe.id]);
+  const exit = useCallback(
+    () => navigate(`/r/${recipe.id}${scale !== 1 ? `?scale=${scale}` : ''}`, { replace: true }),
+    [navigate, recipe.id, scale],
+  );
 
   // Arrow keys on a laptop/tablet keyboard.
   useEffect(() => {
@@ -131,7 +138,9 @@ function CookMode({ recipe }: { recipe: Recipe }) {
             Step {index + 1} of {steps.length}
             {step.section ? ` · ${step.section}` : ''}
           </p>
-          <p className="cook-step">{step.text}</p>
+          <p className="cook-step">
+            <StepText text={step.text} recipeTitle={recipe.title} />
+          </p>
         </main>
       )}
 
@@ -173,7 +182,7 @@ function CookMode({ recipe }: { recipe: Recipe }) {
                     const key = `${si}:${ii}`;
                     return (
                       <li key={key} className={checked.has(key) ? 'done' : ''} onClick={() => toggleIngredient(key)}>
-                        {item}
+                        {scaleIngredient(item, scale)}
                       </li>
                     );
                   })}

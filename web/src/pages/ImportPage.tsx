@@ -86,7 +86,7 @@ export function ImportPage() {
 
   return (
     <div className="page">
-      <h1 className="form-title">Import a recipe</h1>
+      <h1 className="form-title">Add a recipe</h1>
 
       <div className="segmented">
         <button
@@ -149,10 +149,15 @@ export function ImportPage() {
       </form>
 
       <div className="import-more">
-        <p className="muted">Moving a whole collection over?</p>
-        <Link to="/import/bulk" className="btn">
-          Import many links at once
-        </Link>
+        <p className="muted">Or:</p>
+        <div className="settings-actions">
+          <Link to="/new" className="btn">
+            Type in a recipe
+          </Link>
+          <Link to="/import/bulk" className="btn">
+            Import many links at once
+          </Link>
+        </div>
       </div>
     </div>
   );

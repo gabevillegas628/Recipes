@@ -4,6 +4,9 @@ import { api } from './api';
 import { Layout } from './components/Layout';
 import { BulkImportPage } from './pages/BulkImportPage';
 import { CookModePage } from './pages/CookModePage';
+import { GroceriesPage } from './pages/GroceriesPage';
+import { WeekPage } from './pages/WeekPage';
+import { TimerProvider, TimerTray } from './timers';
 import { ImportPage } from './pages/ImportPage';
 import { LoginPage } from './pages/LoginPage';
 import { RecipeDetailPage } from './pages/RecipeDetailPage';
@@ -18,12 +21,16 @@ export function App() {
   if (!me.data) return <LoginPage />;
 
   return (
-    <Routes>
+    <TimerProvider>
+      <TimerTray />
+      <Routes>
       {/* Full screen, outside the tab bar layout. */}
       <Route path="r/:id/cook" element={<CookModePage />} />
       <Route element={<Layout user={me.data} />}>
         <Route index element={<RecipeListPage />} />
         <Route path="new" element={<RecipeEditPage />} />
+        <Route path="week" element={<WeekPage />} />
+        <Route path="groceries" element={<GroceriesPage />} />
         <Route path="import" element={<ImportPage />} />
         <Route path="import/bulk" element={<BulkImportPage />} />
         <Route path="r/:id" element={<RecipeDetailPage />} />
@@ -31,6 +38,7 @@ export function App() {
         <Route path="settings" element={<SettingsPage user={me.data} />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
-    </Routes>
+      </Routes>
+    </TimerProvider>
   );
 }

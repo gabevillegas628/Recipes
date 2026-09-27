@@ -6,6 +6,7 @@ import { ImportError } from './import/errors.js';
 import { extractFromUrl } from './import/extract.js';
 import { FetchError } from './import/safeFetch.js';
 import { draftToInput, findExistingRecipe } from './import/worker.js';
+import { addGroceries, addToPlan, getGroceries, getPlan } from './plan.js';
 import { recipeInput } from './recipeInput.js';
 import { createRecipe, searchWhere, serialize, updateRecipe, withTags } from './recipes.js';
 
@@ -214,6 +215,88 @@ export function buildMcpServer(baseUrl: string) {
       const updated = await updateRecipe(id, parsed.data);
       if (!updated) return toolError(`No recipe with id ${id}`);
       return text({ updated: true, id, title: updated.title, url: link(id) });
+    },
+  );
+
+  server.registerTool(
+    'get_this_week',
+    {
+      title: 'Get this week',
+      description:
+        'List the recipes planned for this week (recipes drop off 7 days after being added), with whether each has been cooked.',
+      inputSchema: {},
+      annotations: { readOnlyHint: true },
+    },
+    async () => {
+      const plan = await getPlan();
+      return text(
+        plan.map((p) => ({
+          planItemId: p.id,
+          recipeId: p.recipe.id,
+          title: p.recipe.title,
+          servingsMultiplier: p.scale,
+          cooked: Boolean(p.cookedAt),
+          addedOn: p.createdAt,
+          url: link(p.recipe.id),
+        })),
+      );
+    },
+  );
+
+  server.registerTool(
+    'add_to_this_week',
+    {
+      title: 'Add to this week',
+      description:
+        "Put a saved recipe on this week's meal plan. Use search_recipes to find the id. servingsMultiplier scales it (0.5 = half, 2 = double).",
+      inputSchema: {
+        recipeId: z.string(),
+        servingsMultiplier: z.number().positive().max(20).nullish(),
+      },
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
+    },
+    async ({ recipeId, servingsMultiplier }) => {
+      const recipe = await prisma.recipe.findUnique({ where: { id: recipeId }, select: { title: true } });
+      if (!recipe) return toolError(`No recipe with id ${recipeId}`);
+      await addToPlan(recipeId, servingsMultiplier ?? 1, null);
+      return text({ added: true, title: recipe.title, url: link(recipeId) });
+    },
+  );
+
+  server.registerTool(
+    'get_grocery_list',
+    {
+      title: 'Get grocery list',
+      description: 'Show the shared grocery list, grouped by store section, with checked-off items marked.',
+      inputSchema: {},
+      annotations: { readOnlyHint: true },
+    },
+    async () => {
+      const items = await getGroceries();
+      return text(
+        items.map((i) => ({ text: i.text, aisle: i.aisle, checked: i.checked, forRecipe: i.recipe?.title ?? null })),
+      );
+    },
+  );
+
+  server.registerTool(
+    'add_to_grocery_list',
+    {
+      title: 'Add to grocery list',
+      description:
+        "Add items to the shared grocery list, one ingredient per item with its quantity (e.g. \"2 lb chicken thighs\"). Before adding a recipe's ingredients, leave out pantry staples the user said they already have. Items are sorted into store sections automatically.",
+      inputSchema: {
+        items: z.array(z.string()).min(1).max(100),
+        recipeId: z.string().nullish().describe('The recipe these are for, if any'),
+      },
+      annotations: { readOnlyHint: false, destructiveHint: false },
+    },
+    async ({ items, recipeId }) => {
+      const added = await addGroceries(
+        items.map((t) => ({ text: t, recipeId: recipeId ?? null })),
+        null,
+      );
+      return text({ added, url: `${baseUrl}/groceries` });
     },
   );
 

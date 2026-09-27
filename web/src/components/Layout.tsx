@@ -12,11 +12,15 @@ export function Layout({ user }: { user: User }) {
           <BookIcon />
           <span>Recipes</span>
         </NavLink>
-        <NavLink to="/import" className="tab">
-          <LinkIcon />
-          <span>Import</span>
+        <NavLink to="/week" className="tab">
+          <CalendarIcon />
+          <span>Week</span>
         </NavLink>
-        <NavLink to="/new" className="tab">
+        <NavLink to="/groceries" className="tab">
+          <CartIcon />
+          <span>Groceries</span>
+        </NavLink>
+        <NavLink to="/import" className="tab">
           <PlusIcon />
           <span>Add</span>
         </NavLink>
@@ -50,11 +54,21 @@ function BookIcon() {
   );
 }
 
-function LinkIcon() {
+function CalendarIcon() {
   return (
     <svg {...iconProps}>
-      <path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7" />
-      <path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7" />
+      <rect x="3" y="5" width="18" height="16" rx="2" />
+      <path d="M3 10h18M8 3v4M16 3v4" />
+    </svg>
+  );
+}
+
+function CartIcon() {
+  return (
+    <svg {...iconProps}>
+      <path d="M3 4h2l2.4 11.2a2 2 0 0 0 2 1.6h7.7a2 2 0 0 0 2-1.5L21 8H6.2" />
+      <circle cx="10" cy="20" r="1.3" />
+      <circle cx="17" cy="20" r="1.3" />
     </svg>
   );
 }

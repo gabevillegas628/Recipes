@@ -19,6 +19,8 @@ model User {
   recipes         Recipe[]
   importJobs      ImportJob[]
   connectorTokens ConnectorToken[]
+  planItems       PlanItem[]
+  groceryItems    GroceryItem[]
 }
 
 enum RecipeSource {
@@ -28,10 +30,10 @@ enum RecipeSource {
 }
 
 model Recipe {
-  id           String       @id @default(cuid())
+  id           String        @id @default(cuid())
   title        String
   description  String?
-  source       RecipeSource @default(MANUAL)
+  source       RecipeSource  @default(MANUAL)
   sourceUrl    String?
   /// Filename inside UPLOAD_DIR, served at /images/<image>
   image        String?
@@ -40,19 +42,21 @@ model Recipe {
   cookMinutes  Int?
   totalMinutes Int?
   /// Section[]: [{ title: string | null, items: string[] }]
-  ingredients  Json         @default("[]")
+  ingredients  Json          @default("[]")
   /// Section[]: [{ title: string | null, items: string[] }]
-  instructions Json         @default("[]")
+  instructions Json          @default("[]")
   notes        String?
-  favorite     Boolean      @default(false)
+  favorite     Boolean       @default(false)
   /// Set when the recipe was extracted by AI rather than structured data; cleared on the next manual save.
-  needsReview  Boolean      @default(false)
+  needsReview  Boolean       @default(false)
   tags         Tag[]
-  createdBy    User?        @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  createdBy    User?         @relation(fields: [createdById], references: [id], onDelete: SetNull)
   createdById  String?
-  createdAt    DateTime     @default(now())
-  updatedAt    DateTime     @updatedAt
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
   importJobs   ImportJob[]
+  planItems    PlanItem[]
+  groceryItems GroceryItem[]
 
   @@index([createdAt])
   @@index([sourceUrl])
@@ -99,4 +103,37 @@ model ConnectorToken {
   createdById String?
   createdAt   DateTime  @default(now())
   lastUsedAt  DateTime?
+}
+
+/// A recipe on "This week". Drops off automatically 7 days after it was added.
+model PlanItem {
+  id         String    @id @default(cuid())
+  recipe     Recipe    @relation(fields: [recipeId], references: [id], onDelete: Cascade)
+  recipeId   String
+  /// Serving multiplier chosen when planning (1 = as written).
+  scale      Float     @default(1)
+  addedBy    User?     @relation(fields: [addedById], references: [id], onDelete: SetNull)
+  addedById  String?
+  createdAt  DateTime  @default(now())
+  cookedAt   DateTime?
+  archivedAt DateTime?
+
+  @@index([archivedAt, createdAt])
+}
+
+/// One line on the shared grocery list.
+model GroceryItem {
+  id          String    @id @default(cuid())
+  text        String
+  /// Store section, e.g. "Produce". Null when AI sorting is unavailable.
+  aisle       String?
+  checked     Boolean   @default(false)
+  checkedAt   DateTime?
+  recipe      Recipe?   @relation(fields: [recipeId], references: [id], onDelete: SetNull)
+  recipeId    String?
+  createdBy   User?     @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  createdById String?
+  createdAt   DateTime  @default(now())
+
+  @@index([checked, createdAt])
 }

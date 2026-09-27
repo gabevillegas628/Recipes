@@ -943,3 +943,338 @@ button {
   font-weight: 600;
   vertical-align: 2px;
 }
+
+/* ---------- Scaling, week, groceries, timers ---------- */
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+}
+
+.small {
+  font-size: 13px;
+}
+
+.link-btn {
+  padding: 4px 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.ingredients-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px 16px;
+  margin: 28px 0 8px;
+}
+
+.recipe .ingredients-header h2 {
+  margin: 0;
+}
+
+.servings {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 15px;
+}
+
+.servings-label {
+  color: var(--muted);
+}
+
+.servings-value {
+  min-width: 28px;
+  text-align: center;
+  font-weight: 700;
+  font-size: 17px;
+}
+
+.stepper {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.stepper:disabled {
+  opacity: 0.4;
+}
+
+.servings .chips .chip {
+  padding: 4px 10px;
+}
+
+.timer-chip {
+  display: inline;
+  margin: 0 2px;
+  padding: 1px 8px;
+  border: 1px solid var(--accent);
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font: inherit;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.timer-tray {
+  position: fixed;
+  top: env(safe-area-inset-top, 0px);
+  left: 0;
+  right: 0;
+  z-index: 40;
+  display: flex;
+  gap: 6px;
+  padding: 6px 12px;
+  overflow-x: auto;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+}
+
+html.has-timers .main {
+  padding-top: 52px;
+}
+
+html.has-timers .cook {
+  padding-top: calc(env(safe-area-inset-top, 0px) + 52px);
+}
+
+.timer-pill {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 260px;
+  min-height: 38px;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.timer-time {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.timer-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted);
+}
+
+.timer-pill.done {
+  border-color: var(--danger);
+  background: var(--danger);
+  color: #fff;
+  animation: pulse 1s ease-in-out infinite;
+}
+
+.timer-pill.done .timer-label {
+  color: #fff;
+}
+
+@keyframes pulse {
+  50% {
+    opacity: 0.6;
+  }
+}
+
+.week-summary {
+  margin: -8px 0 12px;
+}
+
+.week-actions {
+  margin: 16px 0 8px;
+}
+
+.plan-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 6px 8px 10px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.plan-row.cooked .recipe-row-title {
+  text-decoration: line-through;
+  color: var(--muted);
+}
+
+.plan-link {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: inherit;
+  text-decoration: none;
+}
+
+.thumb-small {
+  width: 48px;
+  height: 48px;
+  font-size: 20px;
+}
+
+.check-circle {
+  flex: none;
+  display: inline-grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: 2px solid var(--border);
+  border-radius: 50%;
+  background: var(--surface);
+  color: #fff;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.check-circle.on {
+  border-color: var(--accent);
+  background: var(--accent);
+}
+
+.add-item {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.add-item input {
+  flex: 1;
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  font-size: 16px;
+}
+
+.aisle h2 {
+  margin: 16px 0 4px;
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+}
+
+.aisle-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 20px;
+}
+
+.grocery-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.grocery {
+  display: flex;
+  align-items: center;
+  border-bottom: 1px solid var(--border);
+}
+
+.grocery-main {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 52px;
+  padding: 8px 0;
+  border: 0;
+  background: none;
+  text-align: left;
+  font-size: 17px;
+  cursor: pointer;
+}
+
+.grocery-text {
+  display: flex;
+  flex-direction: column;
+}
+
+.grocery-recipe {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.grocery.done .grocery-text {
+  text-decoration: line-through;
+  color: var(--muted);
+}
+
+.clear-all {
+  margin-top: 28px;
+}
+
+.picker .picker-group {
+  margin-bottom: 12px;
+}
+
+.picker-group-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.picker-group-header h3 {
+  margin: 12px 0 4px;
+}
+
+.picker-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 16px;
+}
+
+.picker-item input {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  margin-top: 2px;
+}
+
+.picker-footer {
+  position: sticky;
+  bottom: -20px;
+  padding: 12px 0 4px;
+  background: var(--surface);
+}
+
+.picker-footer .btn {
+  width: 100%;
+  min-height: 50px;
+}
+
+.check-list li > span {
+  display: block;
+}

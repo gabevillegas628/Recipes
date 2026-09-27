@@ -1,7 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { useState, type ReactNode } from 'react';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { api, imageUrl } from '../api';
+import { GroceryPicker } from '../components/GroceryPicker';
+import { ServingsControl } from '../components/ServingsControl';
+import { StepText } from '../components/StepText';
+import { scaleIngredient } from '../scale';
 import { formatMinutes } from '../sections';
 import type { Recipe, Section } from '../types';
 
@@ -11,13 +15,21 @@ export function RecipeDetailPage() {
 
   if (recipe.isPending) return null;
   if (recipe.error) return <p className="page error">{recipe.error.message}</p>;
-  return <RecipeView recipe={recipe.data} />;
+  return <RecipeView key={recipe.data.id} recipe={recipe.data} />;
 }
 
 function RecipeView({ recipe }: { recipe: Recipe }) {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
+  const [params] = useSearchParams();
   const img = imageUrl(recipe.image);
+
+  const plan = useQuery({ queryKey: ['plan'], queryFn: api.plan });
+  const planned = plan.data?.find((p) => p.recipe.id === recipe.id);
+
+  // Opening from "This week" (?scale=) shows the amount that was planned.
+  const [scale, setScale] = useState(() => Number(params.get('scale')) || 1);
+  const [picking, setPicking] = useState(false);
 
   const favorite = useMutation({
     mutationFn: () => api.setFavorite(recipe.id, !recipe.favorite),
@@ -25,6 +37,14 @@ function RecipeView({ recipe }: { recipe: Recipe }) {
       queryClient.setQueryData<Recipe>(['recipe', recipe.id], (r) => r && { ...r, favorite });
       queryClient.invalidateQueries({ queryKey: ['recipes'] });
     },
+  });
+
+  const togglePlan = useMutation({
+    mutationFn: () =>
+      planned && planned.scale === scale
+        ? api.removePlanItem(planned.id)
+        : api.addToPlan(recipe.id, scale).then(() => undefined),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['plan'] }),
   });
 
   const remove = useMutation({
@@ -40,8 +60,13 @@ function RecipeView({ recipe }: { recipe: Recipe }) {
     ['Prep', formatMinutes(recipe.prepMinutes)],
     ['Cook', formatMinutes(recipe.cookMinutes)],
     ['Total', formatMinutes(recipe.totalMinutes)],
-    ['Serves', recipe.servings],
   ].filter(([, v]) => v);
+
+  const planLabel = !planned
+    ? '+ Add to this week'
+    : planned.scale === scale
+      ? '✓ On this week'
+      : 'Update this week';
 
   return (
     <article className="page recipe">
@@ -79,23 +104,49 @@ function RecipeView({ recipe }: { recipe: Recipe }) {
 
       <div className="actions">
         {recipe.instructions.length > 0 && (
-          <Link to={`/r/${recipe.id}/cook`} className="btn btn-primary">
+          <Link to={`/r/${recipe.id}/cook${scale !== 1 ? `?scale=${scale}` : ''}`} className="btn btn-primary">
             Start cooking
           </Link>
         )}
+        <button
+          type="button"
+          className={`btn ${planned && planned.scale === scale ? 'btn-on' : ''}`}
+          onClick={() => togglePlan.mutate()}
+          disabled={togglePlan.isPending || plan.isPending}
+        >
+          {planLabel}
+        </button>
+        <button type="button" className="btn" onClick={() => setPicking(true)} disabled={recipe.ingredients.length === 0}>
+          Add groceries
+        </button>
         <button type="button" className="btn" onClick={() => favorite.mutate()}>
-          {recipe.favorite ? '★ Favorited' : '☆ Favorite'}
+          {recipe.favorite ? '★' : '☆'}
+          <span className="sr-only">{recipe.favorite ? 'Unfavorite' : 'Favorite'}</span>
         </button>
         <Link to={`/r/${recipe.id}/edit`} className="btn">
           Edit
         </Link>
       </div>
 
-      <h2>Ingredients</h2>
-      <CheckSections sections={recipe.ingredients} kind="ingredients" />
+      <div className="ingredients-header">
+        <h2>Ingredients</h2>
+        <ServingsControl servings={recipe.servings} scale={scale} onChange={setScale} />
+      </div>
+      {scale !== 1 && (
+        <p className="muted small">Amounts adjusted. Quantities mentioned in the steps are as written.</p>
+      )}
+      <CheckSections
+        sections={recipe.ingredients}
+        kind="ingredients"
+        render={(item) => scaleIngredient(item, scale)}
+      />
 
       <h2>Instructions</h2>
-      <CheckSections sections={recipe.instructions} kind="steps" />
+      <CheckSections
+        sections={recipe.instructions}
+        kind="steps"
+        render={(item) => <StepText text={item} recipeTitle={recipe.title} />}
+      />
 
       {recipe.notes && (
         <>
@@ -127,12 +178,27 @@ function RecipeView({ recipe }: { recipe: Recipe }) {
           Delete recipe
         </button>
       </footer>
+
+      {picking && (
+        <GroceryPicker
+          recipes={[{ id: recipe.id, title: recipe.title, ingredients: recipe.ingredients, scale }]}
+          onClose={() => setPicking(false)}
+        />
+      )}
     </article>
   );
 }
 
 /** Tap an ingredient or step to cross it off while cooking. Not persisted. */
-function CheckSections({ sections, kind }: { sections: Section[]; kind: 'ingredients' | 'steps' }) {
+function CheckSections({
+  sections,
+  kind,
+  render,
+}: {
+  sections: Section[];
+  kind: 'ingredients' | 'steps';
+  render: (item: string) => ReactNode;
+}) {
   const [done, setDone] = useState<Set<string>>(new Set());
   const toggle = (key: string) =>
     setDone((prev) => {
@@ -154,12 +220,8 @@ function CheckSections({ sections, kind }: { sections: Section[]; kind: 'ingredi
             {section.items.map((item, ii) => {
               const key = `${si}:${ii}`;
               return (
-                <li
-                  key={key}
-                  className={done.has(key) ? 'done' : ''}
-                  onClick={() => toggle(key)}
-                >
-                  {item}
+                <li key={key} className={done.has(key) ? 'done' : ''} onClick={() => toggle(key)}>
+                  <span>{render(item)}</span>
                 </li>
               );
             })}

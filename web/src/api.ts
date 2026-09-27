@@ -1,5 +1,7 @@
 import type {
   ConnectorStatus,
+  GroceryItem,
+  PlanItem,
   ImportJob,
   ImportResult,
   Recipe,
@@ -75,6 +77,23 @@ export const api = {
     form.append('photo', file);
     return request<{ image: string }>('/api/images', { method: 'POST', body: form });
   },
+
+  plan: () => request<PlanItem[]>('/api/plan'),
+  addToPlan: (recipeId: string, scale: number) =>
+    request<PlanItem>('/api/plan', json('POST', { recipeId, scale })),
+  updatePlanItem: (id: string, input: { cooked?: boolean; scale?: number }) =>
+    request<{ ok: true }>(`/api/plan/${id}`, json('PATCH', input)),
+  removePlanItem: (id: string) => request<void>(`/api/plan/${id}`, { method: 'DELETE' }),
+  clearPlan: () => request<{ ok: true }>('/api/plan', { method: 'DELETE' }),
+
+  groceries: () => request<GroceryItem[]>('/api/grocery'),
+  addGroceries: (items: { text: string; recipeId?: string | null }[]) =>
+    request<{ added: number }>('/api/grocery', json('POST', { items })),
+  updateGrocery: (id: string, input: { checked?: boolean; text?: string }) =>
+    request<{ ok: true }>(`/api/grocery/${id}`, json('PATCH', input)),
+  removeGrocery: (id: string) => request<void>(`/api/grocery/${id}`, { method: 'DELETE' }),
+  clearGroceries: (all = false) =>
+    request<{ deleted: number }>(`/api/grocery${all ? '?all=true' : ''}`, { method: 'DELETE' }),
 
   changePassword: (currentPassword: string, newPassword: string) =>
     request<{ ok: true }>('/api/auth/password', json('POST', { currentPassword, newPassword })),
