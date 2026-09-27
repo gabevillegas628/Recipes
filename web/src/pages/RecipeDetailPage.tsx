@@ -2,7 +2,6 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { api, imageUrl } from '../api';
-import { useWakeLock } from '../useWakeLock';
 import { formatMinutes } from '../sections';
 import type { Recipe, Section } from '../types';
 
@@ -18,7 +17,6 @@ export function RecipeDetailPage() {
 function RecipeView({ recipe }: { recipe: Recipe }) {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
-  const wakeLock = useWakeLock();
   const img = imageUrl(recipe.image);
 
   const favorite = useMutation({
@@ -47,7 +45,16 @@ function RecipeView({ recipe }: { recipe: Recipe }) {
 
   return (
     <article className="page recipe">
-      {img && <img className="hero" src={img} alt="" />}
+      {img && (
+        <img
+          className="hero"
+          src={img}
+          alt=""
+          onError={(e) => {
+            e.currentTarget.style.display = 'none';
+          }}
+        />
+      )}
 
       {recipe.needsReview && (
         <div className="banner">
@@ -71,18 +78,14 @@ function RecipeView({ recipe }: { recipe: Recipe }) {
       )}
 
       <div className="actions">
+        {recipe.instructions.length > 0 && (
+          <Link to={`/r/${recipe.id}/cook`} className="btn btn-primary">
+            Start cooking
+          </Link>
+        )}
         <button type="button" className="btn" onClick={() => favorite.mutate()}>
           {recipe.favorite ? '★ Favorited' : '☆ Favorite'}
         </button>
-        {wakeLock.supported && (
-          <button
-            type="button"
-            className={`btn ${wakeLock.active ? 'btn-on' : ''}`}
-            onClick={wakeLock.toggle}
-          >
-            {wakeLock.active ? 'Screen stays on' : 'Keep screen on'}
-          </button>
-        )}
         <Link to={`/r/${recipe.id}/edit`} className="btn">
           Edit
         </Link>

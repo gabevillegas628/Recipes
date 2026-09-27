@@ -22,6 +22,8 @@ export function SettingsPage({ user }: { user: User }) {
 
       <ConnectorSection />
 
+      <PhoneSection />
+
       <section className="settings-section">
         <h2>Account</h2>
         <p>
@@ -178,4 +180,134 @@ function formatDate(iso: string) {
     day: 'numeric',
     year: 'numeric',
   });
+}
+
+type Platform = 'ios' | 'android' | 'other';
+
+function detectPlatform(): Platform {
+  const ua = navigator.userAgent;
+  // iPadOS reports itself as a Mac with touch.
+  if (/iPhone|iPad|iPod/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1)) return 'ios';
+  if (/Android/.test(ua)) return 'android';
+  return 'other';
+}
+
+function PhoneSection() {
+  const [platform, setPlatform] = useState<Platform>(detectPlatform);
+  const importBase = `${window.location.origin}/import?url=`;
+  const bookmarklet = `javascript:location.href='${importBase}'+encodeURIComponent(location.href)`;
+  const installed = window.matchMedia('(display-mode: standalone)').matches;
+
+  return (
+    <section className="settings-section">
+      <h2>Phone setup</h2>
+      <p className="muted">
+        Install Recipe Box on your home screen, and add it to the Share button so links from
+        Instagram, Messenger or Safari go straight to Import.
+      </p>
+
+      <div className="segmented">
+        {(['ios', 'android', 'other'] as const).map((p) => (
+          <button key={p} type="button" className={platform === p ? 'on' : ''} onClick={() => setPlatform(p)}>
+            {p === 'ios' ? 'iPhone' : p === 'android' ? 'Android' : 'Computer'}
+          </button>
+        ))}
+      </div>
+
+      {platform === 'ios' && (
+        <>
+          <h3>Install</h3>
+          {installed ? (
+            <p className="muted">You're using the installed app. 👍</p>
+          ) : (
+            <ol className="steps">
+              <li>Open this site in <strong>Safari</strong>.</li>
+              <li>Tap <strong>Share</strong>, then <strong>Add to Home Screen</strong>.</li>
+            </ol>
+          )}
+          <h3>Share button (Shortcut)</h3>
+          <ol className="steps">
+            <li>
+              Open the <strong>Shortcuts</strong> app, tap <strong>+</strong>, and name the shortcut
+              “Recipe Box”.
+            </li>
+            <li>
+              Tap the <strong>ⓘ</strong> (details) button and turn on{' '}
+              <strong>Show in Share Sheet</strong>. Set it to receive <strong>URLs</strong> and{' '}
+              <strong>Text</strong>.
+            </li>
+            <li>
+              Add the action <strong>URL Encode</strong> (it encodes the Shortcut Input).
+            </li>
+            <li>
+              Add a <strong>Text</strong> action. Paste the address below, then insert the{' '}
+              <strong>URL Encoded Text</strong> variable right after it:
+              <CopyField value={importBase} />
+            </li>
+            <li>
+              Add the action <strong>Open URLs</strong>.
+            </li>
+            <li>
+              Now in Instagram, Messenger or Safari: <strong>Share → Recipe Box</strong>. It opens the
+              import screen in Safari (log in there once).
+            </li>
+          </ol>
+        </>
+      )}
+
+      {platform === 'android' && (
+        <>
+          <h3>Install</h3>
+          {installed ? (
+            <p className="muted">You're using the installed app. 👍</p>
+          ) : (
+            <ol className="steps">
+              <li>Open this site in <strong>Chrome</strong>.</li>
+              <li>
+                Tap <strong>⋮</strong>, then <strong>Add to Home screen</strong> (or{' '}
+                <strong>Install app</strong>).
+              </li>
+            </ol>
+          )}
+          <h3>Share button</h3>
+          <p>
+            Once installed, <strong>Recipe Box</strong> shows up in the Share menu automatically.
+            Share a link to it and the import starts right away.
+          </p>
+        </>
+      )}
+
+      {platform === 'other' && (
+        <>
+          <h3>Bookmark button</h3>
+          <p>
+            Add a bookmark named “+ Recipe Box” and paste this as its address (URL). Click it on
+            any recipe page to import that page.
+          </p>
+          <CopyField value={bookmarklet} />
+        </>
+      )}
+    </section>
+  );
+}
+
+function CopyField({ value }: { value: string }) {
+  const input = useRef<HTMLInputElement>(null);
+  const [copied, setCopied] = useState(false);
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopied(true);
+    } catch {
+      input.current?.select();
+    }
+  }
+  return (
+    <div className="copy-row">
+      <input ref={input} readOnly value={value} onFocus={(e) => e.target.select()} />
+      <button type="button" className="btn" onClick={copy}>
+        {copied ? 'Copied' : 'Copy'}
+      </button>
+    </div>
+  );
 }

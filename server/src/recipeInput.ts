@@ -40,6 +40,11 @@ export const recipeInput = z.object({
   favorite: z.boolean().default(false),
   /** Omit to keep the current image, a URL to download a new one, or null to remove it. */
   imageUrl: z.url({ protocol: /^https?$/ }).nullable().optional(),
+  /** A photo already uploaded via POST /api/images; takes precedence over imageUrl. */
+  uploadedImage: z
+    .string()
+    .regex(/^[0-9a-f-]{36}\.webp$/, 'Invalid uploaded image')
+    .optional(),
   tags: z
     .array(z.string())
     .default([])

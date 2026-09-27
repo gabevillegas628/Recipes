@@ -87,13 +87,14 @@ export function RecipeListPage() {
 }
 
 function RecipeRow({ recipe }: { recipe: RecipeSummary }) {
-  const img = thumbUrl(recipe.image);
+  const [broken, setBroken] = useState(false);
+  const img = broken ? null : thumbUrl(recipe.image);
   const time = displayTime(recipe);
   return (
     <li>
       <Link to={`/r/${recipe.id}`} className="recipe-row">
         {img ? (
-          <img className="thumb" src={img} alt="" loading="lazy" />
+          <img className="thumb" src={img} alt="" loading="lazy" onError={() => setBroken(true)} />
         ) : (
           <div className="thumb thumb-empty">{recipe.title.charAt(0).toUpperCase()}</div>
         )}

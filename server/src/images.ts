@@ -43,6 +43,15 @@ export async function saveImageFromUrl(url: string): Promise<string> {
   return saveImage(res.body);
 }
 
+/** Whether an uploaded image name refers to a file we stored. */
+export async function uploadExists(image: string): Promise<string | null> {
+  if (!/^[0-9a-f-]{36}\.webp$/.test(image)) return null;
+  return fs
+    .access(path.join(env.uploadDir, image))
+    .then(() => image)
+    .catch(() => null);
+}
+
 export async function deleteImage(image: string | null | undefined) {
   if (!image || image.includes('/') || image.includes('\\')) return;
   await Promise.all(

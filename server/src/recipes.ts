@@ -1,6 +1,6 @@
 import { prisma } from './db.js';
 import type { Prisma } from './generated/prisma/client.js';
-import { deleteImage, saveImageFromUrl } from './images.js';
+import { deleteImage, saveImageFromUrl, uploadExists } from './images.js';
 import type { RecipeInput } from './recipeInput.js';
 
 /**
@@ -40,7 +40,7 @@ export async function searchWhere(query: string): Promise<Prisma.RecipeWhereInpu
 }
 
 function fields(input: RecipeInput) {
-  const { tags: _tags, imageUrl: _imageUrl, ...rest } = input;
+  const { tags: _tags, imageUrl: _imageUrl, uploadedImage: _uploaded, ...rest } = input;
   return rest;
 }
 
@@ -62,7 +62,9 @@ export async function createRecipe(
   input: RecipeInput,
   { userId, needsReview = false }: { userId: string | null; needsReview?: boolean },
 ) {
-  const image = input.imageUrl ? await tryDownload(input.imageUrl) : null;
+  const image =
+    (input.uploadedImage && (await uploadExists(input.uploadedImage))) ||
+    (input.imageUrl ? await tryDownload(input.imageUrl) : null);
   const recipe = await prisma.recipe.create({
     data: {
       ...fields(input),
@@ -82,7 +84,9 @@ export async function updateRecipe(id: string, input: RecipeInput) {
   if (!existing) return null;
 
   let image = existing.image;
-  if (input.imageUrl === null) {
+  if (input.uploadedImage && (await uploadExists(input.uploadedImage))) {
+    image = input.uploadedImage;
+  } else if (input.imageUrl === null) {
     image = null;
   } else if (input.imageUrl) {
     image = (await tryDownload(input.imageUrl)) ?? existing.image;

@@ -11,7 +11,9 @@ import { RecipeForm } from './RecipeEditPage';
  */
 export function ImportPage() {
   const [params, setParams] = useSearchParams();
-  const sharedUrl = params.get('url') ?? params.get('text') ?? '';
+  // Share targets put the link in url, text or even title depending on the app.
+  const sharedUrl =
+    ['url', 'text', 'title'].map((k) => params.get(k) ?? '').find((v) => extractUrl(v)) ?? '';
   const [mode, setMode] = useState<'url' | 'text'>('url');
   const [url, setUrl] = useState(extractUrl(sharedUrl) ?? '');
   const [text, setText] = useState('');

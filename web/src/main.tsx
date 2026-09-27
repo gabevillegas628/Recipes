@@ -20,6 +20,12 @@ const queryClient = new QueryClient({
   },
 });
 
+if ('serviceWorker' in navigator && import.meta.env.PROD) {
+  navigator.serviceWorker.register('/sw.js').catch(() => {
+    // Not installable without it, but the app works fine.
+  });
+}
+
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>

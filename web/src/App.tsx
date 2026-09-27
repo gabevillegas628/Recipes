@@ -3,6 +3,7 @@ import { Navigate, Route, Routes } from 'react-router-dom';
 import { api } from './api';
 import { Layout } from './components/Layout';
 import { BulkImportPage } from './pages/BulkImportPage';
+import { CookModePage } from './pages/CookModePage';
 import { ImportPage } from './pages/ImportPage';
 import { LoginPage } from './pages/LoginPage';
 import { RecipeDetailPage } from './pages/RecipeDetailPage';
@@ -18,6 +19,8 @@ export function App() {
 
   return (
     <Routes>
+      {/* Full screen, outside the tab bar layout. */}
+      <Route path="r/:id/cook" element={<CookModePage />} />
       <Route element={<Layout user={me.data} />}>
         <Route index element={<RecipeListPage />} />
         <Route path="new" element={<RecipeEditPage />} />

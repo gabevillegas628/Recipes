@@ -33,6 +33,8 @@ export interface Recipe extends RecipeSummary {
 export type RecipeInput = Omit<Recipe, 'id' | 'image' | 'needsReview' | 'createdAt' | 'updatedAt'> & {
   /** Omit to keep the current image, a URL to download a new one, or null to remove it. */
   imageUrl?: string | null;
+  /** A photo already uploaded with api.uploadImage. */
+  uploadedImage?: string;
 };
 
 /** A recipe extracted from a link or pasted text, not yet saved. */

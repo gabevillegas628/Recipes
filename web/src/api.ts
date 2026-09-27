@@ -21,7 +21,11 @@ export class ApiError extends Error {
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const res = await fetch(path, {
     ...init,
-    headers: init.body ? { 'Content-Type': 'application/json', ...init.headers } : init.headers,
+    // FormData bodies set their own multipart Content-Type.
+    headers:
+      typeof init.body === 'string'
+        ? { 'Content-Type': 'application/json', ...init.headers }
+        : init.headers,
     credentials: 'same-origin',
   });
   if (res.status === 204) return undefined as T;
@@ -65,6 +69,12 @@ export const api = {
   retryImportJob: (id: string) =>
     request<{ ok: true }>(`/api/import/jobs/${id}/retry`, { method: 'POST' }),
   clearImportJobs: () => request<{ deleted: number }>('/api/import/jobs', { method: 'DELETE' }),
+
+  uploadImage: (file: File) => {
+    const form = new FormData();
+    form.append('photo', file);
+    return request<{ image: string }>('/api/images', { method: 'POST', body: form });
+  },
 
   connectorStatus: () => request<ConnectorStatus>('/api/connector'),
   generateConnector: () =>

@@ -79,11 +79,20 @@ export function RecipeForm({
   const queryClient = useQueryClient();
   const [form, setForm] = useState<FormState>(() => toForm(recipe ?? draft));
   const [removeImage, setRemoveImage] = useState(false);
+  const [uploaded, setUploaded] = useState<string | null>(null);
+
+  const upload = useMutation({
+    mutationFn: api.uploadImage,
+    onSuccess: ({ image }) => {
+      setUploaded(image);
+      setForm((f) => ({ ...f, imageUrl: '' }));
+    },
+  });
   const set = (key: keyof FormState) => (e: { target: { value: string } }) =>
     setForm((f) => ({ ...f, [key]: e.target.value }));
 
   const currentImage = recipe && !removeImage ? imageUrl(recipe.image) : null;
-  const preview = form.imageUrl.trim() || currentImage;
+  const preview = (uploaded && imageUrl(uploaded)) || form.imageUrl.trim() || currentImage;
 
   const save = useMutation({
     mutationFn: () => {
@@ -103,6 +112,7 @@ export function RecipeForm({
         favorite: recipe?.favorite ?? false,
         tags: form.tags.split(','),
         imageUrl: newImage ? newImage : removeImage ? null : undefined,
+        uploadedImage: uploaded ?? undefined,
       };
       return recipe ? api.updateRecipe(recipe.id, input) : api.createRecipe(input);
     },
@@ -123,6 +133,24 @@ export function RecipeForm({
     <form className="form" onSubmit={submit}>
       {banner}
 
+      <div className="photo-picker">
+        <label className={`btn ${upload.isPending ? 'btn-disabled' : ''}`}>
+          {upload.isPending ? 'Uploading…' : preview ? 'Change photo' : 'Add photo'}
+          <input
+            type="file"
+            accept="image/*"
+            hidden
+            disabled={upload.isPending}
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) upload.mutate(file);
+              e.target.value = '';
+            }}
+          />
+        </label>
+        {upload.error && <span className="error">{upload.error.message}</span>}
+      </div>
+
       {preview && (
         <div className="image-preview">
           <img src={preview} alt="" />
@@ -131,6 +159,7 @@ export function RecipeForm({
             className="btn btn-small"
             onClick={() => {
               setForm((f) => ({ ...f, imageUrl: '' }));
+              setUploaded(null);
               if (recipe?.image) setRemoveImage(true);
             }}
           >
