@@ -51,6 +51,8 @@ export interface RecipeDraft {
   instructions: Section[];
   notes: string | null;
   tags: string[];
+  /** A photo already stored on the server (from a photo import). */
+  uploadedImage?: string | null;
 }
 
 export type ImportMethod = 'jsonld' | 'microdata' | 'ai';
@@ -59,6 +61,7 @@ export interface ImportResult {
   draft: RecipeDraft;
   method: ImportMethod;
   duplicateOf: { id: string; title: string } | null;
+  uploadedImage?: string | null;
 }
 
 export type ImportStatus = 'PENDING' | 'RUNNING' | 'DONE' | 'DUPLICATE' | 'FAILED';

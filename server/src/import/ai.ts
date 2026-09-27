@@ -24,7 +24,7 @@ const extraction = z.object({
   found: z
     .boolean()
     .describe(
-      'true if the text gives ingredients or steps for a dish, even informally (e.g. a social media caption); false if it only mentions or describes food',
+      'true if the input gives ingredients or steps for a dish, even informally (a social media caption, or cooking instructions printed on packaging); false if it only mentions or describes food',
     ),
   title: z.string(),
   description: z.string().nullable().describe('One or two sentences, or null'),
@@ -38,9 +38,11 @@ const extraction = z.object({
   tags: z.array(z.string()).describe('2-5 short lowercase tags, e.g. "dinner", "chicken", "vegetarian"'),
 });
 
-const SYSTEM = `You extract recipes from web pages and pasted text for a personal recipe box.
+const SYSTEM = `You extract recipes from web pages, pasted text and photos for a personal recipe box.
 
-Copy ingredient lines and steps faithfully, with their quantities and wording; don't invent or "improve" anything. Leave out life stories, ads, comments, nutrition panels and navigation text. Keep ingredient and step groupings (e.g. "For the dough") as sections, using a null title when there's only one group. Each instruction item should be one step. Use null for anything the text doesn't state.`;
+Copy ingredient lines and steps faithfully, with their quantities and wording; don't invent or "improve" anything. Leave out life stories, ads, comments, nutrition panels and navigation text. Keep ingredient and step groupings (e.g. "For the dough") as sections, using a null title when there's only one group. Each instruction item should be one step. Use null for anything the text doesn't state.
+
+Photos may show a recipe card, a cookbook page, or food packaging. For packaging (a frozen pizza, a boxed mix), use the product name as the title and the product itself as the ingredient, plus anything the package says to add (water, eggs, oil). When the package gives several methods (oven, microwave, air fryer), make each one an instruction section titled with the method, and keep temperatures and times exactly as printed.`;
 
 /** Readable text from an HTML page, with the obvious non-content removed. */
 export function pageText($: CheerioAPI): string {
@@ -59,7 +61,12 @@ export function pageText($: CheerioAPI): string {
 // real recipe while keeping the request small.
 const MAX_INPUT_CHARS = 100_000;
 
-export async function extractWithAi(text: string, sourceUrl: string | null): Promise<RecipeDraft> {
+/** Photos go to Claude as JPEG, already resized (see routes/import.ts). */
+export async function extractWithAi(
+  text: string,
+  sourceUrl: string | null,
+  photos: Buffer[] = [],
+): Promise<RecipeDraft> {
   if (!client) {
     throw new ImportError(
       "This page doesn't include structured recipe data, and AI extraction isn't set up (no ANTHROPIC_API_KEY).",
@@ -77,7 +84,22 @@ export async function extractWithAi(text: string, sourceUrl: string | null): Pro
     messages: [
       {
         role: 'user',
-        content: `${sourceUrl ? `Source: ${sourceUrl}\n\n` : ''}<page>\n${input}\n</page>`,
+        content: [
+          ...photos.map((photo) => ({
+            type: 'image' as const,
+            source: {
+              type: 'base64' as const,
+              media_type: 'image/jpeg' as const,
+              data: photo.toString('base64'),
+            },
+          })),
+          {
+            type: 'text' as const,
+            text: photos.length
+              ? `${photos.length === 1 ? 'This photo shows' : 'These photos show'} a recipe or food packaging.${input ? `\n\n${input}` : ''}`
+              : `${sourceUrl ? `Source: ${sourceUrl}\n\n` : ''}<page>\n${input}\n</page>`,
+          },
+        ],
       },
     ],
   });
@@ -91,6 +113,7 @@ export async function extractWithAi(text: string, sourceUrl: string | null): Pro
       inputTokens: response.usage.input_tokens,
       outputTokens: response.usage.output_tokens,
       source: sourceUrl,
+      photos: photos.length || undefined,
     }),
   );
 

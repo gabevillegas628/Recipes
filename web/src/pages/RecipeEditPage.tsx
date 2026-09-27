@@ -79,7 +79,7 @@ export function RecipeForm({
   const queryClient = useQueryClient();
   const [form, setForm] = useState<FormState>(() => toForm(recipe ?? draft));
   const [removeImage, setRemoveImage] = useState(false);
-  const [uploaded, setUploaded] = useState<string | null>(null);
+  const [uploaded, setUploaded] = useState<string | null>(draft?.uploadedImage ?? null);
 
   const upload = useMutation({
     mutationFn: api.uploadImage,

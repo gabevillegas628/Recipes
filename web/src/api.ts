@@ -65,6 +65,11 @@ export const api = {
   importUrl: (url: string) => request<ImportResult>('/api/import/url', json('POST', { url })),
   importText: (text: string, url?: string) =>
     request<ImportResult>('/api/import/text', json('POST', { text, url })),
+  importPhotos: (photos: Blob[]) => {
+    const form = new FormData();
+    photos.forEach((p, i) => form.append('photo', p, `photo-${i + 1}.jpg`));
+    return request<ImportResult>('/api/import/photo', { method: 'POST', body: form });
+  },
   bulkImport: (text: string) =>
     request<{ queued: number; invalid: string[] }>('/api/import/bulk', json('POST', { text })),
   listImportJobs: () => request<ImportJob[]>('/api/import/jobs'),

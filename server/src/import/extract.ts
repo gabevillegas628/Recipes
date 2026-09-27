@@ -1,4 +1,6 @@
 import * as cheerio from 'cheerio';
+import sharp from 'sharp';
+import { saveImage } from '../images.js';
 import { aiEnabled, extractWithAi, pageText } from './ai.js';
 import { hasContent, type ImportMethod, type RecipeDraft } from './draft.js';
 import { ImportError, NoRecipeFoundError } from './errors.js';
@@ -139,6 +141,44 @@ async function extractFromInstagram(code: string): Promise<Extracted> {
     if (err instanceof NoRecipeFoundError) throw new ImportError(NOT_IN_CAPTION);
     throw err;
   }
+}
+
+/**
+ * Photos of a recipe card, cookbook page or packaging. Each is resized for Claude
+ * (long edge 1568px, which is what it reads at anyway); the first becomes the
+ * recipe's picture.
+ */
+export async function extractFromPhotos(
+  photos: Buffer[],
+): Promise<Extracted & { uploadedImage: string | null }> {
+  if (!aiEnabled) {
+    throw new ImportError('Reading photos needs AI extraction, which isn’t set up (ANTHROPIC_API_KEY).');
+  }
+  let prepared: Buffer[];
+  try {
+    prepared = await Promise.all(
+      photos.map((p) =>
+        sharp(p, { failOn: 'none' })
+          .rotate()
+          .resize({ width: 1568, height: 1568, fit: 'inside', withoutEnlargement: true })
+          .jpeg({ quality: 85 })
+          .toBuffer(),
+      ),
+    );
+  } catch {
+    throw new ImportError("Couldn't read that photo. Try a JPEG or PNG.");
+  }
+
+  const [draft, uploadedImage] = await Promise.all([
+    extractWithAi('', null, prepared).catch((err) => {
+      if (err instanceof NoRecipeFoundError) {
+        throw new ImportError("Couldn't find a recipe or cooking instructions in that photo. Try a closer, sharper shot.");
+      }
+      throw err;
+    }),
+    saveImage(photos[0]).catch(() => null),
+  ]);
+  return { draft, method: 'ai', uploadedImage };
 }
 
 export async function extractFromText(text: string, sourceUrl: string | null): Promise<Extracted> {

@@ -1,10 +1,11 @@
+import multipart from '@fastify/multipart';
 import type { FastifyInstance, FastifyReply } from 'fastify';
 import { z } from 'zod';
 import { requireAuth } from '../auth.js';
 import { prisma } from '../db.js';
 import { aiEnabled } from '../import/ai.js';
 import { ImportError } from '../import/errors.js';
-import { extractFromText, extractFromUrl } from '../import/extract.js';
+import { extractFromPhotos, extractFromText, extractFromUrl } from '../import/extract.js';
 import { FetchError } from '../import/safeFetch.js';
 import { findExistingRecipe, kickImportWorker } from '../import/worker.js';
 
@@ -26,8 +27,31 @@ function isHttpUrl(value: string) {
   }
 }
 
+const MAX_PHOTOS = 4;
+
 export async function importRoutes(app: FastifyInstance) {
+  await app.register(multipart, { limits: { fileSize: 25 * 1024 * 1024, files: MAX_PHOTOS } });
   app.addHook('preHandler', requireAuth);
+
+  /** Read a recipe from photos (a recipe card, a cookbook page, the back of a box). Nothing is saved. */
+  app.post('/api/import/photo', async (request, reply) => {
+    const photos: Buffer[] = [];
+    try {
+      for await (const part of request.files()) {
+        const buffer = await part.toBuffer();
+        if (part.file.truncated) return reply.code(413).send({ error: 'A photo is too large (25 MB max).' });
+        photos.push(buffer);
+      }
+    } catch {
+      return reply.code(400).send({ error: `Send up to ${MAX_PHOTOS} photos at a time.` });
+    }
+    if (photos.length === 0) return reply.code(400).send({ error: 'Take or choose a photo first.' });
+    try {
+      return { ...(await extractFromPhotos(photos)), duplicateOf: null };
+    } catch (err) {
+      return sendImportError(reply, err);
+    }
+  });
 
   app.get('/api/import/config', async () => ({ aiEnabled }));
 
