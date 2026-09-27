@@ -77,9 +77,9 @@ export const api = {
     request<{ ok: true }>(`/api/import/jobs/${id}/retry`, { method: 'POST' }),
   clearImportJobs: () => request<{ deleted: number }>('/api/import/jobs', { method: 'DELETE' }),
 
-  uploadImage: (file: File) => {
+  uploadImage: (file: Blob) => {
     const form = new FormData();
-    form.append('photo', file);
+    form.append('photo', file, 'photo.jpg');
     return request<{ image: string }>('/api/images', { method: 'POST', body: form });
   },
 

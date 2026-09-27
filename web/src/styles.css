@@ -1316,19 +1316,30 @@ html.has-timers .cook {
 .photo-add {
   display: flex;
   flex-direction: column;
-  align-items: center;
   justify-content: center;
-  gap: 6px;
+  gap: 10px;
   aspect-ratio: 3 / 4;
   padding: 12px;
   border: 2px dashed var(--border);
   border-radius: var(--radius);
-  color: var(--muted);
-  text-align: center;
-  font-size: 15px;
-  cursor: pointer;
 }
 
-.photo-add-icon {
-  font-size: 32px;
+.photo-add .btn {
+  width: 100%;
+  min-height: 52px;
+  text-align: center;
+}
+
+
+/* Before any photo is picked, the buttons get the full width. */
+.photo-add-empty {
+  grid-column: 1 / -1;
+  flex-direction: row;
+  aspect-ratio: auto;
+  padding: 20px 12px;
+}
+
+.photo-add-empty .btn {
+  flex: 1;
+  width: auto;
 }

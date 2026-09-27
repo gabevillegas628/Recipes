@@ -2,6 +2,7 @@ import { useMutation, useQuery } from '@tanstack/react-query';
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { api } from '../api';
+import { PhotoInput } from '../components/PhotoInput';
 import { shrinkPhoto } from '../photos';
 import type { ImportResult } from '../types';
 import { RecipeForm } from './RecipeEditPage';
@@ -227,21 +228,14 @@ function PhotoPicker({
           </div>
         ))}
         {photos.length < MAX_PHOTOS && (
-          <label className="photo-add">
-            <span className="photo-add-icon">📷</span>
-            <span>{photos.length ? 'Add another' : 'Take or choose a photo'}</span>
-            <input
-              type="file"
-              accept="image/*"
-              multiple
-              hidden
-              onChange={(e) => {
-                const picked = [...(e.target.files ?? [])];
-                onChange([...photos, ...picked].slice(0, MAX_PHOTOS));
-                e.target.value = '';
-              }}
-            />
-          </label>
+          <div className={`photo-add ${photos.length === 0 ? 'photo-add-empty' : ''}`}>
+            <PhotoInput camera onPick={(picked) => onChange([...photos, ...picked].slice(0, MAX_PHOTOS))}>
+              📷 {photos.length ? 'Take another' : 'Take photo'}
+            </PhotoInput>
+            <PhotoInput onPick={(picked) => onChange([...photos, ...picked].slice(0, MAX_PHOTOS))}>
+              🖼️ Choose photo
+            </PhotoInput>
+          </div>
         )}
       </div>
     </div>

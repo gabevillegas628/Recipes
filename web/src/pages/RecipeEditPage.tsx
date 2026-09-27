@@ -2,6 +2,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState, type FormEvent, type ReactNode } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { api, imageUrl } from '../api';
+import { PhotoInput } from '../components/PhotoInput';
+import { shrinkPhoto } from '../photos';
 import { sectionsToText, textToSections } from '../sections';
 import type { Recipe, RecipeDraft, RecipeInput } from '../types';
 
@@ -82,7 +84,7 @@ export function RecipeForm({
   const [uploaded, setUploaded] = useState<string | null>(draft?.uploadedImage ?? null);
 
   const upload = useMutation({
-    mutationFn: api.uploadImage,
+    mutationFn: async (file: File) => api.uploadImage(await shrinkPhoto(file)),
     onSuccess: ({ image }) => {
       setUploaded(image);
       setForm((f) => ({ ...f, imageUrl: '' }));
@@ -134,20 +136,18 @@ export function RecipeForm({
       {banner}
 
       <div className="photo-picker">
-        <label className={`btn ${upload.isPending ? 'btn-disabled' : ''}`}>
-          {upload.isPending ? 'Uploading…' : preview ? 'Change photo' : 'Add photo'}
-          <input
-            type="file"
-            accept="image/*"
-            hidden
-            disabled={upload.isPending}
-            onChange={(e) => {
-              const file = e.target.files?.[0];
-              if (file) upload.mutate(file);
-              e.target.value = '';
-            }}
-          />
-        </label>
+        {upload.isPending ? (
+          <span className="muted">Uploading photo…</span>
+        ) : (
+          <>
+            <PhotoInput camera onPick={([file]) => upload.mutate(file)}>
+              📷 {preview ? 'Retake' : 'Take photo'}
+            </PhotoInput>
+            <PhotoInput multiple={false} onPick={([file]) => upload.mutate(file)}>
+              {preview ? 'Change photo' : 'Choose photo'}
+            </PhotoInput>
+          </>
+        )}
         {upload.error && <span className="error">{upload.error.message}</span>}
       </div>
 
