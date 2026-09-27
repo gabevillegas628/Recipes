@@ -1158,12 +1158,17 @@ html.has-timers .cook {
 
 .add-item {
   display: flex;
+  align-items: flex-start;
   gap: 8px;
   margin-bottom: 16px;
 }
 
-.add-item input {
+.add-item textarea {
   flex: 1;
+  resize: none;
+  max-height: 40vh;
+  font: inherit;
+  line-height: 1.35;
   min-width: 0;
   padding: 10px 12px;
   border: 1px solid var(--border);

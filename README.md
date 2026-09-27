@@ -44,7 +44,7 @@ Bulk imports are queued as `ImportJob` rows and processed one at a time by an in
 - **Timers:** times in steps become buttons (`web/src/durations.ts`). They run in-app, persist across reloads, and beep and vibrate when done. On iPhone they can instead start the Clock app through a "Recipe Timer" Shortcut (setup is in Settings).
 - **Meals:** named, ordered sets of recipes ("Taco night", "Thanksgiving"), found under Recipes → Meals. Each recipe has its own amount within the meal, and the meal's servings stepper scales them all together. Adding a meal to the week plans every recipe, grouped under one card.
 - **This week:** recipes on the plan remember their serving size and drop off 7 days after being added.
-- **Groceries:** add from a recipe or the whole week, unticking what you already have. Items are tidied and sorted into store sections by Claude (`server/src/groceries.ts`), or left unsorted without an API key. The list polls every few seconds so both phones stay in sync.
+- **Groceries:** add from a recipe or the whole week, unticking what you already have, or type or paste items (one per line or comma, so a list copied from a text works). Items are saved at once, then tidied and sorted into store sections by Claude in the background (`server/src/groceries.ts`, Haiku by default via `GROCERY_MODEL`). Items bought before reuse their remembered aisle without an AI call. Without an API key items stay unsorted. The list polls every few seconds so both phones stay in sync.
 
 ## Claude connector (MCP)
 

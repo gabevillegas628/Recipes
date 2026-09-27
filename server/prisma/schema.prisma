@@ -130,7 +130,7 @@ model PlanItem {
 model GroceryItem {
   id          String    @id @default(cuid())
   text        String
-  /// Store section, e.g. "Produce". Null when AI sorting is unavailable.
+  /// Store section, e.g. "Produce". Null until sorted, or when AI sorting is unavailable.
   aisle       String?
   checked     Boolean   @default(false)
   checkedAt   DateTime?
@@ -141,6 +141,14 @@ model GroceryItem {
   createdAt   DateTime  @default(now())
 
   @@index([checked, createdAt])
+}
+
+/// Store section learned from past sorts, keyed by the bare item name ("lemon").
+/// Lets repeat items skip the AI call.
+model GroceryAisle {
+  name      String   @id
+  aisle     String
+  updatedAt DateTime @updatedAt
 }
 
 /// A named set of recipes cooked together: "Taco night", "Thanksgiving".

@@ -1,5 +1,5 @@
 import { prisma } from './db.js';
-import { sortGroceries } from './groceries.js';
+import { rememberedAisles, scheduleSort } from './groceries.js';
 
 /**
  * "This week" and the grocery list: shared by the REST routes and the MCP tools.
@@ -76,14 +76,16 @@ export async function addGroceries(
   userId: string | null,
 ) {
   const clean = items.map((i) => ({ ...i, text: i.text.trim() })).filter((i) => i.text);
-  const sorted = await sortGroceries(clean.map((i) => i.text));
+  // Save now; anything without a remembered aisle is sorted in the background.
+  const aisles = await rememberedAisles(clean.map((i) => i.text));
   await prisma.groceryItem.createMany({
     data: clean.map((item, i) => ({
-      text: sorted[i].text,
-      aisle: sorted[i].aisle,
+      text: item.text,
+      aisle: aisles[i],
       recipeId: item.recipeId ?? null,
       createdById: userId,
     })),
   });
+  if (aisles.some((a) => !a)) scheduleSort();
   return clean.length;
 }

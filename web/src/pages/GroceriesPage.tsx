@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useState, type FormEvent } from 'react';
+import { useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api';
 import type { GroceryItem } from '../types';
@@ -19,10 +19,23 @@ const AISLES = [
   'Other',
 ];
 
+/**
+ * One item per line or comma (commas inside parentheses don't split), so a
+ * list pasted from a text message goes in as separate items. Drops bullets
+ * and numbering like "- ", "• " or "2. ".
+ */
+function splitItems(text: string): string[] {
+  return text
+    .split(/\n|,(?![^(]*\))/)
+    .map((s) => s.replace(/^\s*(?:[-*•·▪◦]|\d+[.)])\s+/, '').trim())
+    .filter(Boolean);
+}
+
 export function GroceriesPage() {
   const queryClient = useQueryClient();
   const [text, setText] = useState('');
   const [showChecked, setShowChecked] = useState(false);
+  const box = useRef<HTMLTextAreaElement>(null);
 
   // Poll so both phones stay in sync at the store.
   const list = useQuery({ queryKey: ['groceries'], queryFn: api.groceries, refetchInterval: 4000 });
@@ -30,10 +43,13 @@ export function GroceriesPage() {
   const refresh = () => queryClient.invalidateQueries({ queryKey: ['groceries'] });
 
   const add = useMutation({
-    mutationFn: (t: string) => api.addGroceries(t.split(/\n|,(?![^(]*\))/).map((s) => ({ text: s }))),
+    mutationFn: (t: string) => api.addGroceries(splitItems(t).map((s) => ({ text: s }))),
     onSuccess: () => {
       setText('');
+      if (box.current) box.current.style.height = '';
       refresh();
+      // Items are sorted into aisles a moment after they're added.
+      setTimeout(refresh, 3000);
     },
   });
 
@@ -54,11 +70,31 @@ export function GroceriesPage() {
     if (text.trim()) add.mutate(text);
   }
 
+  // Enter adds; pasted line breaks stay, so a pasted list becomes several items.
+  function onKeyDown(e: KeyboardEvent<HTMLTextAreaElement>) {
+    if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
+      e.preventDefault();
+      if (text.trim()) add.mutate(text);
+    }
+  }
+
+  function onChange(value: string) {
+    setText(value);
+    const el = box.current;
+    if (el) {
+      el.style.height = 'auto';
+      el.style.height = `${el.scrollHeight + 2}px`;
+    }
+  }
+
   const open = items.filter((i) => !i.checked);
   const checked = items.filter((i) => i.checked);
+  // Not sorted yet (just added, or AI sorting is off): shown first, without a heading.
+  const unsorted = open.filter((i) => !i.aisle);
   const groups = new Map<string, GroceryItem[]>();
   for (const item of open) {
-    const aisle = item.aisle && AISLES.includes(item.aisle) ? item.aisle : 'Other';
+    if (!item.aisle) continue;
+    const aisle = AISLES.includes(item.aisle) ? item.aisle : 'Other';
     groups.set(aisle, [...(groups.get(aisle) ?? []), item]);
   }
   const ordered = AISLES.filter((a) => groups.has(a));
@@ -68,10 +104,13 @@ export function GroceriesPage() {
       <h1 className="form-title">Groceries</h1>
 
       <form className="add-item" onSubmit={submit}>
-        <input
-          placeholder="Add an item (e.g. 2 lemons)"
+        <textarea
+          ref={box}
+          rows={1}
+          placeholder="Add items, or paste a list"
           value={text}
-          onChange={(e) => setText(e.target.value)}
+          onChange={(e) => onChange(e.target.value)}
+          onKeyDown={onKeyDown}
           enterKeyHint="done"
         />
         <button className="btn btn-primary" disabled={add.isPending || !text.trim()}>
@@ -88,6 +127,14 @@ export function GroceriesPage() {
             <Link to="/week">This week</Link>.
           </p>
         </div>
+      )}
+
+      {unsorted.length > 0 && (
+        <ul className="grocery-list">
+          {unsorted.map((item) => (
+            <GroceryRow key={item.id} item={item} onToggle={() => toggle.mutate(item)} />
+          ))}
+        </ul>
       )}
 
       {ordered.map((aisle) => (
