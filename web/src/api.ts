@@ -76,6 +76,18 @@ export const api = {
     return request<{ image: string }>('/api/images', { method: 'POST', body: form });
   },
 
+  changePassword: (currentPassword: string, newPassword: string) =>
+    request<{ ok: true }>('/api/auth/password', json('POST', { currentPassword, newPassword })),
+
+  listUsers: () => request<User[]>('/api/users'),
+  createUser: (input: { name: string; email: string; password: string; isAdmin: boolean }) =>
+    request<User>('/api/users', json('POST', input)),
+  updateUser: (
+    id: string,
+    input: Partial<{ name: string; email: string; password: string; isAdmin: boolean }>,
+  ) => request<User>(`/api/users/${id}`, json('PATCH', input)),
+  deleteUser: (id: string) => request<void>(`/api/users/${id}`, { method: 'DELETE' }),
+
   connectorStatus: () => request<ConnectorStatus>('/api/connector'),
   generateConnector: () =>
     request<ConnectorStatus & { url: string }>('/api/connector', { method: 'POST' }),

@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../api';
+import { ChangePassword, PeopleSection } from '../components/UserSettings';
 import { signOut } from '../session';
 import type { ConnectorStatus, User } from '../types';
 
@@ -24,14 +25,19 @@ export function SettingsPage({ user }: { user: User }) {
 
       <PhoneSection />
 
+      {user.isAdmin && <PeopleSection me={user} />}
+
       <section className="settings-section">
         <h2>Account</h2>
         <p>
           {user.name} <span className="muted">· {user.email}</span>
         </p>
-        <button type="button" className="btn" onClick={logout}>
-          Log out
-        </button>
+        <div className="settings-actions">
+          <ChangePassword />
+          <button type="button" className="btn" onClick={logout}>
+            Log out
+          </button>
+        </div>
       </section>
     </div>
   );

@@ -76,7 +76,11 @@ Edit `server/prisma/schema.prisma`, then run `npm run db:migrate -w server -- --
 
 `railway.json` sets the build (`npm run build`), start (`npm start`, which runs `prisma migrate deploy` first) and health check (`/api/health`).
 
-### Creating users in production
+### Users
+
+Admins manage people from **Settings → People** in the app: add someone with a temporary password, reset a password, rename, make or remove an admin, or remove a person. Their recipes stay. Everyone can change their own password under **Settings → Account**. Everyone shares one recipe box.
+
+### Creating the first user in production
 
 The production database is only reachable inside Railway, so run the compiled script in the app container. With the Railway CLI linked to the app service:
 
@@ -84,4 +88,4 @@ The production database is only reachable inside Railway, so run the compiled sc
 railway ssh -- node server/dist/scripts/createUser.js you@example.com "Your Name" "password"
 ```
 
-Running the script again with the same email resets that user's password.
+The first user is always an admin, and `--admin` makes any user one. Running the script again with the same email resets that user's password, which is useful if an admin is ever locked out.

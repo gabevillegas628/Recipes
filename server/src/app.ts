@@ -10,6 +10,7 @@ import { imageRoutes } from './routes/images.js';
 import { importRoutes } from './routes/import.js';
 import { mcpRoutes } from './routes/mcp.js';
 import { recipeRoutes } from './routes/recipes.js';
+import { userRoutes } from './routes/users.js';
 
 export async function buildApp() {
   const app = Fastify({
@@ -28,7 +29,11 @@ export async function buildApp() {
 
   await app.register(cookie, { secret: env.sessionSecret });
   app.decorateRequest('userId', null);
-  app.addHook('onRequest', loadSession);
+  app.decorateRequest('isAdmin', false);
+  // Sessions only matter to the API; skip the user lookup for images and app files.
+  app.addHook('onRequest', async (request) => {
+    if (request.url.startsWith('/api/')) await loadSession(request);
+  });
 
   app.get('/api/health', async () => ({ ok: true }));
   await app.register(authRoutes);
@@ -36,6 +41,7 @@ export async function buildApp() {
   await app.register(importRoutes);
   await app.register(mcpRoutes);
   await app.register(imageRoutes);
+  await app.register(userRoutes);
   app.addHook('onReady', resumeImportJobs);
 
   // Recipe images from the upload dir (a Railway volume in production).
