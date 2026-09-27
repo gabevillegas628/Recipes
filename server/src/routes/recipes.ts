@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { requireAuth } from '../auth.js';
 import { prisma } from '../db.js';
 import type { Prisma } from '../generated/prisma/client.js';
+import { getPrepPlan, PrepError } from '../prep.js';
 import { recipeInput } from '../recipeInput.js';
 import {
   createRecipe,
@@ -56,6 +57,19 @@ export async function recipeRoutes(app: FastifyInstance) {
     const recipe = await prisma.recipe.findUnique({ where: { id }, include: withTags });
     if (!recipe) return reply.code(404).send({ error: 'Recipe not found' });
     return serialize(recipe);
+  });
+
+  /** Mise en place: knife work plus ingredients grouped into bowls. Slow the first time (AI). */
+  app.get('/api/recipes/:id/prep', async (request, reply) => {
+    const { id } = idParams.parse(request.params);
+    try {
+      const plan = await getPrepPlan(id);
+      if (!plan) return reply.code(404).send({ error: 'Recipe not found' });
+      return plan;
+    } catch (err) {
+      if (err instanceof PrepError) return reply.code(503).send({ error: err.message });
+      throw err;
+    }
   });
 
   app.post('/api/recipes', async (request, reply) => {

@@ -106,7 +106,7 @@ function RecipeView({ recipe }: { recipe: Recipe }) {
 
       <div className="actions">
         {recipe.instructions.length > 0 && (
-          <Link to={`/r/${recipe.id}/cook${scale !== 1 ? `?scale=${scale}` : ''}`} className="btn btn-primary">
+          <Link to={`/r/${recipe.id}/prep${scale !== 1 ? `?scale=${scale}` : ''}`} className="btn btn-primary">
             Start cooking
           </Link>
         )}

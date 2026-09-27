@@ -8,6 +8,7 @@ import { GroceriesPage } from './pages/GroceriesPage';
 import { MealEditPage } from './pages/MealEditPage';
 import { MealPage } from './pages/MealPage';
 import { MealsPage } from './pages/MealsPage';
+import { PrepPage } from './pages/PrepPage';
 import { WeekPage } from './pages/WeekPage';
 import { TimerProvider, TimerTray } from './timers';
 import { ImportPage } from './pages/ImportPage';
@@ -28,6 +29,7 @@ export function App() {
       <TimerTray />
       <Routes>
       {/* Full screen, outside the tab bar layout. */}
+      <Route path="r/:id/prep" element={<PrepPage />} />
       <Route path="r/:id/cook" element={<CookModePage />} />
       <Route element={<Layout user={me.data} />}>
         <Route index element={<RecipeListPage />} />

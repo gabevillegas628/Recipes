@@ -59,6 +59,7 @@ model Recipe {
   planItems    PlanItem[]
   groceryItems GroceryItem[]
   mealRecipes  MealRecipe[]
+  prep         RecipePrep?
 
   @@index([createdAt])
   @@index([sourceUrl])
@@ -141,6 +142,17 @@ model GroceryItem {
   createdAt   DateTime  @default(now())
 
   @@index([checked, createdAt])
+}
+
+/// Cached mise en place plan (see src/prep.ts). Rebuilt when the recipe's
+/// ingredients or steps no longer match the hash.
+model RecipePrep {
+  recipe    Recipe   @relation(fields: [recipeId], references: [id], onDelete: Cascade)
+  recipeId  String   @id
+  hash      String
+  plan      Json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 /// Store section learned from past sorts, keyed by the bare item name ("lemon").

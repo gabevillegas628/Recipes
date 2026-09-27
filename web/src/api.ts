@@ -5,6 +5,7 @@ import type {
   MealInput,
   MealSummary,
   PlanItem,
+  PrepPlan,
   ImportJob,
   ImportResult,
   Recipe,
@@ -56,6 +57,7 @@ export const api = {
     return request<RecipeSummary[]>(`/api/recipes${qs ? `?${qs}` : ''}`);
   },
   getRecipe: (id: string) => request<Recipe>(`/api/recipes/${id}`),
+  getPrep: (id: string) => request<PrepPlan>(`/api/recipes/${id}/prep`),
   createRecipe: (input: RecipeInput) => request<Recipe>('/api/recipes', json('POST', input)),
   updateRecipe: (id: string, input: RecipeInput) =>
     request<Recipe>(`/api/recipes/${id}`, json('PUT', input)),

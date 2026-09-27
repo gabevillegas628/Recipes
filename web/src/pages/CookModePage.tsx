@@ -5,6 +5,7 @@ import { api } from '../api';
 import { StepText } from '../components/StepText';
 import { scaleIngredient } from '../scale';
 import type { Recipe } from '../types';
+import { bowlLine, ingredientLines, usePrep } from './PrepPage';
 import { useWakeLock } from '../useWakeLock';
 
 /** Full-screen, one step at a time, screen kept awake. */
@@ -51,6 +52,8 @@ function CookMode({ recipe }: { recipe: Recipe }) {
   const [index, setIndex] = useState(() => Math.min(loadStep(recipe.id), Math.max(steps.length - 1, 0)));
   const [showIngredients, setShowIngredients] = useState(false);
   const [checked, setChecked] = useState<Set<string>>(new Set());
+  const prep = usePrep(recipe);
+  const lines = useMemo(() => ingredientLines(recipe), [recipe]);
 
   const last = steps.length - 1;
   const go = useCallback(
@@ -103,6 +106,7 @@ function CookMode({ recipe }: { recipe: Recipe }) {
     });
 
   const step = steps[index];
+  const bowls = prep.data?.bowls.filter((b) => b.step === index) ?? [];
 
   return (
     <div className="cook">
@@ -111,6 +115,9 @@ function CookMode({ recipe }: { recipe: Recipe }) {
           ✕
         </button>
         <div className="cook-title">{recipe.title}</div>
+        <Link to={`/r/${recipe.id}/prep${scale !== 1 ? `?scale=${scale}` : ''}`} replace className="cook-pill">
+          Prep
+        </Link>
         <button
           type="button"
           className={`cook-pill ${showIngredients ? 'on' : ''}`}
@@ -141,6 +148,18 @@ function CookMode({ recipe }: { recipe: Recipe }) {
           <p className="cook-step">
             <StepText text={step.text} recipeTitle={recipe.title} />
           </p>
+          {bowls.length > 0 && (
+            <ul className="cook-bowls">
+              {bowls.map((bowl, i) => (
+                <li key={i}>
+                  <strong>{bowl.label}</strong>
+                  {bowl.items.map((item, j) => (
+                    <span key={j}>{bowlLine(lines[item.ingredient], item.note, scale)}</span>
+                  ))}
+                </li>
+              ))}
+            </ul>
+          )}
         </main>
       )}
 

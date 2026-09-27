@@ -30,6 +30,12 @@ export interface Recipe extends RecipeSummary {
   updatedAt: string;
 }
 
+/** Mise en place. Numbers index the recipe's ingredient lines and steps, counted across sections. */
+export interface PrepPlan {
+  tasks: { text: string; ingredients: number[] }[];
+  bowls: { step: number; label: string; items: { ingredient: number; note: string | null }[] }[];
+}
+
 export type RecipeInput = Omit<Recipe, 'id' | 'image' | 'needsReview' | 'createdAt' | 'updatedAt'> & {
   /** Omit to keep the current image, a URL to download a new one, or null to remove it. */
   imageUrl?: string | null;
