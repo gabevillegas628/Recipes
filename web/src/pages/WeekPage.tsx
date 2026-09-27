@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api, thumbUrl } from '../api';
 import { GroceryPicker } from '../components/GroceryPicker';
-import { baseServings, formatAmount } from '../scale';
+import { servingsLabel } from '../scale';
 import type { PlanItem } from '../types';
 
 export function WeekPage() {
@@ -42,9 +42,13 @@ export function WeekPage() {
             {left === 0 ? 'All cooked. Nice.' : `${left} of ${items.length} left to make`}
           </p>
           <ul className="recipe-list">
-            {items.map((item) => (
-              <PlanRow key={item.id} item={item} onChange={refresh} />
-            ))}
+            {groupByMeal(items).map((block) =>
+              block.meal ? (
+                <MealGroup key={block.meal.id} meal={block.meal} items={block.items} onChange={refresh} />
+              ) : (
+                <PlanRow key={block.items[0].id} item={block.items[0]} onChange={refresh} />
+              ),
+            )}
           </ul>
 
           <div className="settings-actions week-actions">
@@ -75,22 +79,76 @@ export function WeekPage() {
   );
 }
 
-function PlanRow({ item, onChange }: { item: PlanItem; onChange: () => void }) {
+type Block = { meal: PlanItem['meal']; items: PlanItem[] };
+
+/** Recipes added as part of a meal stay together, in the order the meal was added. */
+function groupByMeal(items: PlanItem[]): Block[] {
+  const blocks: Block[] = [];
+  const byMeal = new Map<string, Block>();
+  for (const item of items) {
+    if (!item.meal) {
+      blocks.push({ meal: null, items: [item] });
+      continue;
+    }
+    let block = byMeal.get(item.meal.id);
+    if (!block) {
+      block = { meal: item.meal, items: [] };
+      byMeal.set(item.meal.id, block);
+      blocks.push(block);
+    }
+    block.items.push(item);
+  }
+  return blocks;
+}
+
+function MealGroup({
+  meal,
+  items,
+  onChange,
+}: {
+  meal: NonNullable<PlanItem['meal']>;
+  items: PlanItem[];
+  onChange: () => void;
+}) {
+  const remove = useMutation({ mutationFn: () => api.removeMealFromPlan(meal.id), onSuccess: onChange });
+  const done = items.filter((i) => i.cookedAt).length;
+  return (
+    <li className="meal-group">
+      <div className="meal-group-header">
+        <Link to={`/m/${meal.id}`} className="meal-group-title">
+          {meal.name}
+        </Link>
+        <span className="muted small">
+          {done}/{items.length} made
+        </span>
+        <button
+          type="button"
+          className="cook-icon-btn"
+          onClick={() => confirm(`Remove "${meal.name}" from this week?`) && remove.mutate()}
+          aria-label="Remove meal from this week"
+        >
+          ✕
+        </button>
+      </div>
+      <ul className="recipe-list">
+        {items.map((item) => (
+          <PlanRow key={item.id} item={item} onChange={onChange} inMeal />
+        ))}
+      </ul>
+    </li>
+  );
+}
+
+function PlanRow({ item, onChange, inMeal = false }: { item: PlanItem; onChange: () => void; inMeal?: boolean }) {
   const cooked = Boolean(item.cookedAt);
   const toggle = useMutation({ mutationFn: () => api.updatePlanItem(item.id, { cooked: !cooked }), onSuccess: onChange });
   const remove = useMutation({ mutationFn: () => api.removePlanItem(item.id), onSuccess: onChange });
 
-  const base = baseServings(item.recipe.servings);
-  const amount =
-    item.scale === 1
-      ? null
-      : base
-        ? `Serves ${formatAmount(base * item.scale, null)}`
-        : `${formatAmount(item.scale, null)}×`;
+  const amount = item.scale === 1 ? null : servingsLabel(item.recipe.servings, item.scale);
   const img = thumbUrl(item.recipe.image);
 
   return (
-    <li className={`plan-row ${cooked ? 'cooked' : ''}`}>
+    <li className={`plan-row ${cooked ? 'cooked' : ''} ${inMeal ? 'in-meal' : ''}`}>
       <button
         type="button"
         className={`check-circle ${cooked ? 'on' : ''}`}
@@ -108,9 +166,11 @@ function PlanRow({ item, onChange }: { item: PlanItem; onChange: () => void }) {
           </div>
         </div>
       </Link>
-      <button type="button" className="cook-icon-btn" onClick={() => remove.mutate()} aria-label="Remove from this week">
-        ✕
-      </button>
+      {!inMeal && (
+        <button type="button" className="cook-icon-btn" onClick={() => remove.mutate()} aria-label="Remove from this week">
+          ✕
+        </button>
+      )}
     </li>
   );
 }

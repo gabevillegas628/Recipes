@@ -2,6 +2,7 @@ import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { api, thumbUrl } from '../api';
+import { LibraryTabs } from '../components/LibraryTabs';
 import { displayTime } from '../sections';
 import type { RecipeSummary } from '../types';
 
@@ -43,6 +44,7 @@ export function RecipeListPage() {
   return (
     <div className="page">
       <header className="list-header">
+        <LibraryTabs />
         <input
           className="search"
           type="search"

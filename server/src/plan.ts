@@ -36,18 +36,28 @@ export async function getPlan() {
         },
       },
       addedBy: { select: { name: true } },
+      meal: { select: { id: true, name: true } },
     },
   });
 }
 
 /** Adds a recipe to this week, or updates its servings if it's already there. */
-export async function addToPlan(recipeId: string, scale: number, userId: string | null) {
+export async function addToPlan(
+  recipeId: string,
+  scale: number,
+  userId: string | null,
+  mealId: string | null = null,
+) {
   await archiveOldPlanItems();
   const existing = await prisma.planItem.findFirst({ where: { recipeId, archivedAt: null } });
   if (existing) {
-    return prisma.planItem.update({ where: { id: existing.id }, data: { scale } });
+    return prisma.planItem.update({
+      where: { id: existing.id },
+      // Adding a single recipe keeps it in whatever meal it was planned with.
+      data: { scale, ...(mealId ? { mealId } : {}) },
+    });
   }
-  return prisma.planItem.create({ data: { recipeId, scale, addedById: userId } });
+  return prisma.planItem.create({ data: { recipeId, scale, addedById: userId, mealId } });
 }
 
 export async function clearPlan() {

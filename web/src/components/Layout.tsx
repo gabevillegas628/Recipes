@@ -1,14 +1,22 @@
-import { NavLink, Outlet } from 'react-router-dom';
+import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import type { User } from '../types';
 
 export function Layout({ user }: { user: User }) {
+  const location = useLocation();
   return (
     <div className="app">
       <main className="main">
         <Outlet />
       </main>
       <nav className="tabbar">
-        <NavLink to="/" end className="tab">
+        <NavLink
+          to="/"
+          end
+          className={({ isActive }) =>
+            // Meals and individual recipes live under the Recipes tab too.
+            `tab ${isActive || /^\/(meals|m\/|r\/)/.test(location.pathname) ? 'active' : ''}`
+          }
+        >
           <BookIcon />
           <span>Recipes</span>
         </NavLink>

@@ -1,6 +1,9 @@
 import type {
   ConnectorStatus,
   GroceryItem,
+  Meal,
+  MealInput,
+  MealSummary,
   PlanItem,
   ImportJob,
   ImportResult,
@@ -90,6 +93,21 @@ export const api = {
     request<{ ok: true }>(`/api/plan/${id}`, json('PATCH', input)),
   removePlanItem: (id: string) => request<void>(`/api/plan/${id}`, { method: 'DELETE' }),
   clearPlan: () => request<{ ok: true }>('/api/plan', { method: 'DELETE' }),
+
+  removeMealFromPlan: (mealId: string) =>
+    request<{ ok: true }>(`/api/plan/meal/${mealId}`, { method: 'DELETE' }),
+
+  meals: () => request<MealSummary[]>('/api/meals'),
+  meal: (id: string) => request<Meal>(`/api/meals/${id}`),
+  createMeal: (input: Omit<MealInput, 'recipes'> & { recipeIds: string[] }) =>
+    request<{ id: string }>('/api/meals', json('POST', input)),
+  updateMeal: (id: string, input: Partial<MealInput>) =>
+    request<{ id: string }>(`/api/meals/${id}`, json('PATCH', input)),
+  deleteMeal: (id: string) => request<void>(`/api/meals/${id}`, { method: 'DELETE' }),
+  addRecipeToMeal: (mealId: string, recipeId: string) =>
+    request<{ ok: true }>(`/api/meals/${mealId}/recipes`, json('POST', { recipeId })),
+  addMealToPlan: (mealId: string, factor: number) =>
+    request<{ ok: true }>(`/api/meals/${mealId}/plan`, json('POST', { factor })),
 
   groceries: () => request<GroceryItem[]>('/api/grocery'),
   addGroceries: (items: { text: string; recipeId?: string | null }[]) =>

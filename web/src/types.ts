@@ -82,16 +82,46 @@ export interface PlanItem {
   createdAt: string;
   cookedAt: string | null;
   addedBy: { name: string } | null;
-  recipe: {
-    id: string;
-    title: string;
-    image: string | null;
-    servings: string | null;
-    totalMinutes: number | null;
-    prepMinutes: number | null;
-    cookMinutes: number | null;
-    ingredients: Section[];
-  };
+  meal: { id: string; name: string } | null;
+  recipe: PlannedRecipe;
+}
+
+/** The recipe fields needed to plan, scale and shop for a recipe. */
+export interface PlannedRecipe {
+  id: string;
+  title: string;
+  image: string | null;
+  servings: string | null;
+  totalMinutes: number | null;
+  prepMinutes: number | null;
+  cookMinutes: number | null;
+  ingredients: Section[];
+}
+
+export interface MealSummary {
+  id: string;
+  name: string;
+  notes: string | null;
+  servings: number | null;
+  updatedAt: string;
+  recipeCount: number;
+  recipeTitles: string[];
+  images: string[];
+}
+
+export interface Meal {
+  id: string;
+  name: string;
+  notes: string | null;
+  servings: number | null;
+  recipes: { scale: number; recipe: PlannedRecipe }[];
+}
+
+export interface MealInput {
+  name: string;
+  notes: string | null;
+  servings: number | null;
+  recipes: { recipeId: string; scale: number }[];
 }
 
 export interface GroceryItem {

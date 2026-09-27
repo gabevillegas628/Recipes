@@ -48,6 +48,13 @@ export async function planRoutes(app: FastifyInstance) {
     return reply.code(204).send();
   });
 
+  /** Removes a whole meal from this week. */
+  app.delete('/api/plan/meal/:id', async (request) => {
+    const { id } = idParams.parse(request.params);
+    await prisma.planItem.updateMany({ where: { mealId: id, archivedAt: null }, data: { archivedAt: new Date() } });
+    return { ok: true };
+  });
+
   /** "Start new week": clears everything planned. */
   app.delete('/api/plan', async () => {
     await clearPlan();

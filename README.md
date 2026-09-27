@@ -42,6 +42,7 @@ Bulk imports are queued as `ImportJob` rows and processed one at a time by an in
 
 - **Scaling:** the servings stepper (or ½×–3× when a recipe has no serving count) rescales ingredient lines in the browser (`web/src/scale.ts`). It scales the leading amount and any other amount followed by a unit, leaves package sizes such as "2 (15 oz) cans" alone, and tidies kitchen volumes (6 tsp becomes 2 tbsp).
 - **Timers:** times in steps become buttons (`web/src/durations.ts`). They run in-app, persist across reloads, and beep and vibrate when done. On iPhone they can instead start the Clock app through a "Recipe Timer" Shortcut (setup is in Settings).
+- **Meals:** named, ordered sets of recipes ("Taco night", "Thanksgiving"), found under Recipes → Meals. Each recipe has its own amount within the meal, and the meal's servings stepper scales them all together. Adding a meal to the week plans every recipe, grouped under one card.
 - **This week:** recipes on the plan remember their serving size and drop off 7 days after being added.
 - **Groceries:** add from a recipe or the whole week, unticking what you already have. Items are tidied and sorted into store sections by Claude (`server/src/groceries.ts`), or left unsorted without an API key. The list polls every few seconds so both phones stay in sync.
 
@@ -57,6 +58,7 @@ The server exposes an MCP endpoint at `/mcp/<token>` with these tools:
 | `get_recipe` | Returns a full recipe |
 | `update_recipe` | Partial update: only the fields you pass change |
 | `get_this_week` / `add_to_this_week` | Read or add to the meal plan, with a servings multiplier |
+| `list_meals` / `get_meal` / `create_meal` / `add_meal_to_week` | Browse and build meals, and plan a whole meal for a number of people |
 | `get_grocery_list` / `add_to_grocery_list` | Read or add to the shared grocery list |
 
 There's deliberately no delete tool.

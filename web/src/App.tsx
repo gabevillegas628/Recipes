@@ -5,6 +5,9 @@ import { Layout } from './components/Layout';
 import { BulkImportPage } from './pages/BulkImportPage';
 import { CookModePage } from './pages/CookModePage';
 import { GroceriesPage } from './pages/GroceriesPage';
+import { MealEditPage } from './pages/MealEditPage';
+import { MealPage } from './pages/MealPage';
+import { MealsPage } from './pages/MealsPage';
 import { WeekPage } from './pages/WeekPage';
 import { TimerProvider, TimerTray } from './timers';
 import { ImportPage } from './pages/ImportPage';
@@ -29,6 +32,10 @@ export function App() {
       <Route element={<Layout user={me.data} />}>
         <Route index element={<RecipeListPage />} />
         <Route path="new" element={<RecipeEditPage />} />
+        <Route path="meals" element={<MealsPage />} />
+        <Route path="meals/new" element={<MealEditPage />} />
+        <Route path="m/:id" element={<MealPage />} />
+        <Route path="m/:id/edit" element={<MealEditPage />} />
         <Route path="week" element={<WeekPage />} />
         <Route path="groceries" element={<GroceriesPage />} />
         <Route path="import" element={<ImportPage />} />

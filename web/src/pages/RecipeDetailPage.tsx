@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState, type ReactNode } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { api, imageUrl } from '../api';
+import { AddToMeal } from '../components/AddToMeal';
 import { GroceryPicker } from '../components/GroceryPicker';
 import { ServingsControl } from '../components/ServingsControl';
 import { StepText } from '../components/StepText';
@@ -30,6 +31,7 @@ function RecipeView({ recipe }: { recipe: Recipe }) {
   // Opening from "This week" (?scale=) shows the amount that was planned.
   const [scale, setScale] = useState(() => Number(params.get('scale')) || 1);
   const [picking, setPicking] = useState(false);
+  const [choosingMeal, setChoosingMeal] = useState(false);
 
   const favorite = useMutation({
     mutationFn: () => api.setFavorite(recipe.id, !recipe.favorite),
@@ -123,6 +125,9 @@ function RecipeView({ recipe }: { recipe: Recipe }) {
           {recipe.favorite ? '★' : '☆'}
           <span className="sr-only">{recipe.favorite ? 'Unfavorite' : 'Favorite'}</span>
         </button>
+        <button type="button" className="btn" onClick={() => setChoosingMeal(true)}>
+          Add to meal
+        </button>
         <Link to={`/r/${recipe.id}/edit`} className="btn">
           Edit
         </Link>
@@ -185,6 +190,7 @@ function RecipeView({ recipe }: { recipe: Recipe }) {
           onClose={() => setPicking(false)}
         />
       )}
+      {choosingMeal && <AddToMeal recipeId={recipe.id} onClose={() => setChoosingMeal(false)} />}
     </article>
   );
 }

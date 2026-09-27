@@ -183,3 +183,21 @@ export function baseServings(servings: string | null): number | null {
   const n = m ? Number(m[0].replace(',', '.')) : NaN;
   return n > 0 && n < 1000 ? n : null;
 }
+
+/**
+ * A recipe's yield at a given amount: "24 rolls" at ½× -> "12 rolls", "12" -> "Serves 12",
+ * "6 servings" at ½× -> "3 servings". Without a yield, "2×" (or null at 1×).
+ */
+export function servingsLabel(servings: string | null, scale: number): string | null {
+  const text = servings?.trim();
+  if (!text || !baseServings(text)) return Math.abs(scale - 1) < 0.001 ? null : `${formatAmount(scale, null)}×`;
+  let scaled = scaleIngredient(text, scale);
+  // "Serves 4" / "Makes 16 cookies": the count isn't at the start, so scale the first number (or range).
+  if (scaled === text && Math.abs(scale - 1) > 0.001) {
+    scaled = text.replace(/(\d+(?:[.,]\d+)?)(\s*[-–]\s*(\d+(?:[.,]\d+)?))?/, (_, a: string, range?: string, b?: string) => {
+      const f = (n: string) => formatAmount(Number(n.replace(',', '.')) * scale, null);
+      return range && b ? `${f(a)}–${f(b)}` : f(a);
+    });
+  }
+  return /^[\d.,½¼¾⅓⅔–-]+$/.test(scaled) ? `Serves ${scaled}` : scaled;
+}

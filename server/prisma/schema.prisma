@@ -21,6 +21,7 @@ model User {
   connectorTokens ConnectorToken[]
   planItems       PlanItem[]
   groceryItems    GroceryItem[]
+  meals           Meal[]
 }
 
 enum RecipeSource {
@@ -57,6 +58,7 @@ model Recipe {
   importJobs   ImportJob[]
   planItems    PlanItem[]
   groceryItems GroceryItem[]
+  mealRecipes  MealRecipe[]
 
   @@index([createdAt])
   @@index([sourceUrl])
@@ -114,6 +116,9 @@ model PlanItem {
   scale      Float     @default(1)
   addedBy    User?     @relation(fields: [addedById], references: [id], onDelete: SetNull)
   addedById  String?
+  /// Set when the recipe was added as part of a meal; the Week tab groups by it.
+  meal       Meal?     @relation(fields: [mealId], references: [id], onDelete: SetNull)
+  mealId     String?
   createdAt  DateTime  @default(now())
   cookedAt   DateTime?
   archivedAt DateTime?
@@ -136,4 +141,33 @@ model GroceryItem {
   createdAt   DateTime  @default(now())
 
   @@index([checked, createdAt])
+}
+
+/// A named set of recipes cooked together: "Taco night", "Thanksgiving".
+model Meal {
+  id          String       @id @default(cuid())
+  name        String
+  notes       String?
+  /// How many people the meal serves as defined; the meal's servings stepper scales from this.
+  servings    Int?
+  recipes     MealRecipe[]
+  planItems   PlanItem[]
+  createdBy   User?        @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  createdById String?
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+}
+
+model MealRecipe {
+  meal     Meal   @relation(fields: [mealId], references: [id], onDelete: Cascade)
+  mealId   String
+  recipe   Recipe @relation(fields: [recipeId], references: [id], onDelete: Cascade)
+  recipeId String
+  /// Order within the meal.
+  position Int
+  /// This recipe's amount within the meal (2 = double the mashed potatoes).
+  scale    Float  @default(1)
+
+  @@id([mealId, recipeId])
+  @@index([recipeId])
 }

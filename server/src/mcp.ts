@@ -6,6 +6,7 @@ import { ImportError } from './import/errors.js';
 import { extractFromUrl } from './import/extract.js';
 import { FetchError } from './import/safeFetch.js';
 import { draftToInput, findExistingRecipe } from './import/worker.js';
+import { addMealToPlan, createMeal, getMeal, listMeals } from './meals.js';
 import { addGroceries, addToPlan, getGroceries, getPlan } from './plan.js';
 import { recipeInput } from './recipeInput.js';
 import { createRecipe, searchWhere, serialize, updateRecipe, withTags } from './recipes.js';
@@ -297,6 +298,104 @@ export function buildMcpServer(baseUrl: string) {
         null,
       );
       return text({ added, url: `${baseUrl}/groceries` });
+    },
+  );
+
+  server.registerTool(
+    'list_meals',
+    {
+      title: 'List meals',
+      description:
+        'List saved meals. A meal is a named set of recipes cooked together, like "Taco night" or "Thanksgiving".',
+      inputSchema: {},
+      annotations: { readOnlyHint: true },
+    },
+    async () => {
+      const meals = await listMeals();
+      return text(
+        meals.map((m) => ({
+          mealId: m.id,
+          name: m.name,
+          serves: m.servings,
+          recipes: m.recipeTitles,
+          url: `${baseUrl}/m/${m.id}`,
+        })),
+      );
+    },
+  );
+
+  server.registerTool(
+    'get_meal',
+    {
+      title: 'Get meal',
+      description: "Get a meal's recipes (with ids and each recipe's amount multiplier) and notes.",
+      inputSchema: { mealId: z.string() },
+      annotations: { readOnlyHint: true },
+    },
+    async ({ mealId }) => {
+      const meal = await getMeal(mealId);
+      if (!meal) return toolError(`No meal with id ${mealId}`);
+      return text({
+        mealId: meal.id,
+        name: meal.name,
+        serves: meal.servings,
+        notes: meal.notes,
+        recipes: meal.recipes.map((r) => ({
+          recipeId: r.recipe.id,
+          title: r.recipe.title,
+          recipeServes: r.recipe.servings,
+          amountMultiplier: r.scale,
+        })),
+        url: `${baseUrl}/m/${meal.id}`,
+      });
+    },
+  );
+
+  server.registerTool(
+    'create_meal',
+    {
+      title: 'Create meal',
+      description:
+        'Group saved recipes into a meal (e.g. a main and sides, or a holiday dinner). Find recipe ids with search_recipes first; save any new recipes with save_recipe before adding them. Recipes are kept in the order given.',
+      inputSchema: {
+        name: z.string(),
+        recipeIds: z.array(z.string()).min(1).max(50),
+        serves: z.number().int().positive().nullish().describe('How many people the meal feeds as planned'),
+        notes: z.string().nullish().describe('Timing or plan notes, e.g. "Turkey in by 11"'),
+      },
+      annotations: { readOnlyHint: false, destructiveHint: false },
+    },
+    async ({ name, recipeIds, serves, notes }) => {
+      const meal = await createMeal({ name, recipeIds, servings: serves ?? null, notes: notes ?? null }, null);
+      const saved = await getMeal(meal.id);
+      return text({
+        created: true,
+        mealId: meal.id,
+        recipes: saved?.recipes.map((r) => r.recipe.title),
+        url: `${baseUrl}/m/${meal.id}`,
+      });
+    },
+  );
+
+  server.registerTool(
+    'add_meal_to_week',
+    {
+      title: 'Add meal to this week',
+      description:
+        "Put every recipe in a meal on this week's plan, grouped under the meal. Pass serves to scale the whole meal to a number of people (needs the meal to have a serving count), or multiplier to scale directly.",
+      inputSchema: {
+        mealId: z.string(),
+        serves: z.number().positive().nullish(),
+        multiplier: z.number().positive().max(20).nullish(),
+      },
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
+    },
+    async ({ mealId, serves, multiplier }) => {
+      const meal = await getMeal(mealId);
+      if (!meal) return toolError(`No meal with id ${mealId}`);
+      const factor = serves && meal.servings ? serves / meal.servings : (multiplier ?? 1);
+      await addMealToPlan(mealId, factor, null);
+      return text({ added: true, meal: meal.name, recipes: meal.recipes.length, multiplier: factor });
     },
   );
 
