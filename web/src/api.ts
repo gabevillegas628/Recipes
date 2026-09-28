@@ -1,6 +1,8 @@
 import type {
   CaptureResult,
   ConnectorStatus,
+  GoogleCalendarChoice,
+  GoogleStatus,
   GroceryGroup,
   Meal,
   MealInput,
@@ -139,6 +141,12 @@ export const api = {
   updateNote: (id: string, input: Partial<NoteInput> & { done?: boolean; image?: null }) =>
     request<Note>(`/api/notes/${id}`, json('PATCH', input)),
   deleteNote: (id: string) => request<void>(`/api/notes/${id}`, { method: 'DELETE' }),
+
+  googleStatus: () => request<GoogleStatus>('/api/google'),
+  googleCalendars: () => request<GoogleCalendarChoice[]>('/api/google/calendars'),
+  setGoogleCalendar: (calendarId: string) =>
+    request<GoogleStatus>('/api/google/calendar', json('PUT', { calendarId })),
+  disconnectGoogle: () => request<GoogleStatus>('/api/google', { method: 'DELETE' }),
 
   changePassword: (currentPassword: string, newPassword: string) =>
     request<{ ok: true }>('/api/auth/password', json('POST', { currentPassword, newPassword })),

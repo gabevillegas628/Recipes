@@ -45,6 +45,11 @@ export function NotePage() {
             <p className="muted small">
               Added {n.createdBy ? `by ${n.createdBy.name} ` : ''}
               {new Date(n.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+              {n.syncError
+                ? ` · Couldn't add to Google Calendar: ${n.syncError}`
+                : n.googleEventId
+                  ? ' · On Google Calendar'
+                  : ''}
             </p>
             <button
               type="button"

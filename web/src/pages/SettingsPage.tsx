@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../api';
+import { GoogleCalendarSection } from '../components/GoogleCalendarSettings';
 import { ChangePassword, PeopleSection } from '../components/UserSettings';
 import { signOut } from '../session';
 import { SHORTCUT_NAME, useTimers } from '../timers';
@@ -23,6 +24,8 @@ export function SettingsPage({ user }: { user: User }) {
       <h1 className="form-title">Settings</h1>
 
       <ConnectorSection />
+
+      <GoogleCalendarSection />
 
       <PhoneSection />
 

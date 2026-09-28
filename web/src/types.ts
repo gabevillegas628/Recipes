@@ -182,6 +182,9 @@ export interface Note {
   location: string | null;
   image: string | null;
   doneAt: string | null;
+  googleEventId: string | null;
+  syncPending: boolean;
+  syncError: string | null;
   createdAt: string;
   updatedAt: string;
   createdBy: { name: string } | null;
@@ -214,3 +217,23 @@ export type CaptureResult =
   | { kind: 'note'; note: NoteDraft }
   | { kind: 'recipe'; recipe: ImportResult }
   | { kind: 'groceries'; items: string[] };
+
+export interface GoogleStatus {
+  /** GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET are set on the server. */
+  configured: boolean;
+  connected: boolean;
+  email: string | null;
+  calendarId: string | null;
+  calendarName: string | null;
+  /** The connection stopped working and needs reconnecting. */
+  error: string | null;
+  connectedBy: string | null;
+  pending: number;
+  failed: number;
+}
+
+export interface GoogleCalendarChoice {
+  id: string;
+  name: string;
+  primary: boolean;
+}

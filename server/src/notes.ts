@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { kickCalendarSync, removeFromCalendar } from './calendarSync.js';
 import { prisma } from './db.js';
 import type { NoteKind, Prisma } from './generated/prisma/client.js';
 import { deleteImage, uploadExists } from './images.js';
@@ -95,10 +96,12 @@ export async function getNote(id: string) {
 
 export async function createNote(input: z.infer<typeof createNoteBody>, userId: string | null) {
   const image = input.uploadedImage ? await uploadExists(input.uploadedImage) : null;
-  return prisma.note.create({
-    data: { ...normalize(input), image, createdById: userId },
+  const note = await prisma.note.create({
+    data: { ...normalize(input), image, createdById: userId, syncPending: true },
     include,
   });
+  kickCalendarSync();
+  return note;
 }
 
 /** Returns null when there's no such note. */
@@ -122,17 +125,20 @@ export async function updateNote(id: string, input: z.infer<typeof updateNoteBod
       ...normalize(merged),
       ...(done !== undefined ? { doneAt: done ? (current.doneAt ?? new Date()) : null } : {}),
       ...(image === null ? { image: null } : {}),
+      syncPending: true,
     },
     include,
   });
   if (image === null) await deleteImage(current.image);
+  kickCalendarSync();
   return note;
 }
 
 export async function deleteNote(id: string) {
-  const note = await prisma.note.findUnique({ where: { id }, select: { image: true } });
+  const note = await prisma.note.findUnique({ where: { id }, select: { image: true, googleEventId: true } });
   if (!note) return false;
   await prisma.note.delete({ where: { id } });
   await deleteImage(note.image);
+  void removeFromCalendar(note.googleEventId);
   return true;
 }

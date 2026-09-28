@@ -6,6 +6,7 @@ import { loadSession } from './auth.js';
 import { env } from './env.js';
 import { resumeImportJobs } from './import/worker.js';
 import { authRoutes } from './routes/auth.js';
+import { googleRoutes } from './routes/google.js';
 import { imageRoutes } from './routes/images.js';
 import { importRoutes } from './routes/import.js';
 import { mcpRoutes } from './routes/mcp.js';
@@ -48,6 +49,7 @@ export async function buildApp() {
   await app.register(planRoutes);
   await app.register(mealRoutes);
   await app.register(noteRoutes);
+  await app.register(googleRoutes);
   app.addHook('onReady', resumeImportJobs);
 
   // Recipe images from the upload dir (a Railway volume in production).

@@ -1785,3 +1785,15 @@ html.has-timers .cook {
   -webkit-appearance: none;
   appearance: none;
 }
+
+.field select {
+  width: 100%;
+  min-height: 46px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  font: inherit;
+  font-size: 16px;
+  color: inherit;
+}
