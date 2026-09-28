@@ -139,6 +139,18 @@ export interface GroceryItem {
   recipe: { id: string; title: string } | null;
 }
 
+/** Lines for the same item ("2 lb carrots", "3 carrots"), shown and ticked as one row. */
+export interface GroceryGroup {
+  key: string;
+  /** The shared item name ("carrots"). */
+  name: string;
+  aisle: string | null;
+  checked: boolean;
+  /** One amount to buy across the lines, once estimated. */
+  buy: string | null;
+  items: GroceryItem[];
+}
+
 export type ConnectorStatus =
   | { enabled: false }
   | { enabled: true; createdAt: string; lastUsedAt: string | null };

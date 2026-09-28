@@ -273,9 +273,16 @@ export function buildMcpServer(baseUrl: string) {
       annotations: { readOnlyHint: true },
     },
     async () => {
-      const items = await getGroceries();
+      const groups = await getGroceries();
       return text(
-        items.map((i) => ({ text: i.text, aisle: i.aisle, checked: i.checked, forRecipe: i.recipe?.title ?? null })),
+        groups.map((g) => ({
+          item: g.items.length > 1 ? g.name : g.items[0].text,
+          buy: g.buy,
+          lines: g.items.length > 1 ? g.items.map((i) => i.text) : undefined,
+          aisle: g.aisle,
+          checked: g.checked,
+          forRecipes: [...new Set(g.items.map((i) => i.recipe?.title).filter(Boolean))],
+        })),
       );
     },
   );

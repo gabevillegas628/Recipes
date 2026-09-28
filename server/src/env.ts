@@ -22,6 +22,8 @@ export const env = {
   anthropicModel: process.env.ANTHROPIC_MODEL || 'claude-opus-5',
   /** Sorting grocery items into aisles is simple and frequent, so it gets a small, fast model. */
   groceryModel: process.env.GROCERY_MODEL || 'claude-haiku-4-5',
+  /** Adding up mixed units ("2 cups + 1 carton of stock") needs more care than sorting, and runs far less often. */
+  groceryTotalsModel: process.env.GROCERY_TOTALS_MODEL || 'claude-sonnet-5',
   /** Public base URL for links (connector URL, recipe links for Claude). Defaults to the request's host. */
   publicUrl: process.env.PUBLIC_URL?.replace(/\/$/, '') || null,
 };

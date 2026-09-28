@@ -1293,6 +1293,15 @@ html.has-timers .cook {
   flex-direction: column;
 }
 
+.grocery-buy {
+  font-weight: 600;
+}
+
+.grocery-lines {
+  font-size: 14px;
+  color: var(--muted);
+}
+
 .grocery-recipe {
   font-size: 12px;
   color: var(--muted);

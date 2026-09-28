@@ -133,6 +133,9 @@ model GroceryItem {
   text        String
   /// Store section, e.g. "Produce". Null until sorted, or when AI sorting is unavailable.
   aisle       String?
+  /// Plain item name ("carrots") shared by lines for the same thing, so they show as one row.
+  /// Null until sorted.
+  name        String?
   checked     Boolean   @default(false)
   checkedAt   DateTime?
   recipe      Recipe?   @relation(fields: [recipeId], references: [id], onDelete: SetNull)
@@ -160,6 +163,17 @@ model RecipePrep {
 model GroceryAisle {
   name      String   @id
   aisle     String
+  /// The plain item name the AI gave it ("garlic" for "cloves garlic").
+  item      String?
+  updatedAt DateTime @updatedAt
+}
+
+/// One amount to buy for several lines of the same item ("2 lb + 3 carrots" -> "about 3 lb"),
+/// estimated by AI. Valid only while `sources` still matches the lines on the list.
+model GroceryTotal {
+  name      String   @id
+  sources   String
+  buy       String
   updatedAt DateTime @updatedAt
 }
 

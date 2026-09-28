@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api';
-import type { GroceryItem } from '../types';
+import type { GroceryGroup } from '../types';
 
 // Store walk order. Matches the server's aisle names.
 const AISLES = [
@@ -40,6 +40,10 @@ export function GroceriesPage() {
   // Poll so both phones stay in sync at the store.
   const list = useQuery({ queryKey: ['groceries'], queryFn: api.groceries, refetchInterval: 4000 });
   const items = list.data ?? [];
+  const setChecked = (key: string, checked: boolean) =>
+    queryClient.setQueryData<GroceryGroup[]>(['groceries'], (prev) =>
+      prev?.map((g) => (g.key === key ? { ...g, checked } : g)),
+    );
   const refresh = () => queryClient.invalidateQueries({ queryKey: ['groceries'] });
 
   const add = useMutation({
@@ -53,16 +57,18 @@ export function GroceriesPage() {
     },
   });
 
+  // A row can stand for several lines ("2 lb carrots", "3 carrots"); ticking it ticks them all.
   const toggle = useMutation({
-    mutationFn: (item: GroceryItem) => api.updateGrocery(item.id, { checked: !item.checked }),
+    mutationFn: (group: GroceryGroup) =>
+      Promise.all(group.items.map((i) => api.updateGrocery(i.id, { checked: !group.checked }))),
     // Tick instantly; the next poll confirms.
-    onMutate: (item) =>
-      queryClient.setQueryData<GroceryItem[]>(['groceries'], (prev) =>
-        prev?.map((i) => (i.id === item.id ? { ...i, checked: !i.checked } : i)),
-      ),
+    onMutate: (group) => setChecked(group.key, !group.checked),
     onSettled: refresh,
   });
-  const remove = useMutation({ mutationFn: api.removeGrocery, onSettled: refresh });
+  const remove = useMutation({
+    mutationFn: (group: GroceryGroup) => Promise.all(group.items.map((i) => api.removeGrocery(i.id))),
+    onSettled: refresh,
+  });
   const clear = useMutation({ mutationFn: (all: boolean) => api.clearGroceries(all), onSettled: refresh });
 
   function submit(e: FormEvent) {
@@ -91,13 +97,13 @@ export function GroceriesPage() {
   const checked = items.filter((i) => i.checked);
   // Not sorted yet (just added, or AI sorting is off): shown first, without a heading.
   const unsorted = open.filter((i) => !i.aisle);
-  const groups = new Map<string, GroceryItem[]>();
+  const byAisle = new Map<string, GroceryGroup[]>();
   for (const item of open) {
     if (!item.aisle) continue;
     const aisle = AISLES.includes(item.aisle) ? item.aisle : 'Other';
-    groups.set(aisle, [...(groups.get(aisle) ?? []), item]);
+    byAisle.set(aisle, [...(byAisle.get(aisle) ?? []), item]);
   }
-  const ordered = AISLES.filter((a) => groups.has(a));
+  const ordered = AISLES.filter((a) => byAisle.has(a));
 
   return (
     <div className="page">
@@ -131,8 +137,8 @@ export function GroceriesPage() {
 
       {unsorted.length > 0 && (
         <ul className="grocery-list">
-          {unsorted.map((item) => (
-            <GroceryRow key={item.id} item={item} onToggle={() => toggle.mutate(item)} />
+          {unsorted.map((group) => (
+            <GroceryRow key={group.key} group={group} onToggle={() => toggle.mutate(group)} />
           ))}
         </ul>
       )}
@@ -141,8 +147,8 @@ export function GroceriesPage() {
         <section key={aisle} className="aisle">
           <h2>{aisle}</h2>
           <ul className="grocery-list">
-            {groups.get(aisle)!.map((item) => (
-              <GroceryRow key={item.id} item={item} onToggle={() => toggle.mutate(item)} />
+            {byAisle.get(aisle)!.map((group) => (
+              <GroceryRow key={group.key} group={group} onToggle={() => toggle.mutate(group)} />
             ))}
           </ul>
         </section>
@@ -160,12 +166,12 @@ export function GroceriesPage() {
           </div>
           {showChecked && (
             <ul className="grocery-list">
-              {checked.map((item) => (
+              {checked.map((group) => (
                 <GroceryRow
-                  key={item.id}
-                  item={item}
-                  onToggle={() => toggle.mutate(item)}
-                  onRemove={() => remove.mutate(item.id)}
+                  key={group.key}
+                  group={group}
+                  onToggle={() => toggle.mutate(group)}
+                  onRemove={() => remove.mutate(group)}
                 />
               ))}
             </ul>
@@ -187,21 +193,33 @@ export function GroceriesPage() {
 }
 
 function GroceryRow({
-  item,
+  group,
   onToggle,
   onRemove,
 }: {
-  item: GroceryItem;
+  group: GroceryGroup;
   onToggle: () => void;
   onRemove?: () => void;
 }) {
+  const single = group.items.length === 1;
+  const recipes = [...new Set(group.items.flatMap((i) => (i.recipe ? [i.recipe.title] : [])))];
   return (
-    <li className={`grocery ${item.checked ? 'done' : ''}`}>
+    <li className={`grocery ${group.checked ? 'done' : ''}`}>
       <button type="button" className="grocery-main" onClick={onToggle}>
-        <span className={`check-circle ${item.checked ? 'on' : ''}`}>{item.checked ? '✓' : ''}</span>
+        <span className={`check-circle ${group.checked ? 'on' : ''}`}>{group.checked ? '✓' : ''}</span>
         <span className="grocery-text">
-          {item.text}
-          {item.recipe && <span className="grocery-recipe">{item.recipe.title}</span>}
+          {single ? (
+            group.items[0].text
+          ) : (
+            <>
+              <span>
+                {group.name.charAt(0).toUpperCase() + group.name.slice(1)}
+                {group.buy && <strong className="grocery-buy"> · {group.buy}</strong>}
+              </span>
+              <span className="grocery-lines">{group.items.map((i) => i.text).join(' + ')}</span>
+            </>
+          )}
+          {recipes.length > 0 && <span className="grocery-recipe">{recipes.join(' · ')}</span>}
         </span>
       </button>
       {onRemove && (

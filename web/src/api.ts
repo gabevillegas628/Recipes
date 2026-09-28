@@ -1,6 +1,6 @@
 import type {
   ConnectorStatus,
-  GroceryItem,
+  GroceryGroup,
   Meal,
   MealInput,
   MealSummary,
@@ -111,7 +111,7 @@ export const api = {
   addMealToPlan: (mealId: string, factor: number) =>
     request<{ ok: true }>(`/api/meals/${mealId}/plan`, json('POST', { factor })),
 
-  groceries: () => request<GroceryItem[]>('/api/grocery'),
+  groceries: () => request<GroceryGroup[]>('/api/grocery'),
   addGroceries: (items: { text: string; recipeId?: string | null }[]) =>
     request<{ added: number }>('/api/grocery', json('POST', { items })),
   updateGrocery: (id: string, input: { checked?: boolean; text?: string }) =>

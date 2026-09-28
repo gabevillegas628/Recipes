@@ -1,5 +1,5 @@
 import { prisma } from './db.js';
-import { rememberedAisles, scheduleSort } from './groceries.js';
+import { itemKey, rememberedItems, scheduleSort, totalSources } from './groceries.js';
 
 /**
  * "This week" and the grocery list: shared by the REST routes and the MCP tools.
@@ -64,11 +64,53 @@ export async function clearPlan() {
   await prisma.planItem.updateMany({ where: { archivedAt: null }, data: { archivedAt: new Date() } });
 }
 
-export async function getGroceries() {
+async function groceryItems() {
   return prisma.groceryItem.findMany({
     orderBy: [{ checked: 'asc' }, { createdAt: 'asc' }],
     include: { recipe: { select: { id: true, title: true } } },
   });
+}
+
+type GroceryRow = Awaited<ReturnType<typeof groceryItems>>[number];
+
+/** Lines for the same item, shown and ticked as one row. */
+export interface GroceryGroup {
+  key: string;
+  /** The shared item name; for a single line, just use its text. */
+  name: string;
+  aisle: string | null;
+  checked: boolean;
+  /** One amount to buy across the lines, when they've been combined. */
+  buy: string | null;
+  items: GroceryRow[];
+}
+
+/** The list, with lines for the same item combined. Unsorted items fall back to a rough name match. */
+export async function getGroceries(): Promise<GroceryGroup[]> {
+  const items = await groceryItems();
+  const groups = new Map<string, GroceryGroup>();
+  for (const item of items) {
+    const name = item.name ?? (itemKey(item.text) || item.text.toLowerCase());
+    const key = `${item.checked ? 'done' : 'open'}:${name}`;
+    const group = groups.get(key);
+    if (group) {
+      group.items.push(item);
+      group.aisle ??= item.aisle;
+    } else {
+      groups.set(key, { key, name, aisle: item.aisle, checked: item.checked, buy: null, items: [item] });
+    }
+  }
+
+  const combined = [...groups.values()].filter((g) => g.items.length > 1);
+  if (combined.length > 0) {
+    const totals = await prisma.groceryTotal.findMany({ where: { name: { in: combined.map((g) => g.name) } } });
+    const byName = new Map(totals.map((t) => [t.name, t]));
+    for (const group of combined) {
+      const total = byName.get(group.name);
+      if (total && total.sources === totalSources(group.items.map((i) => i.text))) group.buy = total.buy;
+    }
+  }
+  return [...groups.values()];
 }
 
 export async function addGroceries(
@@ -77,15 +119,17 @@ export async function addGroceries(
 ) {
   const clean = items.map((i) => ({ ...i, text: i.text.trim() })).filter((i) => i.text);
   // Save now; anything without a remembered aisle is sorted in the background.
-  const aisles = await rememberedAisles(clean.map((i) => i.text));
+  const known = await rememberedItems(clean.map((i) => i.text));
   await prisma.groceryItem.createMany({
     data: clean.map((item, i) => ({
       text: item.text,
-      aisle: aisles[i],
+      aisle: known[i]?.aisle ?? null,
+      name: known[i]?.name ?? null,
       recipeId: item.recipeId ?? null,
       createdById: userId,
     })),
   });
-  if (aisles.some((a) => !a)) scheduleSort();
+  // Sort anything new, and re-estimate combined amounts now that lines were added.
+  scheduleSort();
   return clean.length;
 }
