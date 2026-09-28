@@ -22,6 +22,7 @@ model User {
   planItems       PlanItem[]
   groceryItems    GroceryItem[]
   meals           Meal[]
+  notes           Note[]
 }
 
 enum RecipeSource {
@@ -204,4 +205,35 @@ model MealRecipe {
 
   @@id([mealId, recipeId])
   @@index([recipeId])
+}
+
+enum NoteKind {
+  NOTE
+  REMINDER
+  APPOINTMENT
+}
+
+/// A note, reminder or appointment, shared by everyone. Usually sorted by AI from
+/// something typed, dictated or photographed (see src/capture.ts).
+model Note {
+  id          String    @id @default(cuid())
+  kind        NoteKind  @default(NOTE)
+  title       String
+  body        String?
+  /// When an appointment starts, or when a reminder is due. All-day dates are stored
+  /// at 12:00 UTC on that date, so they read as the same day in any US time zone.
+  startsAt    DateTime?
+  endsAt      DateTime?
+  allDay      Boolean   @default(false)
+  location    String?
+  /// A photo kept with it (the flyer it came from), stored like recipe images.
+  image       String?
+  /// Reminders only: ticked off.
+  doneAt      DateTime?
+  createdBy   User?     @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  createdById String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([kind, startsAt])
 }

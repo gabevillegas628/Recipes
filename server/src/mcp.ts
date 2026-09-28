@@ -7,6 +7,7 @@ import { extractFromUrl } from './import/extract.js';
 import { FetchError } from './import/safeFetch.js';
 import { draftToInput, findExistingRecipe } from './import/worker.js';
 import { addMealToPlan, createMeal, getMeal, listMeals } from './meals.js';
+import { allDayInstant, createNote, listNotes, NOTE_KINDS, NoteError, updateNote } from './notes.js';
 import { addGroceries, addToPlan, getGroceries, getPlan } from './plan.js';
 import { recipeInput } from './recipeInput.js';
 import { createRecipe, searchWhere, serialize, updateRecipe, withTags } from './recipes.js';
@@ -403,6 +404,139 @@ export function buildMcpServer(baseUrl: string) {
       const factor = serves && meal.servings ? serves / meal.servings : (multiplier ?? 1);
       await addMealToPlan(mealId, factor, null);
       return text({ added: true, meal: meal.name, recipes: meal.recipes.length, multiplier: factor });
+    },
+  );
+
+  // ---------- Notes, reminders, appointments ----------
+
+  const when = z
+    .string()
+    .nullish()
+    .describe(
+      'A date and time with its UTC offset, e.g. "2026-10-06T15:30:00-04:00", or just a date ("2026-10-06") for all day. Use the user\'s local time zone.',
+    );
+
+  /** Accepts "YYYY-MM-DD" (all day) or a date-time with an offset. */
+  function parseWhen(value: string | null | undefined, field: string) {
+    if (!value) return { iso: null, allDay: false };
+    if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return { iso: allDayInstant(value).toISOString(), allDay: true };
+    if (/(Z|[+-]\d{2}:?\d{2})$/i.test(value) && !Number.isNaN(Date.parse(value))) {
+      return { iso: new Date(value).toISOString(), allDay: false };
+    }
+    throw new NoteError(`${field} must be a date (2026-10-06) or a date-time with its UTC offset (2026-10-06T15:30:00-04:00).`);
+  }
+
+  const noteLink = (id: string) => `${baseUrl}/n/${id}`;
+  type SavedNote = Awaited<ReturnType<typeof listNotes>>[number];
+  const noteForClaude = (n: SavedNote) => ({
+    id: n.id,
+    kind: n.kind,
+    title: n.title,
+    details: n.body,
+    // All-day items come back as a plain date.
+    startsAt: n.startsAt && (n.allDay ? n.startsAt.toISOString().slice(0, 10) : n.startsAt.toISOString()),
+    endsAt: n.endsAt && (n.allDay ? n.endsAt.toISOString().slice(0, 10) : n.endsAt.toISOString()),
+    location: n.location,
+    done: n.doneAt !== null,
+    hasPhoto: Boolean(n.image),
+    addedBy: n.createdBy?.name ?? null,
+    url: noteLink(n.id),
+  });
+
+  server.registerTool(
+    'save_note',
+    {
+      title: 'Save a note, reminder or appointment',
+      description:
+        "Save something to the family's shared organizer (the same app as the recipe box). kind APPOINTMENT is an event at a set date, like a doctor's visit or a school event; REMINDER is something to do, optionally due at startsAt; NOTE is information to keep. Appointments need startsAt.",
+      inputSchema: {
+        kind: z.enum(NOTE_KINDS),
+        title: z.string().describe('Short, scannable title, e.g. "Dentist: Maya"'),
+        details: z.string().nullish().describe('Anything else worth keeping: what to bring, phone numbers, links'),
+        startsAt: when.describe('When the appointment starts or the reminder is due. ' + when.description),
+        endsAt: when.describe('Appointments only: when it ends, if known. ' + when.description),
+        location: z.string().nullish().describe('Appointments only: the place or address'),
+      },
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false },
+    },
+    async ({ kind, title, details, startsAt, endsAt, location }) => {
+      try {
+        const start = parseWhen(startsAt, 'startsAt');
+        const end = parseWhen(endsAt, 'endsAt');
+        const note = await createNote(
+          { kind, title, body: details ?? null, startsAt: start.iso, endsAt: end.iso, allDay: start.allDay, location: location ?? null },
+          null,
+        );
+        return text({ saved: true, ...noteForClaude(note) });
+      } catch (err) {
+        if (err instanceof NoteError) return toolError(err.message);
+        throw err;
+      }
+    },
+  );
+
+  server.registerTool(
+    'list_notes',
+    {
+      title: 'List notes, reminders and appointments',
+      description:
+        'List what\'s in the shared organizer: upcoming appointments, open reminders and notes, newest first. Appointments that already ended and reminders ticked off over a month ago are left out unless includePast is true.',
+      inputSchema: {
+        kind: z.enum(NOTE_KINDS).nullish().describe('Only this kind'),
+        query: z.string().nullish().describe('Only items with these words in the title or details'),
+        includePast: z.boolean().nullish(),
+      },
+      annotations: { readOnlyHint: true },
+    },
+    async ({ kind, query, includePast }) => {
+      const now = Date.now();
+      const words = (query ?? '').toLowerCase().split(/\s+/).filter(Boolean);
+      const notes = (await listNotes()).filter((n) => {
+        if (kind && n.kind !== kind) return false;
+        if (!includePast && n.kind === 'APPOINTMENT' && (n.endsAt ?? n.startsAt)!.getTime() < now - 24 * 60 * 60 * 1000) {
+          return false;
+        }
+        const haystack = `${n.title} ${n.body ?? ''} ${n.location ?? ''}`.toLowerCase();
+        return words.every((w) => haystack.includes(w));
+      });
+      return text(notes.map(noteForClaude));
+    },
+  );
+
+  server.registerTool(
+    'update_note',
+    {
+      title: 'Update a note, reminder or appointment',
+      description:
+        'Change a saved item (find its id with list_notes), or tick a reminder off with done: true. Only the fields you pass change; pass null to clear one.',
+      inputSchema: {
+        id: z.string(),
+        kind: z.enum(NOTE_KINDS).optional(),
+        title: z.string().optional(),
+        details: z.string().nullable().optional(),
+        startsAt: when.optional(),
+        endsAt: when.optional(),
+        location: z.string().nullable().optional(),
+        done: z.boolean().optional(),
+      },
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
+    },
+    async ({ id, details, startsAt, endsAt, ...rest }) => {
+      try {
+        const start = startsAt !== undefined ? parseWhen(startsAt, 'startsAt') : undefined;
+        const end = endsAt !== undefined ? parseWhen(endsAt, 'endsAt') : undefined;
+        const note = await updateNote(id, {
+          ...rest,
+          ...(details !== undefined ? { body: details } : {}),
+          ...(start ? { startsAt: start.iso, allDay: start.allDay } : {}),
+          ...(end ? { endsAt: end.iso } : {}),
+        });
+        if (!note) return toolError(`No note with id ${id}`);
+        return text({ updated: true, ...noteForClaude(note) });
+      } catch (err) {
+        if (err instanceof NoteError) return toolError(err.message);
+        throw err;
+      }
     },
   );
 

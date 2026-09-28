@@ -10,6 +10,7 @@ import { imageRoutes } from './routes/images.js';
 import { importRoutes } from './routes/import.js';
 import { mcpRoutes } from './routes/mcp.js';
 import { mealRoutes } from './routes/meals.js';
+import { noteRoutes } from './routes/notes.js';
 import { planRoutes } from './routes/plan.js';
 import { recipeRoutes } from './routes/recipes.js';
 import { userRoutes } from './routes/users.js';
@@ -46,6 +47,7 @@ export async function buildApp() {
   await app.register(userRoutes);
   await app.register(planRoutes);
   await app.register(mealRoutes);
+  await app.register(noteRoutes);
   app.addHook('onReady', resumeImportJobs);
 
   // Recipe images from the upload dir (a Railway volume in production).

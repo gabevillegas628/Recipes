@@ -1,6 +1,6 @@
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react';
+import { Link, useLocation, useSearchParams } from 'react-router-dom';
 import { api } from '../api';
 import { PhotoInput } from '../components/PhotoInput';
 import { shrinkPhoto } from '../photos';
@@ -9,7 +9,8 @@ import { RecipeForm } from './RecipeEditPage';
 
 /**
  * Import one recipe from a link (or pasted text), review it in the edit form, then save.
- * Also reachable as /import?url=... so share sheets / Shortcuts can hand a link straight in.
+ * Also reachable as /import?url=... so share sheets / Shortcuts can hand a link straight in,
+ * and from Capture with the extracted recipe already in the location state.
  */
 export function ImportPage() {
   const [params, setParams] = useSearchParams();
@@ -20,7 +21,8 @@ export function ImportPage() {
   const [photos, setPhotos] = useState<File[]>([]);
   const [url, setUrl] = useState(extractUrl(sharedUrl) ?? '');
   const [text, setText] = useState('');
-  const [result, setResult] = useState<ImportResult | null>(null);
+  const handedOver = (useLocation().state as { result?: ImportResult } | null)?.result ?? null;
+  const [result, setResult] = useState<ImportResult | null>(handedOver);
 
   const config = useQuery({ queryKey: ['import-config'], queryFn: api.importConfig });
 
@@ -184,21 +186,23 @@ export function ImportPage() {
 }
 
 /** Share targets often send "Title https://…" as text; pull out the link. */
-function extractUrl(value: string): string | null {
+export function extractUrl(value: string): string | null {
   return value.match(/https?:\/\/\S+/)?.[0] ?? null;
 }
 
 const MAX_PHOTOS = 4;
 
 /** Camera or photo library; up to 4 shots (e.g. front and back of a box). */
-function PhotoPicker({
+export function PhotoPicker({
   photos,
   onChange,
   aiEnabled,
+  hint,
 }: {
   photos: File[];
   onChange: (photos: File[]) => void;
   aiEnabled: boolean;
+  hint?: ReactNode;
 }) {
   const previews = useMemo(() => photos.map((p) => URL.createObjectURL(p)), [photos]);
   useEffect(() => () => previews.forEach((u) => URL.revokeObjectURL(u)), [previews]);
@@ -207,8 +211,12 @@ function PhotoPicker({
     <div className="field">
       <span>Photos</span>
       <small>
-        A recipe card, a cookbook page, or the instructions on a box. Add the front too if the name
-        is there. Up to {MAX_PHOTOS}.
+        {hint ?? (
+          <>
+            A recipe card, a cookbook page, or the instructions on a box. Add the front too if the
+            name is there. Up to {MAX_PHOTOS}.
+          </>
+        )}
       </small>
       {!aiEnabled && (
         <div className="banner">Reading photos needs AI extraction (ANTHROPIC_API_KEY).</div>

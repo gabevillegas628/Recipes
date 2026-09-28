@@ -1,9 +1,12 @@
 import type {
+  CaptureResult,
   ConnectorStatus,
   GroceryGroup,
   Meal,
   MealInput,
   MealSummary,
+  Note,
+  NoteInput,
   PlanItem,
   PrepPlan,
   ImportJob,
@@ -119,6 +122,23 @@ export const api = {
   removeGrocery: (id: string) => request<void>(`/api/grocery/${id}`, { method: 'DELETE' }),
   clearGroceries: (all = false) =>
     request<{ deleted: number }>(`/api/grocery${all ? '?all=true' : ''}`, { method: 'DELETE' }),
+
+  captureConfig: () => request<{ aiEnabled: boolean }>('/api/capture/config'),
+  capture: (text: string, photos: Blob[], now: string) => {
+    const form = new FormData();
+    form.append('text', text);
+    form.append('now', now);
+    photos.forEach((p, i) => form.append('photo', p, `photo-${i + 1}.jpg`));
+    return request<CaptureResult>('/api/capture', { method: 'POST', body: form });
+  },
+
+  notes: () => request<Note[]>('/api/notes'),
+  note: (id: string) => request<Note>(`/api/notes/${id}`),
+  createNote: (input: NoteInput & { uploadedImage?: string | null }) =>
+    request<Note>('/api/notes', json('POST', input)),
+  updateNote: (id: string, input: Partial<NoteInput> & { done?: boolean; image?: null }) =>
+    request<Note>(`/api/notes/${id}`, json('PATCH', input)),
+  deleteNote: (id: string) => request<void>(`/api/notes/${id}`, { method: 'DELETE' }),
 
   changePassword: (currentPassword: string, newPassword: string) =>
     request<{ ok: true }>('/api/auth/password', json('POST', { currentPassword, newPassword })),

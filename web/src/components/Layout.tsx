@@ -28,9 +28,19 @@ export function Layout({ user }: { user: User }) {
           <CartIcon />
           <span>Groceries</span>
         </NavLink>
-        <NavLink to="/import" className="tab">
+        <NavLink
+          to="/add"
+          className={({ isActive }) => `tab ${isActive || /^\/import/.test(location.pathname) ? 'active' : ''}`}
+        >
           <PlusIcon />
           <span>Add</span>
+        </NavLink>
+        <NavLink
+          to="/notes"
+          className={({ isActive }) => `tab ${isActive || /^\/n\//.test(location.pathname) ? 'active' : ''}`}
+        >
+          <NoteIcon />
+          <span>Notes</span>
         </NavLink>
         <NavLink to="/settings" className="tab">
           <UserIcon />
@@ -86,6 +96,15 @@ function PlusIcon() {
     <svg {...iconProps}>
       <circle cx="12" cy="12" r="9" />
       <path d="M12 8v8M8 12h8" />
+    </svg>
+  );
+}
+
+function NoteIcon() {
+  return (
+    <svg {...iconProps}>
+      <path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z" />
+      <path d="M14 3v6h6M8 13h8M8 17h5" />
     </svg>
   );
 }

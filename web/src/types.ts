@@ -167,3 +167,50 @@ export interface TagCount {
   name: string;
   count: number;
 }
+
+export type NoteKind = 'NOTE' | 'REMINDER' | 'APPOINTMENT';
+
+/** A note, reminder or appointment. All-day times sit at 12:00 UTC on their date. */
+export interface Note {
+  id: string;
+  kind: NoteKind;
+  title: string;
+  body: string | null;
+  startsAt: string | null;
+  endsAt: string | null;
+  allDay: boolean;
+  location: string | null;
+  image: string | null;
+  doneAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  createdBy: { name: string } | null;
+}
+
+export interface NoteInput {
+  kind: NoteKind;
+  title: string;
+  body: string | null;
+  startsAt: string | null;
+  endsAt: string | null;
+  allDay: boolean;
+  location: string | null;
+}
+
+/** What capture read out of the input: local dates and times, not yet saved. */
+export interface NoteDraft {
+  kind: NoteKind;
+  title: string;
+  body: string | null;
+  date: string | null;
+  time: string | null;
+  endDate: string | null;
+  endTime: string | null;
+  location: string | null;
+  uploadedImage: string | null;
+}
+
+export type CaptureResult =
+  | { kind: 'note'; note: NoteDraft }
+  | { kind: 'recipe'; recipe: ImportResult }
+  | { kind: 'groceries'; items: string[] };
