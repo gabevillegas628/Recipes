@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api, thumbUrl } from '../api';
-import { dayLabel, dayOf, isOverdue, localDate, timeLabel } from '../notes';
+import { dayLabel, dayOf, isOverdue, localDate, nextOn, reminderDue, repeatLabel, timeLabel } from '../notes';
 import type { Note } from '../types';
 
 /**
@@ -18,40 +18,72 @@ export function NotesPage() {
   const list = useQuery({ queryKey: ['notes'], queryFn: api.notes, refetchInterval: 30_000 });
   const notes = list.data ?? [];
 
+  // A repeating reminder is ticked off one occurrence at a time: always "done", and the next one shows.
   const toggle = useMutation({
-    mutationFn: (n: Note) => api.updateNote(n.id, { done: !n.doneAt }),
+    mutationFn: (n: Note) => api.updateNote(n.id, { done: Boolean(n.recurrence) || !n.doneAt }),
     onMutate: (n) =>
       queryClient.setQueryData<Note[]>(['notes'], (prev) =>
-        prev?.map((x) => (x.id === n.id ? { ...x, doneAt: n.doneAt ? null : new Date().toISOString() } : x)),
+        prev?.map((x) =>
+          x.id === n.id ? { ...x, doneAt: n.doneAt && !n.recurrence ? null : new Date().toISOString() } : x,
+        ),
       ),
     onSettled: () => queryClient.invalidateQueries({ queryKey: ['notes'] }),
   });
 
   const today = localDate(new Date());
-  const endDay = (n: Note) => dayOf(n.endsAt ?? n.startsAt!, n.allDay);
-  const byStart = (a: Note, b: Note) => (a.startsAt ?? '').localeCompare(b.startsAt ?? '');
+  // "15:30", local; sorts as text.
+  const time = (n: Note) => (n.allDay || !n.startsAt ? '' : new Date(n.startsAt).toTimeString().slice(0, 5));
+  // Soonest first; on the same day, all-day items first, then by time.
+  const bySoonest = (a: Dated, b: Dated) => a.day.localeCompare(b.day) || time(a.note).localeCompare(time(b.note));
 
-  const appointments = notes.filter((n) => n.kind === 'APPOINTMENT' && n.startsAt);
-  const upcoming = appointments.filter((n) => endDay(n) >= today).sort(byStart);
-  const past = appointments.filter((n) => endDay(n) < today).sort((a, b) => byStart(b, a));
+  type Dated = { note: Note; day: string };
+  const upcoming: Dated[] = [];
+  const past: Note[] = [];
+  for (const n of notes) {
+    if (n.kind !== 'APPOINTMENT' || !n.startsAt) continue;
+    if (n.recurrence) {
+      const next = nextOn(n, today);
+      if (next) upcoming.push({ note: n, day: next });
+      else past.push(n);
+    } else if (dayOf(n.endsAt ?? n.startsAt, n.allDay) >= today) {
+      // Multi-day ones already under way show under today.
+      const start = dayOf(n.startsAt, n.allDay);
+      upcoming.push({ note: n, day: start < today ? today : start });
+    } else {
+      past.push(n);
+    }
+  }
+  upcoming.sort(bySoonest);
+  past.sort((a, b) => b.startsAt!.localeCompare(a.startsAt!));
 
-  const reminders = notes.filter((n) => n.kind === 'REMINDER');
+  const open: Dated[] = [];
+  const undated: Note[] = [];
+  const done: Note[] = [];
+  for (const n of notes) {
+    if (n.kind !== 'REMINDER') continue;
+    if (n.recurrence && n.startsAt) {
+      const due = reminderDue(n);
+      if (due) open.push({ note: n, day: due });
+      else done.push(n);
+    } else if (n.doneAt) {
+      done.push(n);
+    } else if (n.startsAt) {
+      open.push({ note: n, day: dayOf(n.startsAt, n.allDay) });
+    } else {
+      undated.push(n);
+    }
+  }
   // Dated reminders first, soonest first; then undated, newest first.
-  const open = reminders
-    .filter((n) => !n.doneAt)
-    .sort((a, b) =>
-      a.startsAt && b.startsAt ? byStart(a, b) : a.startsAt ? -1 : b.startsAt ? 1 : b.createdAt.localeCompare(a.createdAt),
-    );
-  const done = reminders.filter((n) => n.doneAt).sort((a, b) => b.doneAt!.localeCompare(a.doneAt!));
+  open.sort(bySoonest);
+  undated.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  done.sort((a, b) => (b.doneAt ?? b.updatedAt).localeCompare(a.doneAt ?? a.updatedAt));
 
   const plain = notes.filter((n) => n.kind === 'NOTE');
 
-  // Upcoming appointments grouped under a heading per day (multi-day ones under their first day).
+  // Upcoming appointments under a heading per day.
   const days = new Map<string, Note[]>();
-  for (const n of upcoming) {
-    const day = dayOf(n.startsAt!, n.allDay) < today ? today : dayOf(n.startsAt!, n.allDay);
-    days.set(day, [...(days.get(day) ?? []), n]);
-  }
+  for (const { note, day } of upcoming) days.set(day, [...(days.get(day) ?? []), note]);
+  const shownOn = new Map(upcoming.map(({ note, day }) => [note.id, day]));
 
   return (
     <div className="page">
@@ -80,7 +112,11 @@ export function NotesPage() {
               <h2>{dayLabel(day)}</h2>
               <ul className="note-list">
                 {items.map((n) => (
-                  <NoteRow key={n.id} note={n} meta={[timeLabel(n, false), n.location].filter(Boolean).join(' · ')} />
+                  <NoteRow
+                    key={n.id}
+                    note={n}
+                    meta={[timeLabel(n, false, shownOn.get(n.id)), n.location].filter(Boolean).join(' · ')}
+                  />
                 ))}
               </ul>
             </div>
@@ -88,18 +124,23 @@ export function NotesPage() {
         </section>
       )}
 
-      {(open.length > 0 || done.length > 0) && (
+      {(open.length > 0 || undated.length > 0 || done.length > 0) && (
         <section className="notes-section">
           <h2 className="notes-section-title">Reminders</h2>
           <ul className="note-list">
-            {open.map((n) => (
+            {open.map(({ note: n, day }) => (
               <NoteRow
                 key={n.id}
                 note={n}
-                meta={n.startsAt ? `Due ${timeLabel(n)}` : ''}
+                meta={`Due ${timeLabel(n, true, day)}`}
                 overdue={isOverdue(n)}
+                // The current occurrence of a repeating reminder is never shown ticked.
+                checked={n.recurrence ? false : undefined}
                 onToggle={() => toggle.mutate(n)}
               />
+            ))}
+            {undated.map((n) => (
+              <NoteRow key={n.id} note={n} meta="" onToggle={() => toggle.mutate(n)} />
             ))}
           </ul>
           {done.length > 0 && (
@@ -110,7 +151,8 @@ export function NotesPage() {
               {showDone && (
                 <ul className="note-list">
                   {done.map((n) => (
-                    <NoteRow key={n.id} note={n} meta="" onToggle={() => toggle.mutate(n)} />
+                    // A finished repeating series has nothing left to untick.
+                    <NoteRow key={n.id} note={n} meta="" onToggle={n.recurrence ? undefined : () => toggle.mutate(n)} />
                   ))}
                 </ul>
               )}
@@ -152,30 +194,34 @@ function NoteRow({
   note,
   meta,
   overdue = false,
+  checked = Boolean(note.doneAt),
   onToggle,
 }: {
   note: Note;
   meta: string;
   overdue?: boolean;
+  checked?: boolean;
   onToggle?: () => void;
 }) {
   const thumb = thumbUrl(note.image);
+  const repeats = repeatLabel(note);
   return (
-    <li className={`note-row ${note.doneAt ? 'done' : ''}`}>
+    <li className={`note-row ${checked ? 'done' : ''}`}>
       {onToggle && (
         <button
           type="button"
-          className={`check-circle ${note.doneAt ? 'on' : ''}`}
+          className={`check-circle ${checked ? 'on' : ''}`}
           onClick={onToggle}
-          aria-label={note.doneAt ? 'Mark not done' : 'Mark done'}
+          aria-label={checked ? 'Mark not done' : 'Mark done'}
         >
-          {note.doneAt ? '✓' : ''}
+          {checked ? '✓' : ''}
         </button>
       )}
       <Link to={`/n/${note.id}`} className="note-link">
         <span className="note-text">
           <span className="note-title">{note.title}</span>
           {meta && <span className={`note-meta ${overdue ? 'overdue' : ''}`}>{meta}</span>}
+          {repeats && <span className="note-meta">↻ {repeats}</span>}
         </span>
         {thumb && <img className="note-thumb" src={thumb} alt="" />}
       </Link>

@@ -8,6 +8,7 @@ import { ImportError } from './import/errors.js';
 import { extractFromPhotos, extractFromText, extractFromUrl, preparePhotos } from './import/extract.js';
 import { FetchError } from './import/safeFetch.js';
 import { findExistingRecipe } from './import/worker.js';
+import { firstOccurrence, formatRule, nextOccurrence, WEEKDAYS, type Rule } from './recurrence.js';
 
 /**
  * "Capture": something typed, dictated, pasted or photographed, sorted by Claude
@@ -22,6 +23,7 @@ const DATE = /^\d{4}-\d{2}-\d{2}$/;
 const TIME = /^([01]\d|2[0-3]):[0-5]\d$/;
 
 const classification = z.object({
+  today: z.string().describe("Today's date, YYYY-MM-DD, from the current date given"),
   kind: z.enum(['note', 'reminder', 'appointment', 'recipe', 'groceries']),
   title: z.string().describe('Short title, e.g. "Dentist: Maya" or "Call the plumber"'),
   details: z
@@ -34,6 +36,20 @@ const classification = z.object({
   endTime: z.string().nullable().describe('HH:MM, 24-hour, when the appointment ends, if stated'),
   location: z.string().nullable().describe('Appointments only: the place or address, as given'),
   groceryItems: z.array(z.string()).describe('Groceries only: one item per entry, with amounts. Empty otherwise.'),
+  repeat: z
+    .object({
+      freq: z.enum(['daily', 'weekly', 'monthly', 'yearly']),
+      interval: z.number().int().describe('1 for every week, 2 for every other week, and so on'),
+      weekdays: z.array(z.enum(WEEKDAYS)).describe('Weekly only: the days, e.g. ["TU","TH"]. Empty for the weekday of date.'),
+      monthlyBy: z
+        .enum(['date', 'weekday', 'lastWeekday'])
+        .nullable()
+        .describe('Monthly only: same day of the month (the 15th), same weekday position (second Tuesday), or last weekday (last Friday)'),
+      until: z.string().nullable().describe('YYYY-MM-DD of the last possible occurrence, if stated'),
+      count: z.number().int().nullable().describe('How many times in total, if stated'),
+    })
+    .nullable()
+    .describe('Only for appointments and reminders that repeat'),
 });
 
 const SYSTEM = `You file things for a family's shared organizer app. The input was typed, dictated (so expect speech-to-text slips and filler words), pasted, or photographed (a flyer, a letter from school, an appointment card, a screenshot).
@@ -49,6 +65,7 @@ Then fill in the fields:
 - title: short and scannable, the way someone would write it in a calendar. For events, lead with what it is, and add who it's for when stated ("Dentist: Maya").
 - details: keep anything useful that isn't in the other fields, such as what to bring, cost, phone numbers, links, or registration deadlines. Keep the person's own wording for dictated notes, minus filler words. Don't repeat the title, date, time or place.
 - date and time: resolve relative dates ("next Tuesday", "the 14th", "tomorrow at 3") against the current date given below. When a flyer gives a month and day with no year, use the next time that date comes up. A reminder gets a date only when one is stated or clearly implied. If only a time is given for a reminder, use today, or tomorrow if that time has passed.
+- repeat: only when it recurs ("every Tuesday", "the first Monday of each month", "every other week", "daily until Friday"). date is then the first occurrence on or after today.
 - For a recipe or a grocery list, only kind and title matter (plus groceryItems for groceries).`;
 
 export type NoteDraft = {
@@ -60,6 +77,8 @@ export type NoteDraft = {
   endDate: string | null;
   endTime: string | null;
   location: string | null;
+  /** An RRULE when it repeats (see recurrence.ts). */
+  recurrence: string | null;
   /** The photo, stored, to keep with the note. */
   uploadedImage: string | null;
 };
@@ -128,7 +147,16 @@ export async function capture(text: string, photos: Buffer[], now: string): Prom
   }
 
   const kind = result.kind === 'appointment' ? 'APPOINTMENT' : result.kind === 'reminder' ? 'REMINDER' : 'NOTE';
-  const date = result.date && DATE.test(result.date) ? result.date : null;
+  let date = result.date && DATE.test(result.date) ? result.date : null;
+  const rule = kind !== 'NOTE' && date && result.repeat ? ruleFrom(result.repeat, date) : null;
+  // Line the start up with the rule ("every Thursday" said on a Monday starts Thursday),
+  // and start from today, not an occurrence already past ("last Friday of the month" said after it).
+  // (Counted from the AI's date, which sets the day of the month for monthly and yearly repeats.)
+  const today = DATE.test(result.today) ? result.today : null;
+  const endless = rule && { ...rule, until: null, count: null };
+  const first =
+    endless && date ? (today && date < today ? nextOccurrence(endless, date, today) : firstOccurrence(endless, date)) : null;
+  if (first) date = first;
   const valid = (t: string | null) => (t && TIME.test(t) ? t : null);
   return {
     kind: 'note',
@@ -142,8 +170,31 @@ export async function capture(text: string, photos: Buffer[], now: string): Prom
       endDate: date && result.endDate && DATE.test(result.endDate) ? result.endDate : null,
       endTime: date ? valid(result.endTime) : null,
       location: result.location?.trim() || null,
+      recurrence: rule ? formatRule(rule) : null,
       uploadedImage: photos.length ? await saveImage(photos[0]).catch(() => null) : null,
     },
+  };
+}
+
+type Repeat = NonNullable<z.infer<typeof classification>['repeat']>;
+
+/** The AI's repeat fields as a rule. Monthly weekday positions come from the start date. */
+function ruleFrom(repeat: Repeat, date: string): Rule {
+  const freq = repeat.freq.toUpperCase() as Rule['freq'];
+  const weekday = WEEKDAYS[(new Date(`${date}T00:00:00Z`).getUTCDay() + 6) % 7];
+  const dom = Number(date.slice(8));
+  let byDay: Rule['byDay'] = [];
+  if (freq === 'WEEKLY') byDay = (repeat.weekdays.length ? repeat.weekdays : [weekday]).map((day) => ({ n: null, day }));
+  if (freq === 'MONTHLY' && repeat.monthlyBy === 'weekday') byDay = [{ n: Math.min(4, Math.ceil(dom / 7)), day: weekday }];
+  if (freq === 'MONTHLY' && repeat.monthlyBy === 'lastWeekday') byDay = [{ n: -1, day: weekday }];
+  const until = repeat.until && DATE.test(repeat.until) && repeat.until >= date ? repeat.until : null;
+  const count = !until && repeat.count && repeat.count > 0 ? Math.min(999, repeat.count) : null;
+  return {
+    freq,
+    interval: Math.min(99, Math.max(1, repeat.interval || 1)),
+    byDay: [...new Set(byDay.map((d) => JSON.stringify(d)))].map((d) => JSON.parse(d)),
+    until,
+    count,
   };
 }
 

@@ -1,6 +1,7 @@
 import { prisma } from './db.js';
 import type { Note } from './generated/prisma/client.js';
 import {
+  calendarTimeZone,
   deleteEvent,
   getConnection,
   GoogleApiError,
@@ -9,13 +10,27 @@ import {
   updateEvent,
   type EventBody,
 } from './google.js';
+import { parseRule } from './recurrence.js';
 
 /**
- * Copies appointments and dated reminders to the family Google Calendar. Saving a
- * note marks it syncPending and kicks this worker, so saves never wait on Google.
- * One-way: edits made in Google Calendar don't come back. Temporary failures are
- * retried by the timer in index.ts; a note Google rejects keeps its syncError.
+ * Copies appointments and dated reminders to Google Calendar: appointments to the
+ * family calendar, reminders to their own calendar when one is set (else the
+ * family one). Saving a note marks it syncPending and kicks this worker, so saves
+ * never wait on Google. One-way: edits made in Google Calendar don't come back.
+ * Temporary failures are retried by the timer in index.ts; a note Google rejects
+ * keeps its syncError.
  */
+
+interface Target {
+  calendarId: string;
+  remindersCalendarId: string | null;
+  remindersColor: string | null;
+  appUrl: string;
+  timeZone: string;
+}
+
+const calendarFor = (note: Pick<Note, 'kind'>, t: Pick<Target, 'calendarId' | 'remindersCalendarId'>) =>
+  note.kind === 'REMINDER' && t.remindersCalendarId ? t.remindersCalendarId : t.calendarId;
 
 let running = false;
 let again = false;
@@ -45,7 +60,16 @@ export function onCalendar(note: Pick<Note, 'kind' | 'startsAt'>): boolean {
 async function drain() {
   const connection = await getConnection();
   if (!connection?.calendarId || connection.error) return;
-  const { calendarId, appUrl } = connection;
+  const { calendarId, remindersCalendarId, remindersColor, appUrl } = connection;
+  let target: Target;
+  try {
+    // Google expands repeating events in this zone, so "every Tuesday at 3" stays at 3 across DST.
+    const timeZone = (await calendarTimeZone(calendarId, connection.timeZone)) ?? 'UTC';
+    target = { calendarId, remindersCalendarId, remindersColor, appUrl, timeZone };
+  } catch (err) {
+    if (!(err instanceof GoogleAuthError)) console.warn('Calendar sync: no time zone yet:', (err as Error).message);
+    return;
+  }
 
   const failed = new Set<string>();
   for (;;) {
@@ -58,7 +82,7 @@ async function drain() {
 
     for (const note of batch) {
       try {
-        await syncNote(note, calendarId, appUrl);
+        await syncNote(note, target);
       } catch (err) {
         if (err instanceof GoogleAuthError) return; // Recorded on the connection; stop until reconnected.
         if (err instanceof GoogleApiError && err.status >= 400 && err.status < 500 && err.status !== 429) {
@@ -74,33 +98,54 @@ async function drain() {
   }
 }
 
-async function syncNote(note: Note, calendarId: string, appUrl: string) {
+/** Takes an event off a calendar we're moving away from. Best effort: it may already be gone. */
+async function deleteQuietly(calendarId: string, eventId: string) {
+  try {
+    await deleteEvent(calendarId, eventId);
+  } catch (err) {
+    if (err instanceof GoogleAuthError) throw err;
+    console.warn('Could not remove event from the old calendar:', (err as Error).message);
+  }
+}
+
+async function syncNote(note: Note, t: Target) {
+  // Events written before the calendar was recorded are on the family calendar.
+  const current = note.googleEventId ? (note.googleCalendarId ?? t.calendarId) : null;
   if (!onCalendar(note)) {
-    if (note.googleEventId) await deleteEvent(calendarId, note.googleEventId);
-    await finish(note, { googleEventId: null, syncError: null });
+    if (note.googleEventId) await deleteEvent(current!, note.googleEventId);
+    await finish(note, { googleEventId: null, googleCalendarId: null, syncError: null });
     return;
   }
 
-  const event = toEvent(note, appUrl);
+  const calendarId = calendarFor(note, t);
+  const event = toEvent(note, t);
   let eventId = note.googleEventId;
+  if (eventId && current !== calendarId) {
+    // Now belongs on another calendar (reminders calendar changed, or a reminder became an appointment).
+    await deleteQuietly(current!, eventId);
+    eventId = null;
+  }
   if (eventId) {
     try {
       await updateEvent(calendarId, eventId, event);
     } catch (err) {
-      // Deleted in Google Calendar, or it lives on a calendar we no longer use: add it again.
+      // Deleted in Google Calendar: add it again.
       if (!(err instanceof GoogleApiError && [403, 404, 410].includes(err.status))) throw err;
       eventId = null;
     }
   }
   if (!eventId) eventId = await insertEvent(calendarId, event);
-  await finish(note, { googleEventId: eventId, syncError: null });
+  await finish(note, { googleEventId: eventId, googleCalendarId: calendarId, syncError: null });
 }
 
 /**
  * Records the result without touching updatedAt (the list sorts by it). If the
- * note was edited while syncing, only the event id is kept and it stays pending.
+ * note was edited while syncing, only the event's whereabouts are kept and it stays pending.
  */
-async function finish(note: Note, data: { googleEventId?: string | null; syncError: string | null }) {
+async function finish(
+  note: Note,
+  data: { googleEventId?: string | null; googleCalendarId?: string | null; syncError: string | null },
+) {
   const done = await prisma.note.updateMany({
     where: { id: note.id, updatedAt: note.updatedAt },
     data: { ...data, syncPending: false, updatedAt: note.updatedAt },
@@ -110,7 +155,7 @@ async function finish(note: Note, data: { googleEventId?: string | null; syncErr
     if (current) {
       await prisma.note.update({
         where: { id: note.id },
-        data: { googleEventId: data.googleEventId, updatedAt: current.updatedAt },
+        data: { googleEventId: data.googleEventId, googleCalendarId: data.googleCalendarId, updatedAt: current.updatedAt },
       });
     }
   }
@@ -120,69 +165,129 @@ const MINUTE = 60_000;
 const day = (d: Date) => d.toISOString().slice(0, 10);
 const nextDay = (d: Date) => day(new Date(d.getTime() + 24 * 60 * MINUTE));
 
-export function toEvent(note: Note, appUrl: string): EventBody {
-  const title = note.kind === 'REMINDER' ? `Reminder: ${note.title}` : note.title;
+/** "2026-10-06T15:30:00": the wall-clock time in a time zone. */
+function wallTime(d: Date, timeZone: string): string {
+  const p = Object.fromEntries(
+    new Intl.DateTimeFormat('en-US', {
+      timeZone,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hourCycle: 'h23',
+    })
+      .formatToParts(d)
+      .map((x) => [x.type, x.value]),
+  );
+  return `${p.year}-${p.month}-${p.day}T${p.hour}:${p.minute}:${p.second}`;
+}
+
+/** The instant a wall-clock time in a time zone happens. */
+function zonedInstant(wall: string, timeZone: string): Date {
+  const guess = new Date(`${wall}Z`);
+  const offset = new Date(`${wallTime(guess, timeZone)}Z`).getTime() - guess.getTime();
+  return new Date(guess.getTime() - offset);
+}
+
+/**
+ * The repeat rule as Google wants it. UNTIL stays a date for all-day events; for
+ * timed ones it must be an instant, so it becomes the end of that day in the calendar's zone.
+ */
+function googleRecurrence(note: Note, timeZone: string, timed: boolean): string[] {
+  if (!note.recurrence) return [];
+  const until = parseRule(note.recurrence).until;
+  let rule = note.recurrence;
+  if (until && timed) {
+    const instant = zonedInstant(`${until}T23:59:59`, timeZone)
+      .toISOString()
+      .replace(/\.\d{3}/, '')
+      .replace(/[-:]/g, '');
+    rule = rule.replace(/UNTIL=\d{8}/, `UNTIL=${instant}`);
+  }
+  return [`RRULE:${rule}`];
+}
+
+/** When a reminder with no time alerts, since Google can't alert "on the day" of an all-day event through the API. */
+const REMINDER_TIME = '09:00';
+/** How long a reminder shows on the calendar: long enough to read in the Google Calendar app's day view. */
+const REMINDER_MINUTES = 30;
+/** Appointments with no end time. */
+const APPOINTMENT_MINUTES = 60;
+
+export function toEvent(note: Note, t: Pick<Target, 'appUrl' | 'timeZone' | 'remindersColor'>): EventBody {
+  const { timeZone } = t;
+  const reminder = note.kind === 'REMINDER';
+  const title = reminder ? `Reminder: ${note.title}` : note.title;
   const start = note.startsAt!;
   const end = note.endsAt ?? start;
-  return {
-    summary: note.doneAt ? `✓ ${title}` : title,
-    description: [note.body, `Open in the app: ${appUrl}/n/${note.id}`].filter(Boolean).join('\n\n'),
-    location: note.location ?? undefined,
+  // Local wall time plus the zone: Google needs the zone to repeat "every Tuesday at 3" correctly across DST.
+  const timed = (d: Date) => ({ dateTime: wallTime(d, timeZone), timeZone });
+  let when: EventBody;
+  if (reminder && note.allDay) {
+    // A short item at 9 AM on the due day, so it can alert then.
+    when = {
+      start: { dateTime: `${day(start)}T${REMINDER_TIME}:00`, timeZone },
+      end: { dateTime: wallTime(new Date(new Date(`${day(start)}T${REMINDER_TIME}:00Z`).getTime() + REMINDER_MINUTES * MINUTE), 'UTC'), timeZone },
+    };
+  } else if (note.allDay) {
     // All-day dates sit at 12:00 UTC (see notes.ts); Google's all-day end date is exclusive.
-    ...(note.allDay
-      ? { start: { date: day(start) }, end: { date: nextDay(end) } }
-      : {
-          start: { dateTime: start.toISOString() },
-          end: {
-            dateTime: (note.endsAt
-              ? note.endsAt
-              : new Date(start.getTime() + (note.kind === 'APPOINTMENT' ? 60 : 15) * MINUTE)
-            ).toISOString(),
-          },
-        }),
-    // Each person's own default alerts for the calendar.
-    reminders: { useDefault: true },
+    when = { start: { date: day(start) }, end: { date: nextDay(end) } };
+  } else {
+    when = {
+      start: timed(start),
+      end: timed(note.endsAt ?? new Date(start.getTime() + (reminder ? REMINDER_MINUTES : APPOINTMENT_MINUTES) * MINUTE)),
+    };
+  }
+  return {
+    // A repeating reminder is ticked off one occurrence at a time, so the series never gets a check mark.
+    summary: note.doneAt && !note.recurrence ? `✓ ${title}` : title,
+    description: [note.body, `Open in the app: ${t.appUrl}/n/${note.id}`].filter(Boolean).join('\n\n'),
+    location: note.location ?? undefined,
+    ...when,
+    // Updates replace the whole event, so an empty list also removes a repeat that was turned off.
+    recurrence: googleRecurrence(note, timeZone, !(note.allDay && !reminder)),
+    // Reminders alert when they're due (for the connected account; Google keeps alerts per person).
+    // Appointments use each person's own defaults for the calendar.
+    reminders: reminder ? { useDefault: false, overrides: [{ method: 'popup', minutes: 0 }] } : { useDefault: true },
+    // Reminders show as free time, in their own color if one is set.
+    ...(reminder ? { transparency: 'transparent' } : {}),
+    ...(reminder && t.remindersColor ? { colorId: t.remindersColor } : {}),
     extendedProperties: { private: { noteId: note.id } },
   };
 }
 
 /** Removes a deleted note's event. Best effort: the note itself is already gone. */
-export async function removeFromCalendar(googleEventId: string | null) {
+export async function removeFromCalendar(googleEventId: string | null, googleCalendarId: string | null) {
   if (!googleEventId) return;
   const connection = await getConnection();
-  if (!connection?.calendarId || connection.error) return;
+  const calendarId = googleCalendarId ?? connection?.calendarId;
+  if (!calendarId || connection?.error) return;
   try {
-    await deleteEvent(connection.calendarId, googleEventId);
+    await deleteEvent(calendarId, googleEventId);
   } catch (err) {
     console.warn('Could not remove calendar event:', (err as Error).message);
   }
 }
 
 /**
- * After choosing a (different) calendar: take events off the old one, then queue
- * everything current for the new one. Past appointments stay off the calendar.
+ * After changing where events go (or how reminders look): queue everything that's
+ * on a calendar, plus everything current, and the sync moves or restyles each one.
+ * `kind` limits it to reminders when only their settings changed.
  */
-export async function moveToCalendar(oldCalendarId: string | null) {
-  if (oldCalendarId) {
-    const onOld = await prisma.note.findMany({ where: { googleEventId: { not: null } } });
-    for (const note of onOld) {
-      try {
-        await deleteEvent(oldCalendarId, note.googleEventId!);
-      } catch (err) {
-        console.warn('Could not remove event from the old calendar:', (err as Error).message);
-      }
-      await prisma.note.update({ where: { id: note.id }, data: { googleEventId: null, updatedAt: note.updatedAt } });
-    }
-  }
+export async function resync(kind?: 'REMINDER') {
   const yesterday = new Date(Date.now() - 24 * 60 * MINUTE);
   await prisma.note.updateMany({
     where: {
-      kind: { in: ['APPOINTMENT', 'REMINDER'] },
+      kind: kind ?? { in: ['APPOINTMENT', 'REMINDER'] },
       OR: [
+        { googleEventId: { not: null } },
         { endsAt: { gte: yesterday } },
         { endsAt: null, startsAt: { gte: yesterday } },
-        // Open reminders, even overdue ones.
+        // Open and repeating reminders, even overdue ones.
         { kind: 'REMINDER', doneAt: null, startsAt: { not: null } },
+        { recurrence: { not: null } },
       ],
     },
     data: { syncPending: true },

@@ -3,6 +3,7 @@ import { kickCalendarSync, removeFromCalendar } from './calendarSync.js';
 import { prisma } from './db.js';
 import type { NoteKind, Prisma } from './generated/prisma/client.js';
 import { deleteImage, uploadExists } from './images.js';
+import { formatRule, parseRule, RuleError } from './recurrence.js';
 
 /**
  * Notes, reminders and appointments. Everyone sees all of them.
@@ -34,6 +35,8 @@ export const noteFields = z.object({
   endsAt: instant,
   allDay: z.boolean().optional(),
   location: optionalText(500),
+  /** An RRULE (see recurrence.ts), or null for a one-off. */
+  recurrence: z.string().trim().max(300).nullish(),
 });
 
 export const createNoteBody = noteFields.extend({
@@ -56,7 +59,8 @@ export function allDayInstant(date: string): Date {
 
 /**
  * Drops fields that don't apply to the kind: notes have no time, only
- * appointments have an end or a place. Appointments need a start.
+ * appointments have an end or a place. Appointments need a start. Only
+ * something with a date can repeat.
  */
 function normalize(fields: Fields) {
   const kind = fields.kind;
@@ -67,6 +71,15 @@ function normalize(fields: Fields) {
   if (allDay && endsAt) endsAt = allDayInstant(endsAt.toISOString().slice(0, 10));
   if (startsAt && endsAt && endsAt < startsAt) endsAt = null;
   if (kind === 'APPOINTMENT' && !startsAt) throw new NoteError('An appointment needs a date.');
+  let recurrence: string | null = null;
+  if (startsAt && fields.recurrence) {
+    try {
+      recurrence = formatRule(parseRule(fields.recurrence));
+    } catch (err) {
+      if (err instanceof RuleError) throw new NoteError(err.message);
+      throw err;
+    }
+  }
   return {
     kind,
     title: fields.title,
@@ -75,16 +88,17 @@ function normalize(fields: Fields) {
     endsAt,
     allDay,
     location: kind === 'APPOINTMENT' ? (fields.location ?? null) : null,
+    recurrence,
   };
 }
 
 export class NoteError extends Error {}
 
 export async function listNotes() {
-  // Ticked-off reminders drop off after a month.
+  // Ticked-off reminders drop off after a month; repeating ones only tick off one occurrence.
   const monthAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
   return prisma.note.findMany({
-    where: { OR: [{ doneAt: null }, { doneAt: { gte: monthAgo } }] },
+    where: { OR: [{ doneAt: null }, { doneAt: { gte: monthAgo } }, { recurrence: { not: null } }] },
     orderBy: { updatedAt: 'desc' },
     include,
   });
@@ -118,12 +132,16 @@ export async function updateNote(id: string, input: z.infer<typeof updateNoteBod
     endsAt: changes.endsAt !== undefined ? changes.endsAt : current.endsAt?.toISOString(),
     allDay: changes.allDay ?? current.allDay,
     location: changes.location !== undefined ? changes.location : current.location,
+    recurrence: changes.recurrence !== undefined ? changes.recurrence : current.recurrence,
   };
   const note = await prisma.note.update({
     where: { id },
     data: {
       ...normalize(merged),
-      ...(done !== undefined ? { doneAt: done ? (current.doneAt ?? new Date()) : null } : {}),
+      // A repeating reminder is ticked off one occurrence at a time, so each tick is dated now.
+      ...(done !== undefined
+        ? { doneAt: done ? (current.recurrence ? new Date() : (current.doneAt ?? new Date())) : null }
+        : {}),
       ...(image === null ? { image: null } : {}),
       syncPending: true,
     },
@@ -135,10 +153,10 @@ export async function updateNote(id: string, input: z.infer<typeof updateNoteBod
 }
 
 export async function deleteNote(id: string) {
-  const note = await prisma.note.findUnique({ where: { id }, select: { image: true, googleEventId: true } });
+  const note = await prisma.note.findUnique({ where: { id }, select: { image: true, googleEventId: true, googleCalendarId: true } });
   if (!note) return false;
   await prisma.note.delete({ where: { id } });
   await deleteImage(note.image);
-  void removeFromCalendar(note.googleEventId);
+  void removeFromCalendar(note.googleEventId, note.googleCalendarId);
   return true;
 }

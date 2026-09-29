@@ -1,3 +1,4 @@
+import Anthropic from '@anthropic-ai/sdk';
 import multipart from '@fastify/multipart';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
@@ -50,6 +51,13 @@ export async function noteRoutes(app: FastifyInstance) {
     } catch (err) {
       if (err instanceof ImportError || err instanceof FetchError) {
         return reply.code(422).send({ error: err.message });
+      }
+      // Claude outages, overload and rate limits (the SDK has already retried these).
+      if (err instanceof Anthropic.APIError && (err.status === undefined || err.status === 429 || err.status >= 500)) {
+        request.log.warn({ err }, 'claude unavailable');
+        return reply.code(503).send({
+          error: "The AI service is having trouble right now. Your text is still here, so try again in a few minutes.",
+        });
       }
       throw err;
     }

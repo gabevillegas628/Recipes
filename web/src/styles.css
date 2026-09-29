@@ -1797,3 +1797,106 @@ html.has-timers .cook {
   font-size: 16px;
   color: inherit;
 }
+
+/* Settings → Google Calendar → Reminders. */
+.reminders-settings {
+  margin: 16px 0;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.reminders-settings h3 {
+  margin-bottom: 4px;
+  font-size: 16px;
+}
+
+.color-picks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.color-pick {
+  width: 34px;
+  height: 34px;
+  border: 2px solid transparent;
+  border-radius: 50%;
+  cursor: pointer;
+}
+
+.color-pick.on {
+  border-color: var(--surface);
+  box-shadow: 0 0 0 2px var(--text);
+}
+
+.color-pick-none {
+  width: auto;
+  padding: 0 12px;
+  border-radius: 999px;
+  border-color: var(--border);
+  background: var(--surface);
+  font-size: 13px;
+}
+
+.color-pick-none.on {
+  border-color: var(--text);
+  box-shadow: none;
+}
+
+/* Repeat options on the note form. */
+.repeat-options {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: -6px 0 16px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.repeat-options select,
+.repeat-options input {
+  min-height: 42px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg);
+  font: inherit;
+  font-size: 16px;
+  color: inherit;
+}
+
+.repeat-every {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.repeat-every input {
+  width: 64px;
+  text-align: center;
+}
+
+.weekday-picks {
+  display: flex;
+  gap: 6px;
+}
+
+.weekday-picks .chip {
+  flex: 1;
+  min-width: 0;
+  padding: 8px 0;
+  text-align: center;
+}
+
+.repeat-ends {
+  display: flex;
+  gap: 8px;
+}
+
+.repeat-ends > * {
+  flex: 1;
+  min-width: 0;
+}

@@ -142,9 +142,10 @@ export function GoogleCalendarSection() {
             {s.connectedBy ? `, connected by ${s.connectedBy}` : ''}.{' '}
             {s.pending > 0 && `Adding ${s.pending} now… `}
             {s.failed > 0 && `${s.failed} couldn't be added; open them in Notes to see why. `}
-            Alerts follow each person's default notifications for that calendar in Google Calendar.
-            Changes made in Google Calendar don't come back here.
+            Appointment alerts follow each person's default notifications for that calendar in
+            Google Calendar. Changes made in Google Calendar don't come back here.
           </p>
+          <RemindersSettings status={s} onStatus={onStatus} />
           <div className="settings-actions">
             <button
               type="button"
@@ -170,5 +171,131 @@ export function GoogleCalendarSection() {
       )}
       {disconnect.error && <p className="error">{disconnect.error.message}</p>}
     </section>
+  );
+}
+
+/** Google Calendar's event colors (colorId → name and swatch). */
+const COLORS: { id: string; name: string; hex: string }[] = [
+  { id: '11', name: 'Tomato', hex: '#d50000' },
+  { id: '4', name: 'Flamingo', hex: '#e67c73' },
+  { id: '6', name: 'Tangerine', hex: '#f4511e' },
+  { id: '5', name: 'Banana', hex: '#f6bf26' },
+  { id: '2', name: 'Sage', hex: '#33b679' },
+  { id: '10', name: 'Basil', hex: '#0b8043' },
+  { id: '7', name: 'Peacock', hex: '#039be5' },
+  { id: '9', name: 'Blueberry', hex: '#3f51b5' },
+  { id: '1', name: 'Lavender', hex: '#7986cb' },
+  { id: '3', name: 'Grape', hex: '#8e24aa' },
+  { id: '8', name: 'Graphite', hex: '#616161' },
+];
+
+/** Where reminders go and what color they are. They alert at the due time for the connected account. */
+function RemindersSettings({ status: s, onStatus }: { status: GoogleStatus; onStatus: (s: GoogleStatus) => void }) {
+  const [editing, setEditing] = useState(false);
+  const [calendarId, setCalendarId] = useState(s.remindersCalendarId ?? '');
+  const [color, setColor] = useState(s.remindersColor ?? '');
+  const calendars = useQuery({ queryKey: ['google-calendars'], queryFn: api.googleCalendars, enabled: editing });
+  const save = useMutation({
+    mutationFn: () => api.setGoogleReminders(calendarId || null, color || null),
+    onSuccess: (next) => {
+      onStatus(next);
+      setEditing(false);
+    },
+  });
+
+  const colorName = COLORS.find((c) => c.id === s.remindersColor)?.name;
+
+  if (!editing) {
+    return (
+      <div className="reminders-settings">
+        <h3>Reminders</h3>
+        <p className="muted small">
+          On <strong>{s.remindersCalendarName ?? s.calendarName}</strong>
+          {colorName ? `, in ${colorName}` : ''}. Each one alerts when it's due (for {s.email}); ones without a time
+          alert at 9 AM.
+        </p>
+        <button
+          type="button"
+          className="btn btn-small"
+          onClick={() => {
+            setCalendarId(s.remindersCalendarId ?? '');
+            setColor(s.remindersColor ?? '');
+            setEditing(true);
+          }}
+        >
+          Change
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <form
+      className="reminders-settings form"
+      onSubmit={(e) => {
+        e.preventDefault();
+        save.mutate();
+      }}
+    >
+      <h3>Reminders</h3>
+      <label className="field">
+        <span>Put reminders on</span>
+        {calendars.isPending ? (
+          <small>Loading calendars…</small>
+        ) : calendars.error ? (
+          <p className="error">{calendars.error.message}</p>
+        ) : (
+          <select value={calendarId} onChange={(e) => setCalendarId(e.target.value)}>
+            <option value="">{s.calendarName} (with appointments)</option>
+            {calendars.data
+              ?.filter((c) => c.id !== s.calendarId)
+              .map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                  {c.primary ? ' (personal)' : ''}
+                </option>
+              ))}
+          </select>
+        )}
+      </label>
+      <div className="field">
+        <span>Color</span>
+        <div className="color-picks" role="radiogroup" aria-label="Reminder color">
+          <button
+            type="button"
+            role="radio"
+            aria-checked={color === ''}
+            className={`color-pick color-pick-none ${color === '' ? 'on' : ''}`}
+            onClick={() => setColor('')}
+            title="The calendar's own color"
+          >
+            <span>Calendar's</span>
+          </button>
+          {COLORS.map((c) => (
+            <button
+              key={c.id}
+              type="button"
+              role="radio"
+              aria-checked={color === c.id}
+              aria-label={c.name}
+              title={c.name}
+              className={`color-pick ${color === c.id ? 'on' : ''}`}
+              style={{ background: c.hex }}
+              onClick={() => setColor(c.id)}
+            />
+          ))}
+        </div>
+      </div>
+      {save.error && <p className="error">{save.error.message}</p>}
+      <div className="settings-actions">
+        <button className="btn btn-primary" disabled={save.isPending || calendars.isPending}>
+          {save.isPending ? 'Saving…' : 'Save'}
+        </button>
+        <button type="button" className="btn" onClick={() => setEditing(false)}>
+          Cancel
+        </button>
+      </div>
+      <small className="muted">Existing reminders move and change color too.</small>
+    </form>
   );
 }

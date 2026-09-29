@@ -180,7 +180,10 @@ export interface Note {
   endsAt: string | null;
   allDay: boolean;
   location: string | null;
+  /** An RRULE when it repeats; startsAt is the first occurrence. */
+  recurrence: string | null;
   image: string | null;
+  /** For a repeating reminder: when the latest occurrence was ticked off. */
   doneAt: string | null;
   googleEventId: string | null;
   syncPending: boolean;
@@ -198,6 +201,7 @@ export interface NoteInput {
   endsAt: string | null;
   allDay: boolean;
   location: string | null;
+  recurrence: string | null;
 }
 
 /** What capture read out of the input: local dates and times, not yet saved. */
@@ -210,6 +214,7 @@ export interface NoteDraft {
   endDate: string | null;
   endTime: string | null;
   location: string | null;
+  recurrence: string | null;
   uploadedImage: string | null;
 }
 
@@ -225,6 +230,11 @@ export interface GoogleStatus {
   email: string | null;
   calendarId: string | null;
   calendarName: string | null;
+  /** Where reminders go; null means with appointments. */
+  remindersCalendarId: string | null;
+  remindersCalendarName: string | null;
+  /** Google event colorId "1"-"11", or null for the calendar's own color. */
+  remindersColor: string | null;
   /** The connection stopped working and needs reconnecting. */
   error: string | null;
   connectedBy: string | null;

@@ -126,6 +126,7 @@ export function CapturePage() {
               endDate: null,
               endTime: null,
               location: null,
+              recurrence: null,
               uploadedImage: null,
             })
           }

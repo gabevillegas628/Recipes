@@ -217,30 +217,33 @@ enum NoteKind {
 /// A note, reminder or appointment, shared by everyone. Usually sorted by AI from
 /// something typed, dictated or photographed (see src/capture.ts).
 model Note {
-  id            String    @id @default(cuid())
-  kind          NoteKind  @default(NOTE)
-  title         String
-  body          String?
+  id               String    @id @default(cuid())
+  kind             NoteKind  @default(NOTE)
+  title            String
+  body             String?
   /// When an appointment starts, or when a reminder is due. All-day dates are stored
   /// at 12:00 UTC on that date, so they read as the same day in any US time zone.
-  startsAt      DateTime?
-  endsAt        DateTime?
-  allDay        Boolean   @default(false)
-  location      String?
+  startsAt         DateTime?
+  endsAt           DateTime?
+  allDay           Boolean   @default(false)
+  location         String?
+  /// Repeats: an RRULE such as "FREQ=WEEKLY;BYDAY=TU" (see src/recurrence.ts). startsAt is the first occurrence.
+  recurrence       String?
   /// A photo kept with it (the flyer it came from), stored like recipe images.
-  image         String?
+  image            String?
   /// Reminders only: ticked off.
-  doneAt        DateTime?
-  /// The matching event on the family Google Calendar (see src/calendarSync.ts).
-  googleEventId String?
+  doneAt           DateTime?
+  /// The matching Google Calendar event (see src/calendarSync.ts), and the calendar it's on.
+  googleEventId    String?
+  googleCalendarId String?
   /// Changed since it was last written to Google Calendar.
-  syncPending   Boolean   @default(false)
+  syncPending      Boolean   @default(false)
   /// Why Google Calendar rejected it, if it did.
-  syncError     String?
-  createdBy     User?     @relation(fields: [createdById], references: [id], onDelete: SetNull)
-  createdById   String?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  syncError        String?
+  createdBy        User?     @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  createdById      String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
 
   @@index([kind, startsAt])
   @@index([syncPending])
@@ -248,18 +251,25 @@ model Note {
 
 /// The Google account the app writes calendar events with. At most one row (id "default").
 model GoogleConnection {
-  id            String   @id @default("default")
-  email         String?
+  id                    String   @id @default("default")
+  email                 String?
   /// Encrypted with a key derived from SESSION_SECRET (see src/google.ts).
-  refreshToken  String
-  calendarId    String?
-  calendarName  String?
+  refreshToken          String
+  calendarId            String?
+  calendarName          String?
+  /// The calendar's time zone (IANA), which Google needs for repeating events.
+  timeZone              String?
+  /// Where reminders go instead, if set (say, one person's own calendar). They alert at the due time.
+  remindersCalendarId   String?
+  remindersCalendarName String?
+  /// Google's event color for reminders, "1"-"11" (see GOOGLE_COLORS in google.ts); null for the calendar's color.
+  remindersColor        String?
   /// Where the app lives, for "open in the app" links in event descriptions.
-  appUrl        String
+  appUrl                String
   /// Set when Google stops accepting the connection (revoked, expired); needs reconnecting.
-  error         String?
-  connectedBy   User?    @relation(fields: [connectedById], references: [id], onDelete: SetNull)
-  connectedById String?
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  error                 String?
+  connectedBy           User?    @relation(fields: [connectedById], references: [id], onDelete: SetNull)
+  connectedById         String?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
 }

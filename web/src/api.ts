@@ -146,6 +146,8 @@ export const api = {
   googleCalendars: () => request<GoogleCalendarChoice[]>('/api/google/calendars'),
   setGoogleCalendar: (calendarId: string) =>
     request<GoogleStatus>('/api/google/calendar', json('PUT', { calendarId })),
+  setGoogleReminders: (calendarId: string | null, color: string | null) =>
+    request<GoogleStatus>('/api/google/reminders', json('PUT', { calendarId, color })),
   disconnectGoogle: () => request<GoogleStatus>('/api/google', { method: 'DELETE' }),
 
   changePassword: (currentPassword: string, newPassword: string) =>

@@ -1,6 +1,7 @@
 import { useState, type FormEvent, type ReactNode } from 'react';
+import { WEEKDAYS, weekdayOf, type Freq, type Weekday } from '../../../server/src/recurrence';
 import { imageUrl } from '../api';
-import type { NoteValues } from '../notes';
+import { monthlyPositions, type NoteValues, type RepeatValues } from '../notes';
 import type { NoteKind } from '../types';
 
 const KINDS: { kind: NoteKind; label: string }[] = [
@@ -93,6 +94,7 @@ export function NoteForm({
           <small className="muted field-hint">
             {v.kind === 'APPOINTMENT' ? 'Leave the time empty for all day.' : 'Leave empty for no due date.'}
           </small>
+          {v.date && <RepeatFields date={v.date} value={v.repeat} onChange={(repeat) => set('repeat', repeat)} />}
         </>
       )}
 
@@ -135,5 +137,127 @@ export function NoteForm({
       </div>
       {footer}
     </form>
+  );
+}
+
+const UNITS: Record<Freq, string> = { DAILY: 'day', WEEKLY: 'week', MONTHLY: 'month', YEARLY: 'year' };
+const DAY_LETTERS: Record<Weekday, string> = { MO: 'M', TU: 'T', WE: 'W', TH: 'T', FR: 'F', SA: 'S', SU: 'S' };
+const DAY_NAMES: Record<Weekday, string> = {
+  MO: 'Monday',
+  TU: 'Tuesday',
+  WE: 'Wednesday',
+  TH: 'Thursday',
+  FR: 'Friday',
+  SA: 'Saturday',
+  SU: 'Sunday',
+};
+
+/** How an appointment or reminder repeats. Weekly and monthly details come from the date unless changed. */
+function RepeatFields({
+  date,
+  value: r,
+  onChange,
+}: {
+  date: string;
+  value: RepeatValues;
+  onChange: (value: RepeatValues) => void;
+}) {
+  const set = <K extends keyof RepeatValues>(key: K, value: RepeatValues[K]) => onChange({ ...r, [key]: value });
+  // Until days are picked, weekly means the start's weekday.
+  const days = r.days.length ? r.days : [weekdayOf(date)];
+  const positions = monthlyPositions(date);
+  const dom = Number(date.slice(8));
+  // Show what will be saved when the date no longer allows the choice (see ruleFromRepeat).
+  const monthly = r.monthly === 'nth' && !positions.nth ? 'last' : r.monthly === 'last' && !positions.last ? 'nth' : r.monthly;
+  const interval = Number(r.interval) || 1;
+
+  function toggleDay(day: Weekday) {
+    const next = days.includes(day) ? days.filter((d) => d !== day) : [...days, day];
+    if (next.length) set('days', next);
+  }
+
+  return (
+    <div className="repeat">
+      <label className="field">
+        <span>Repeats</span>
+        <select value={r.freq} onChange={(e) => set('freq', e.target.value as Freq | '')}>
+          <option value="">Doesn't repeat</option>
+          <option value="DAILY">Daily</option>
+          <option value="WEEKLY">Weekly</option>
+          <option value="MONTHLY">Monthly</option>
+          <option value="YEARLY">Yearly</option>
+        </select>
+      </label>
+
+      {r.freq && (
+        <div className="repeat-options">
+          <label className="repeat-every">
+            Every
+            <input
+              type="number"
+              inputMode="numeric"
+              min={1}
+              max={99}
+              value={r.interval}
+              onChange={(e) => set('interval', e.target.value)}
+            />
+            {UNITS[r.freq]}
+            {interval === 1 ? '' : 's'}
+          </label>
+
+          {r.freq === 'WEEKLY' && (
+            <div className="weekday-picks" role="group" aria-label="On these days">
+              {WEEKDAYS.map((d) => (
+                <button
+                  key={d}
+                  type="button"
+                  className={`chip ${days.includes(d) ? 'chip-on' : ''}`}
+                  aria-pressed={days.includes(d)}
+                  aria-label={DAY_NAMES[d]}
+                  onClick={() => toggleDay(d)}
+                >
+                  {DAY_LETTERS[d]}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {r.freq === 'MONTHLY' && (
+            <select value={monthly} onChange={(e) => set('monthly', e.target.value as RepeatValues['monthly'])}>
+              <option value="date">On day {dom}</option>
+              {positions.nth && <option value="nth">On {positions.nth}</option>}
+              {positions.last && <option value="last">On {positions.last}</option>}
+            </select>
+          )}
+
+          <div className="repeat-ends">
+            <select value={r.ends} onChange={(e) => set('ends', e.target.value as RepeatValues['ends'])}>
+              <option value="never">Forever</option>
+              <option value="until">Until</option>
+              <option value="count">A number of times</option>
+            </select>
+            {r.ends === 'until' && (
+              <input type="date" min={date} value={r.until} onChange={(e) => set('until', e.target.value)} required />
+            )}
+            {r.ends === 'count' && (
+              <input
+                type="number"
+                inputMode="numeric"
+                min={1}
+                max={999}
+                placeholder="10"
+                value={r.count}
+                onChange={(e) => set('count', e.target.value)}
+                required
+                aria-label="Times"
+              />
+            )}
+          </div>
+          {r.freq === 'WEEKLY' && !days.includes(weekdayOf(date)) && (
+            <small className="muted">It starts on the first chosen day after the date above.</small>
+          )}
+        </div>
+      )}
+    </div>
   );
 }

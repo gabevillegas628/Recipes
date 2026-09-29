@@ -2,7 +2,7 @@ import { randomBytes } from 'node:crypto';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { requireAuth } from '../auth.js';
-import { moveToCalendar } from '../calendarSync.js';
+import { resync } from '../calendarSync.js';
 import { prisma } from '../db.js';
 import { env } from '../env.js';
 import {
@@ -12,9 +12,11 @@ import {
   getConnection,
   GoogleApiError,
   GoogleAuthError,
+  GOOGLE_COLORS,
   googleConfigured,
   listCalendars,
   setCalendar,
+  setReminders,
 } from '../google.js';
 
 /**
@@ -40,6 +42,9 @@ async function status() {
     email: c?.email ?? null,
     calendarId: c?.calendarId ?? null,
     calendarName: c?.calendarName ?? null,
+    remindersCalendarId: c?.remindersCalendarId ?? null,
+    remindersCalendarName: c?.remindersCalendarName ?? null,
+    remindersColor: c?.remindersColor ?? null,
     error: c?.error ?? null,
     connectedBy: c?.connectedBy?.name ?? null,
     pending: c ? await prisma.note.count({ where: { syncPending: true } }) : 0,
@@ -114,7 +119,39 @@ export async function googleRoutes(app: FastifyInstance) {
       if (!calendar) return reply.code(400).send({ error: "That calendar isn't one this account can add events to." });
       const previous = connection.calendarId;
       await setCalendar(calendar);
-      if (previous !== calendar.id) await moveToCalendar(previous);
+      if (previous !== calendar.id) await resync();
+      return status();
+    } catch (err) {
+      const message = googleError(err);
+      if (!message) throw err;
+      return reply.code(502).send({ error: message });
+    }
+  });
+
+  /** Where reminders go (null: with appointments) and their color (null: the calendar's own). Restyles existing ones. */
+  app.put('/api/google/reminders', async (request, reply) => {
+    const parsed = z
+      .object({
+        calendarId: z.string().min(1).nullable(),
+        color: z.enum(Object.keys(GOOGLE_COLORS) as [string, ...string[]]).nullable(),
+      })
+      .safeParse(request.body);
+    if (!parsed.success) return reply.code(400).send({ error: 'Pick a calendar and a color' });
+    const connection = await getConnection();
+    if (!connection?.calendarId) return reply.code(409).send({ error: 'Choose the family calendar first' });
+    try {
+      const { calendarId, color } = parsed.data;
+      const calendar =
+        calendarId && calendarId !== connection.calendarId
+          ? (await listCalendars()).find((c) => c.id === calendarId)
+          : null;
+      if (calendarId && calendarId !== connection.calendarId && !calendar) {
+        return reply.code(400).send({ error: "That calendar isn't one this account can add events to." });
+      }
+      await setReminders(calendar ?? null, color);
+      if ((calendar?.id ?? null) !== connection.remindersCalendarId || color !== connection.remindersColor) {
+        await resync('REMINDER');
+      }
       return status();
     } catch (err) {
       const message = googleError(err);

@@ -191,25 +191,66 @@ export interface CalendarChoice {
   id: string;
   name: string;
   primary: boolean;
+  timeZone: string | null;
 }
 
 /** Calendars the connected account can add events to. */
 export async function listCalendars(token?: string): Promise<CalendarChoice[]> {
   const data = await api<{
-    items?: { id: string; summary: string; summaryOverride?: string; primary?: boolean; accessRole: string }[];
+    items?: {
+      id: string;
+      summary: string;
+      summaryOverride?: string;
+      primary?: boolean;
+      accessRole: string;
+      timeZone?: string;
+    }[];
   }>('GET', '/users/me/calendarList?minAccessRole=writer&maxResults=250', undefined, token);
   return (data?.items ?? []).map((c) => ({
     id: c.id,
     name: c.summaryOverride ?? c.summary,
     primary: Boolean(c.primary),
+    timeZone: c.timeZone ?? null,
   }));
 }
 
 export async function setCalendar(calendar: CalendarChoice) {
   await prisma.googleConnection.update({
     where: { id: ID },
-    data: { calendarId: calendar.id, calendarName: calendar.name },
+    data: { calendarId: calendar.id, calendarName: calendar.name, timeZone: calendar.timeZone },
   });
+}
+
+/** Google Calendar's event colors, by colorId. */
+export const GOOGLE_COLORS: Record<string, string> = {
+  '1': 'Lavender',
+  '2': 'Sage',
+  '3': 'Grape',
+  '4': 'Flamingo',
+  '5': 'Banana',
+  '6': 'Tangerine',
+  '7': 'Peacock',
+  '8': 'Graphite',
+  '9': 'Blueberry',
+  '10': 'Basil',
+  '11': 'Tomato',
+};
+
+/** Where reminders go (null: with appointments) and their color (null: the calendar's own). */
+export async function setReminders(calendar: CalendarChoice | null, color: string | null) {
+  await prisma.googleConnection.update({
+    where: { id: ID },
+    data: { remindersCalendarId: calendar?.id ?? null, remindersCalendarName: calendar?.name ?? null, remindersColor: color },
+  });
+}
+
+/** The chosen calendar's time zone, looked up once for connections made before it was stored. */
+export async function calendarTimeZone(calendarId: string, stored: string | null): Promise<string | null> {
+  if (stored) return stored;
+  const calendar = (await listCalendars()).find((c) => c.id === calendarId);
+  if (!calendar?.timeZone) return null;
+  await prisma.googleConnection.update({ where: { id: ID }, data: { timeZone: calendar.timeZone } });
+  return calendar.timeZone;
 }
 
 export type EventBody = Record<string, unknown>;

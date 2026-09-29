@@ -8,6 +8,7 @@ import { FetchError } from './import/safeFetch.js';
 import { draftToInput, findExistingRecipe } from './import/worker.js';
 import { addMealToPlan, createMeal, getMeal, listMeals } from './meals.js';
 import { allDayInstant, createNote, listNotes, NOTE_KINDS, NoteError, updateNote } from './notes.js';
+import { describeRule, nextOccurrence, parseRule } from './recurrence.js';
 import { addGroceries, addToPlan, getGroceries, getPlan } from './plan.js';
 import { recipeInput } from './recipeInput.js';
 import { createRecipe, searchWhere, serialize, updateRecipe, withTags } from './recipes.js';
@@ -426,8 +427,17 @@ export function buildMcpServer(baseUrl: string) {
     throw new NoteError(`${field} must be a date (2026-10-06) or a date-time with its UTC offset (2026-10-06T15:30:00-04:00).`);
   }
 
+  const repeats = z
+    .string()
+    .nullish()
+    .describe(
+      'Only if it repeats: an iCalendar RRULE using FREQ (DAILY, WEEKLY, MONTHLY, YEARLY), INTERVAL, BYDAY and UNTIL (a date) or COUNT. Examples: "FREQ=WEEKLY;BYDAY=TU", "FREQ=WEEKLY;INTERVAL=2;BYDAY=MO,WE", "FREQ=MONTHLY;BYDAY=-1FR" (last Friday), "FREQ=MONTHLY" (same day of the month as startsAt), "FREQ=DAILY;UNTIL=20261231". startsAt must be the first occurrence.',
+    );
+
   const noteLink = (id: string) => `${baseUrl}/n/${id}`;
   type SavedNote = Awaited<ReturnType<typeof listNotes>>[number];
+  // Close enough for listing: timed items are placed on their UTC day.
+  const startDay = (n: SavedNote) => n.startsAt!.toISOString().slice(0, 10);
   const noteForClaude = (n: SavedNote) => ({
     id: n.id,
     kind: n.kind,
@@ -436,6 +446,8 @@ export function buildMcpServer(baseUrl: string) {
     // All-day items come back as a plain date.
     startsAt: n.startsAt && (n.allDay ? n.startsAt.toISOString().slice(0, 10) : n.startsAt.toISOString()),
     endsAt: n.endsAt && (n.allDay ? n.endsAt.toISOString().slice(0, 10) : n.endsAt.toISOString()),
+    repeats: n.recurrence,
+    repeatsInWords: n.recurrence && n.startsAt ? describeRule(parseRule(n.recurrence), startDay(n)) : null,
     location: n.location,
     done: n.doneAt !== null,
     hasPhoto: Boolean(n.image),
@@ -456,15 +468,25 @@ export function buildMcpServer(baseUrl: string) {
         startsAt: when.describe('When the appointment starts or the reminder is due. ' + when.description),
         endsAt: when.describe('Appointments only: when it ends, if known. ' + when.description),
         location: z.string().nullish().describe('Appointments only: the place or address'),
+        repeats,
       },
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false },
     },
-    async ({ kind, title, details, startsAt, endsAt, location }) => {
+    async ({ kind, title, details, startsAt, endsAt, location, repeats: recurrence }) => {
       try {
         const start = parseWhen(startsAt, 'startsAt');
         const end = parseWhen(endsAt, 'endsAt');
         const note = await createNote(
-          { kind, title, body: details ?? null, startsAt: start.iso, endsAt: end.iso, allDay: start.allDay, location: location ?? null },
+          {
+            kind,
+            title,
+            body: details ?? null,
+            startsAt: start.iso,
+            endsAt: end.iso,
+            allDay: start.allDay,
+            location: location ?? null,
+            recurrence,
+          },
           null,
         );
         return text({ saved: true, ...noteForClaude(note) });
@@ -493,8 +515,11 @@ export function buildMcpServer(baseUrl: string) {
       const words = (query ?? '').toLowerCase().split(/\s+/).filter(Boolean);
       const notes = (await listNotes()).filter((n) => {
         if (kind && n.kind !== kind) return false;
-        if (!includePast && n.kind === 'APPOINTMENT' && (n.endsAt ?? n.startsAt)!.getTime() < now - 24 * 60 * 60 * 1000) {
-          return false;
+        if (!includePast && n.kind === 'APPOINTMENT') {
+          const over = n.recurrence
+            ? !nextOccurrence(parseRule(n.recurrence), startDay(n), new Date(now - 24 * 60 * 60 * 1000).toISOString().slice(0, 10))
+            : (n.endsAt ?? n.startsAt)!.getTime() < now - 24 * 60 * 60 * 1000;
+          if (over) return false;
         }
         const haystack = `${n.title} ${n.body ?? ''} ${n.location ?? ''}`.toLowerCase();
         return words.every((w) => haystack.includes(w));
@@ -508,7 +533,7 @@ export function buildMcpServer(baseUrl: string) {
     {
       title: 'Update a note, reminder or appointment',
       description:
-        'Change a saved item (find its id with list_notes), or tick a reminder off with done: true. Only the fields you pass change; pass null to clear one.',
+        'Change a saved item (find its id with list_notes), or tick a reminder off with done: true (for a repeating reminder, that ticks off the current occurrence). Only the fields you pass change; pass null to clear one, e.g. repeats: null to stop it repeating. Changes apply to every occurrence of a repeating item.',
       inputSchema: {
         id: z.string(),
         kind: z.enum(NOTE_KINDS).optional(),
@@ -517,17 +542,19 @@ export function buildMcpServer(baseUrl: string) {
         startsAt: when.optional(),
         endsAt: when.optional(),
         location: z.string().nullable().optional(),
+        repeats: repeats.optional(),
         done: z.boolean().optional(),
       },
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
     },
-    async ({ id, details, startsAt, endsAt, ...rest }) => {
+    async ({ id, details, startsAt, endsAt, repeats: recurrence, ...rest }) => {
       try {
         const start = startsAt !== undefined ? parseWhen(startsAt, 'startsAt') : undefined;
         const end = endsAt !== undefined ? parseWhen(endsAt, 'endsAt') : undefined;
         const note = await updateNote(id, {
           ...rest,
           ...(details !== undefined ? { body: details } : {}),
+          ...(recurrence !== undefined ? { recurrence } : {}),
           ...(start ? { startsAt: start.iso, allDay: start.allDay } : {}),
           ...(end ? { endsAt: end.iso } : {}),
         });
