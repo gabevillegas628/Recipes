@@ -1,18 +1,18 @@
 /* Standalone styles for the privacy and terms pages (public, outside the app). */
 :root {
-  --bg: #f5f5f4;
-  --text: #1a1a1c;
-  --muted: #6b6b72;
-  --accent: #1f7a5a;
+  --bg: #f7f3ee;
+  --text: #221f1b;
+  --muted: #7a7166;
+  --accent: #c2562e;
   color-scheme: light;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #111113;
-    --text: #ececee;
-    --muted: #9d9da6;
-    --accent: #4cbf8c;
+    --bg: #1b1916;
+    --text: #efe9e1;
+    --muted: #a39a8e;
+    --accent: #e07a52;
     color-scheme: dark;
   }
 }

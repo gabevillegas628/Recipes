@@ -1,12 +1,11 @@
 :root {
-  /* Neutral grays with one herb-green accent. */
-  --bg: #f5f5f4;
+  --bg: #f7f3ee;
   --surface: #ffffff;
-  --text: #1a1a1c;
-  --muted: #6b6b72;
-  --border: #e3e3e6;
-  --accent: #1f7a5a;
-  --accent-soft: #e2f1ea;
+  --text: #221f1b;
+  --muted: #7a7166;
+  --border: #e6ded3;
+  --accent: #c2562e;
+  --accent-soft: #f6e3da;
   /* Text on accent-colored backgrounds. */
   --on-accent: #ffffff;
   --danger: #b3261e;
@@ -18,14 +17,14 @@
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #111113;
-    --surface: #1c1c1f;
-    --text: #ececee;
-    --muted: #9d9da6;
-    --border: #2e2e33;
-    --accent: #4cbf8c;
-    --accent-soft: #1b3128;
-    --on-accent: #0b1d15;
+    --bg: #1b1916;
+    --surface: #262320;
+    --text: #efe9e1;
+    --muted: #a39a8e;
+    --border: #3a3530;
+    --accent: #e07a52;
+    --accent-soft: #3d2a21;
+    --on-accent: #ffffff;
     --danger: #f2877f;
     color-scheme: dark;
   }
@@ -2054,6 +2053,12 @@ html.has-timers .cook {
 }
 
 /* ---------- Tab bar: Add in the middle ---------- */
+
+/* Tabs clip their contents; the raised Add button needs to stick out above the bar. */
+.tab-add,
+.tab-add .tab-add-button {
+  overflow: visible;
+}
 
 .tab-add-button {
   display: grid;
