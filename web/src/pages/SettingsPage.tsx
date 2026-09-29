@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { api } from '../api';
 import { GoogleCalendarSection } from '../components/GoogleCalendarSettings';
 import { HouseholdSection } from '../components/HouseholdSettings';
@@ -9,7 +9,56 @@ import { signOut } from '../session';
 import { SHORTCUT_NAME, useTimers } from '../timers';
 import type { ConnectorStatus, User } from '../types';
 
+/** Settings, one page per topic. /settings lists them; /settings/:section shows one. */
+const SECTIONS = [
+  { id: 'calendar', title: 'Calendar & reminders', detail: 'Google Calendar, and where reminders go' },
+  { id: 'household', title: 'Household', detail: 'The family, school hours, travel time' },
+  { id: 'connector', title: 'Claude connector', detail: 'Save recipes and notes from Claude chats' },
+  { id: 'phone', title: 'Phone setup', detail: 'Home screen, Share button, timers' },
+  { id: 'people', title: 'People', detail: 'Who can log in', adminOnly: true },
+  { id: 'account', title: 'Account', detail: 'Password, log out' },
+] as const;
+
 export function SettingsPage({ user }: { user: User }) {
+  const { section: id } = useParams();
+  const sections = SECTIONS.filter((s) => !('adminOnly' in s) || user.isAdmin);
+  const section = sections.find((s) => s.id === id);
+
+  if (!section) {
+    return (
+      <div className="page settings">
+        <h1 className="form-title">Settings</h1>
+        <ul className="settings-index">
+          {sections.map((s) => (
+            <li key={s.id}>
+              <Link to={`/settings/${s.id}`} className="settings-link">
+                <span className="settings-link-title">{s.title}</span>
+                <span className="settings-link-detail">{s.id === 'account' ? `${user.name} · ${user.email}` : s.detail}</span>
+              </Link>
+            </li>
+          ))}
+        </ul>
+      </div>
+    );
+  }
+
+  return (
+    <div className="page settings settings-page">
+      <Link to="/settings" className="back-link">
+        ‹ Settings
+      </Link>
+      <h1 className="form-title">{section.title}</h1>
+      {section.id === 'calendar' && <GoogleCalendarSection />}
+      {section.id === 'household' && <HouseholdSection />}
+      {section.id === 'connector' && <ConnectorSection />}
+      {section.id === 'phone' && <PhoneSection />}
+      {section.id === 'people' && <PeopleSection me={user} />}
+      {section.id === 'account' && <AccountSection user={user} />}
+    </div>
+  );
+}
+
+function AccountSection({ user }: { user: User }) {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
 
@@ -21,32 +70,18 @@ export function SettingsPage({ user }: { user: User }) {
   }
 
   return (
-    <div className="page settings">
-      <h1 className="form-title">Settings</h1>
-
-      <ConnectorSection />
-
-      <GoogleCalendarSection />
-
-      <HouseholdSection />
-
-      <PhoneSection />
-
-      {user.isAdmin && <PeopleSection me={user} />}
-
-      <section className="settings-section">
-        <h2>Account</h2>
-        <p>
-          {user.name} <span className="muted">· {user.email}</span>
-        </p>
-        <div className="settings-actions">
-          <ChangePassword />
-          <button type="button" className="btn" onClick={logout}>
-            Log out
-          </button>
-        </div>
-      </section>
-    </div>
+    <section className="settings-section">
+      <h2>Account</h2>
+      <p>
+        {user.name} <span className="muted">· {user.email}</span>
+      </p>
+      <div className="settings-actions">
+        <ChangePassword />
+        <button type="button" className="btn" onClick={logout}>
+          Log out
+        </button>
+      </div>
+    </section>
   );
 }
 
@@ -215,7 +250,7 @@ function PhoneSection() {
     <section className="settings-section">
       <h2>Phone setup</h2>
       <p className="muted">
-        Install Recipe Box on your home screen, and add it to the Share button so links from
+        Install Mise on your home screen, and add it to the Share button so links from
         Instagram, Messenger or Safari go straight to Import.
       </p>
 
@@ -242,7 +277,7 @@ function PhoneSection() {
           <ol className="steps">
             <li>
               Open the <strong>Shortcuts</strong> app, tap <strong>+</strong>, and name the shortcut
-              “Recipe Box”.
+              “Mise”.
             </li>
             <li>
               Tap the <strong>ⓘ</strong> (details) button and turn on{' '}
@@ -261,7 +296,7 @@ function PhoneSection() {
               Add the action <strong>Open URLs</strong>.
             </li>
             <li>
-              Now in Instagram, Messenger or Safari: <strong>Share → Recipe Box</strong>. It opens the
+              Now in Instagram, Messenger or Safari: <strong>Share → Mise</strong>. It opens the
               import screen in Safari (log in there once).
             </li>
           </ol>
@@ -285,7 +320,7 @@ function PhoneSection() {
           )}
           <h3>Share button</h3>
           <p>
-            Once installed, <strong>Recipe Box</strong> shows up in the Share menu automatically.
+            Once installed, <strong>Mise</strong> shows up in the Share menu automatically.
             Share a link to it and the import starts right away.
           </p>
         </>
@@ -295,7 +330,7 @@ function PhoneSection() {
         <>
           <h3>Bookmark button</h3>
           <p>
-            Add a bookmark named “+ Recipe Box” and paste this as its address (URL). Click it on
+            Add a bookmark named “+ Mise” and paste this as its address (URL). Click it on
             any recipe page to import that page.
           </p>
           <CopyField value={bookmarklet} />

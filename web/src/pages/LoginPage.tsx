@@ -21,7 +21,7 @@ export function LoginPage() {
     <div className="login">
       <form className="login-card" onSubmit={submit}>
         <img src="/icon.svg" alt="" width={56} height={56} />
-        <h1>Recipes</h1>
+        <h1>Mise</h1>
         <label className="field">
           <span>Email</span>
           <input

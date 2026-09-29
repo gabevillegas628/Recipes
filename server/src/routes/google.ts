@@ -63,7 +63,7 @@ export async function googleRoutes(app: FastifyInstance) {
   app.get('/api/google', async () => status());
 
   app.get('/api/google/connect', async (request, reply) => {
-    if (!googleConfigured) return reply.redirect('/settings?google=unconfigured');
+    if (!googleConfigured) return reply.redirect('/settings/calendar?google=unconfigured');
     const state = randomBytes(16).toString('base64url');
     reply.setCookie(STATE_COOKIE, state, {
       signed: true,
@@ -84,18 +84,18 @@ export async function googleRoutes(app: FastifyInstance) {
     const expected = raw ? request.unsignCookie(raw) : null;
     reply.clearCookie(STATE_COOKIE, { path: '/api/google' });
 
-    if (query.error) return reply.redirect('/settings?google=cancelled');
+    if (query.error) return reply.redirect('/settings/calendar?google=cancelled');
     if (!query.code || !expected?.valid || expected.value !== query.state) {
-      return reply.redirect('/settings?google=expired');
+      return reply.redirect('/settings/calendar?google=expired');
     }
     try {
       await connect(query.code, redirectUri(request), baseUrl(request), request.userId);
     } catch (err) {
       const message = googleError(err);
       if (!message) throw err;
-      return reply.redirect(`/settings?google=failed&reason=${encodeURIComponent(message)}`);
+      return reply.redirect(`/settings/calendar?google=failed&reason=${encodeURIComponent(message)}`);
     }
-    return reply.redirect('/settings?google=connected');
+    return reply.redirect('/settings/calendar?google=connected');
   });
 
   app.get('/api/google/calendars', async (_request, reply) => {

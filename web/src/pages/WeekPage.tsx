@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api, thumbUrl } from '../api';
 import { GroceryPicker } from '../components/GroceryPicker';
+import { LibraryTabs } from '../components/LibraryTabs';
 import { servingsLabel } from '../scale';
 import type { PlanItem } from '../types';
 
@@ -19,7 +20,9 @@ export function WeekPage() {
 
   return (
     <div className="page">
-      <h1 className="form-title">This week</h1>
+      <header className="list-header">
+        <LibraryTabs />
+      </header>
 
       {plan.error && <p className="error">{plan.error.message}</p>}
 
@@ -30,7 +33,7 @@ export function WeekPage() {
             Tap <strong>Add to this week</strong> on any recipe. Recipes drop off by themselves 7 days
             after you add them.
           </p>
-          <Link to="/" className="btn">
+          <Link to="/recipes" className="btn">
             Browse recipes
           </Link>
         </div>

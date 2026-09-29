@@ -224,6 +224,24 @@ export type CaptureResult =
   | { kind: 'groceries'; items: string[] }
   | { kind: 'findTime'; find: FindTimeResult };
 
+/** The family calendar for Today, from the start of today on. */
+export interface TodayCalendar {
+  connected: boolean;
+  error: string | null;
+  calendarName: string | null;
+  events: {
+    title: string;
+    /** Timed events; all-day ones have allDayDate and allDayEnd (exclusive) instead. */
+    start: string | null;
+    end: string | null;
+    allDayDate: string | null;
+    allDayEnd: string | null;
+    location: string | null;
+    /** Set when it's an appointment saved in this app. */
+    noteId: string | null;
+  }[];
+}
+
 export interface HouseholdPerson {
   /** Missing for someone just added in Settings. */
   id?: string;

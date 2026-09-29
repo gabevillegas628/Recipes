@@ -54,7 +54,7 @@ function RecipeView({ recipe }: { recipe: Recipe }) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['recipes'] });
       queryClient.invalidateQueries({ queryKey: ['tags'] });
-      navigate('/', { replace: true });
+      navigate('/recipes', { replace: true });
     },
   });
 
@@ -164,7 +164,7 @@ function RecipeView({ recipe }: { recipe: Recipe }) {
         {recipe.tags.length > 0 && (
           <div className="chips">
             {recipe.tags.map((t) => (
-              <Link key={t} to={`/?tag=${encodeURIComponent(t)}`} className="chip">
+              <Link key={t} to={`/recipes?tag=${encodeURIComponent(t)}`} className="chip">
                 {t}
               </Link>
             ))}

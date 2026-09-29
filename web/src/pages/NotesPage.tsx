@@ -87,12 +87,7 @@ export function NotesPage() {
 
   return (
     <div className="page">
-      <header className="notes-header">
-        <h1>Notes</h1>
-        <Link to="/add" className="btn btn-small">
-          + Add
-        </Link>
-      </header>
+      <h1 className="form-title">Notes</h1>
 
       {list.data && notes.length === 0 && (
         <div className="empty">

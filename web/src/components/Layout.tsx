@@ -1,50 +1,43 @@
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
-import type { User } from '../types';
 
-export function Layout({ user }: { user: User }) {
-  const location = useLocation();
+/**
+ * Five tabs: Today (home), Kitchen (recipes, meals, this week), Add in the middle,
+ * Groceries and Notes. Settings opens from Today.
+ */
+export function Layout() {
+  const { pathname } = useLocation();
+  const tab = (active: boolean, extra = '') => `tab ${extra} ${active ? 'active' : ''}`;
   return (
     <div className="app">
       <main className="main">
         <Outlet />
       </main>
       <nav className="tabbar">
+        <NavLink to="/" end className={({ isActive }) => tab(isActive || pathname.startsWith('/settings'))}>
+          <SunIcon />
+          <span>Today</span>
+        </NavLink>
         <NavLink
-          to="/"
-          end
-          className={({ isActive }) =>
-            // Meals and individual recipes live under the Recipes tab too.
-            `tab ${isActive || /^\/(meals|m\/|r\/)/.test(location.pathname) ? 'active' : ''}`
-          }
+          to="/recipes"
+          // Recipes, meals, this week and each recipe all live under Kitchen.
+          className={({ isActive }) => tab(isActive || /^\/(meals|m\/|r\/|week|new)/.test(pathname))}
         >
-          <BookIcon />
-          <span>Recipes</span>
+          <PotIcon />
+          <span>Kitchen</span>
         </NavLink>
-        <NavLink to="/week" className="tab">
-          <CalendarIcon />
-          <span>Week</span>
+        <NavLink to="/add" className={({ isActive }) => tab(isActive || pathname.startsWith('/import'), 'tab-add')}>
+          <span className="tab-add-button">
+            <PlusIcon />
+          </span>
+          <span>Add</span>
         </NavLink>
-        <NavLink to="/groceries" className="tab">
+        <NavLink to="/groceries" className={({ isActive }) => tab(isActive)}>
           <CartIcon />
           <span>Groceries</span>
         </NavLink>
-        <NavLink
-          to="/add"
-          className={({ isActive }) => `tab ${isActive || /^\/import/.test(location.pathname) ? 'active' : ''}`}
-        >
-          <PlusIcon />
-          <span>Add</span>
-        </NavLink>
-        <NavLink
-          to="/notes"
-          className={({ isActive }) => `tab ${isActive || /^\/n\//.test(location.pathname) ? 'active' : ''}`}
-        >
+        <NavLink to="/notes" className={({ isActive }) => tab(isActive || pathname.startsWith('/n/'))}>
           <NoteIcon />
           <span>Notes</span>
-        </NavLink>
-        <NavLink to="/settings" className="tab">
-          <UserIcon />
-          <span>{user.name}</span>
         </NavLink>
       </nav>
     </div>
@@ -63,20 +56,21 @@ const iconProps = {
   'aria-hidden': true,
 };
 
-function BookIcon() {
+function SunIcon() {
   return (
     <svg {...iconProps}>
-      <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20V3H6.5A2.5 2.5 0 0 0 4 5.5z" />
-      <path d="M4 19.5A2.5 2.5 0 0 0 6.5 22H20v-5" />
+      <circle cx="12" cy="12" r="4" />
+      <path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" />
     </svg>
   );
 }
 
-function CalendarIcon() {
+/** A pot with a lid, for the Kitchen tab. */
+function PotIcon() {
   return (
     <svg {...iconProps}>
-      <rect x="3" y="5" width="18" height="16" rx="2" />
-      <path d="M3 10h18M8 3v4M16 3v4" />
+      <path d="M4 10h16v6a4 4 0 0 1-4 4H8a4 4 0 0 1-4-4z" />
+      <path d="M2 10h20M9 7c0-1.2 1.3-2 3-2s3 .8 3 2" />
     </svg>
   );
 }
@@ -93,9 +87,8 @@ function CartIcon() {
 
 function PlusIcon() {
   return (
-    <svg {...iconProps}>
-      <circle cx="12" cy="12" r="9" />
-      <path d="M12 8v8M8 12h8" />
+    <svg {...iconProps} strokeWidth={2.5}>
+      <path d="M12 5v14M5 12h14" />
     </svg>
   );
 }
@@ -105,15 +98,6 @@ function NoteIcon() {
     <svg {...iconProps}>
       <path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z" />
       <path d="M14 3v6h6M8 13h8M8 17h5" />
-    </svg>
-  );
-}
-
-function UserIcon() {
-  return (
-    <svg {...iconProps}>
-      <circle cx="12" cy="8" r="4" />
-      <path d="M4 21a8 8 0 0 1 16 0" />
     </svg>
   );
 }

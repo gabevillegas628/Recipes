@@ -21,6 +21,7 @@ import type {
   RecipeInput,
   RecipeSummary,
   TagCount,
+  TodayCalendar,
   User,
 } from './types';
 
@@ -138,6 +139,7 @@ export const api = {
     return request<CaptureResult>('/api/capture', { method: 'POST', body: form });
   },
 
+  today: () => request<TodayCalendar>('/api/today'),
   household: () => request<Household>('/api/household'),
   saveHousehold: (input: Omit<Household, 'people'> & { people: HouseholdPerson[] }) =>
     request<Household>('/api/household', json('PUT', input)),

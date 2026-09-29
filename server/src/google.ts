@@ -268,12 +268,16 @@ export async function updateEvent(calendarId: string, eventId: string, event: Ev
 
 export interface CalendarEvent {
   title: string;
-  /** Timed events; all-day ones have `allDayDate` ("YYYY-MM-DD") instead. */
+  /** Timed events; all-day ones have `allDayDate` ("YYYY-MM-DD") instead, and `allDayEnd` (exclusive). */
   start: Date | null;
   end: Date | null;
   allDayDate: string | null;
+  allDayEnd: string | null;
+  location: string | null;
   /** Marked "free" in Google Calendar (like the app's own reminders). */
   free: boolean;
+  /** Set on events this app wrote (see calendarSync.ts). */
+  noteId: string | null;
 }
 
 /** Events between two instants, with repeating ones expanded into single occurrences. */
@@ -282,8 +286,10 @@ export async function listEvents(calendarId: string, from: Date, to: Date): Prom
     status?: string;
     summary?: string;
     transparency?: string;
+    location?: string;
     start?: { dateTime?: string; date?: string };
     end?: { dateTime?: string; date?: string };
+    extendedProperties?: { private?: { noteId?: string } };
   };
   const events: CalendarEvent[] = [];
   let pageToken: string | undefined;
@@ -304,7 +310,10 @@ export async function listEvents(calendarId: string, from: Date, to: Date): Prom
         start: e.start.dateTime ? new Date(e.start.dateTime) : null,
         end: e.end?.dateTime ? new Date(e.end.dateTime) : null,
         allDayDate: e.start.date ?? null,
+        allDayEnd: e.end?.date ?? null,
+        location: e.location?.trim() || null,
         free: e.transparency === 'transparent',
+        noteId: e.extendedProperties?.private?.noteId ?? null,
       });
     }
     pageToken = data?.nextPageToken;
