@@ -7,14 +7,17 @@ import type { RecipeDraft, ImportMethod } from './import/draft.js';
 import { ImportError } from './import/errors.js';
 import { extractFromPhotos, extractFromText, extractFromUrl, preparePhotos } from './import/extract.js';
 import { FetchError } from './import/safeFetch.js';
+import { FindTimeError, runFindTime, type FindTimeResult } from './findTimeService.js';
+import { getHousehold, type Household } from './household.js';
 import { findExistingRecipe } from './import/worker.js';
 import { firstOccurrence, formatRule, nextOccurrence, WEEKDAYS, type Rule } from './recurrence.js';
 
 /**
  * "Capture": something typed, dictated, pasted or photographed, sorted by Claude
- * into a note, reminder, appointment, recipe or grocery list. Nothing is saved
- * here; the app shows the result for a quick check first. Recipes and grocery
- * lists hand off to the existing recipe import and grocery list.
+ * into a note, reminder, appointment, recipe or grocery list, or a request to
+ * find a time for something. Nothing is saved here; the app shows the result for
+ * a quick check first. Recipes and grocery lists hand off to the existing recipe
+ * import and grocery list; finding a time runs findTimeService.ts.
  */
 
 const client = env.anthropicApiKey ? new Anthropic({ apiKey: env.anthropicApiKey }) : null;
@@ -24,7 +27,7 @@ const TIME = /^([01]\d|2[0-3]):[0-5]\d$/;
 
 const classification = z.object({
   today: z.string().describe("Today's date, YYYY-MM-DD, from the current date given"),
-  kind: z.enum(['note', 'reminder', 'appointment', 'recipe', 'groceries']),
+  kind: z.enum(['note', 'reminder', 'appointment', 'recipe', 'groceries', 'findTime']),
   title: z.string().describe('Short title, e.g. "Dentist: Maya" or "Call the plumber"'),
   details: z
     .string()
@@ -50,6 +53,18 @@ const classification = z.object({
     })
     .nullable()
     .describe('Only for appointments and reminders that repeat'),
+  findTime: z
+    .object({
+      people: z.array(z.string()).describe('Household names of who has to be there, exactly as listed'),
+      from: z.string().describe('YYYY-MM-DD, first day to look at'),
+      to: z.string().describe('YYYY-MM-DD, last day to look at'),
+      durationMinutes: z.number().int().describe('How long it takes there, stated or typical'),
+      earliest: z.string().nullable().describe('HH:MM, only if the request limits the time of day'),
+      latest: z.string().nullable().describe('HH:MM, only if the request limits the time of day'),
+      days: z.array(z.enum(WEEKDAYS)).nullable().describe('Only if the request limits or widens the days, e.g. weekends'),
+    })
+    .nullable()
+    .describe('Only for findTime'),
 });
 
 const SYSTEM = `You file things for a family's shared organizer app. The input was typed, dictated (so expect speech-to-text slips and filler words), pasted, or photographed (a flyer, a letter from school, an appointment card, a screenshot).
@@ -60,13 +75,19 @@ Decide what it is:
 - note: information to keep, not an action or event: gift ideas, a wifi password, sizes, a phone number, a thought.
 - recipe: ingredients or cooking steps for a dish, or a link to a recipe.
 - groceries: a list of things to buy at the store.
+- findTime: asking when something could be scheduled, with no time settled yet: "I need to schedule Evan an eye appointment sometime the week of 11/2", "when could I fit in a haircut next week", "find a night for date night this month". If a time is already set, it's an appointment instead.
 
 Then fill in the fields:
 - title: short and scannable, the way someone would write it in a calendar. For events, lead with what it is, and add who it's for when stated ("Dentist: Maya").
 - details: keep anything useful that isn't in the other fields, such as what to bring, cost, phone numbers, links, or registration deadlines. Keep the person's own wording for dictated notes, minus filler words. Don't repeat the title, date, time or place.
 - date and time: resolve relative dates ("next Tuesday", "the 14th", "tomorrow at 3") against the current date given below. When a flyer gives a month and day with no year, use the next time that date comes up. A reminder gets a date only when one is stated or clearly implied. If only a time is given for a reminder, use today, or tomorrow if that time has passed.
 - repeat: only when it recurs ("every Tuesday", "the first Monday of each month", "every other week", "daily until Friday"). date is then the first occurrence on or after today.
-- For a recipe or a grocery list, only kind and title matter (plus groceryItems for groceries).`;
+- For a recipe or a grocery list, only kind and title matter (plus groceryItems for groceries).
+- findTime: title is what the appointment will be called ("Eye appointment: Evan"); details and location as for appointments. In findTime:
+  - people: who has to be there, by household name. "Me" or "I" is the person typing; "us" or "we" is the two adults. For a child's appointment, list just the child; the app adds a parent to take them.
+  - from and to: the days to look at. "The week of 11/2" is that Monday to the Sunday after; "next week" is next Monday to Sunday; "this month" runs from today; with no dates given, the next two weeks. Never before today.
+  - durationMinutes: as stated, else typical time there: a doctor, dentist or eye exam 60, a haircut 30, a dinner out 90.
+  - earliest, latest and days: only when the request says ("after 4", "mornings", "weekends are fine", "not Monday"); otherwise null, and the family's usual weekday hours apply.`;
 
 export type NoteDraft = {
   kind: 'NOTE' | 'REMINDER' | 'APPOINTMENT';
@@ -93,17 +114,21 @@ type RecipeResult = {
 export type CaptureResult =
   | { kind: 'note'; note: NoteDraft }
   | { kind: 'recipe'; recipe: RecipeResult }
-  | { kind: 'groceries'; items: string[] };
+  | { kind: 'groceries'; items: string[] }
+  | { kind: 'findTime'; find: FindTimeResult };
 
 export const captureEnabled = client !== null;
 
-/** `now` is the phone's local date and time in words, e.g. "Monday, September 28, 2026 at 2:05 PM EDT". */
-export async function capture(text: string, photos: Buffer[], now: string): Promise<CaptureResult> {
+/**
+ * `now` is the phone's local date and time in words, e.g. "Monday, September 28, 2026 at 2:05 PM EDT";
+ * `userName` is who's typing, so "me" means someone.
+ */
+export async function capture(text: string, photos: Buffer[], now: string, userName: string | null): Promise<CaptureResult> {
   if (!client) throw new ImportError("Sorting needs AI, which isn't set up on the server (ANTHROPIC_API_KEY).");
   text = text.trim().slice(0, 20_000);
   if (!text && photos.length === 0) throw new ImportError('Type something or add a photo first.');
 
-  const prepared = await preparePhotos(photos);
+  const [prepared, household] = await Promise.all([preparePhotos(photos), getHousehold()]);
   const response = await client.beta.messages.parse({
     model: env.anthropicModel,
     max_tokens: 4000,
@@ -119,7 +144,10 @@ export async function capture(text: string, photos: Buffer[], now: string): Prom
             type: 'image' as const,
             source: { type: 'base64' as const, media_type: 'image/jpeg' as const, data: photo.toString('base64') },
           })),
-          { type: 'text' as const, text: `It is now ${now}.${text ? `\n\n<input>\n${text}\n</input>` : ''}` },
+          {
+            type: 'text' as const,
+            text: `It is now ${now}.${familyContext(household, userName)}${text ? `\n\n<input>\n${text}\n</input>` : ''}`,
+          },
         ],
       },
     ],
@@ -142,6 +170,7 @@ export async function capture(text: string, photos: Buffer[], now: string): Prom
   if (!result) throw new ImportError("Couldn't make sense of that. Try again, or add a bit more detail.");
 
   if (result.kind === 'recipe') return { kind: 'recipe', recipe: await recipeFrom(text, photos) };
+  if (result.kind === 'findTime' && result.findTime) return { kind: 'findTime', find: await findTimeFrom(result, household) };
   if (result.kind === 'groceries' && result.groceryItems.length > 0) {
     return { kind: 'groceries', items: result.groceryItems.map((s) => s.trim()).filter(Boolean) };
   }
@@ -174,6 +203,43 @@ export async function capture(text: string, photos: Buffer[], now: string): Prom
       uploadedImage: photos.length ? await saveImage(photos[0]).catch(() => null) : null,
     },
   };
+}
+
+/** Who's in the family and who's typing, for "me", "us" and names in the input. */
+function familyContext(household: Household, userName: string | null) {
+  if (!household.people.length) return '';
+  const list = household.people.map((p) => `${p.name} (${p.adult ? 'adult' : 'child'}${p.aliases.length ? `, also ${p.aliases.join(', ')}` : ''})`);
+  return `\nHousehold: ${list.join('; ')}.${userName ? ` The person typing is ${userName}.` : ''}`;
+}
+
+/** The AI's reading of "find a time for ...", checked, then run against the calendar. */
+async function findTimeFrom(result: z.infer<typeof classification>, household: Household): Promise<FindTimeResult> {
+  const f = result.findTime!;
+  const idFor = (name: string) => {
+    const n = name.trim().toLowerCase();
+    return household.people.find((p) => p.name.toLowerCase() === n || p.aliases.some((a) => a.toLowerCase() === n))?.id;
+  };
+  const today = DATE.test(result.today) ? result.today : new Date().toISOString().slice(0, 10);
+  const from = DATE.test(f.from) && f.from > today ? f.from : today;
+  const to = DATE.test(f.to) && f.to >= from ? f.to : from;
+  const time = (t: string | null) => (t && TIME.test(t) ? t : null);
+  try {
+    return await runFindTime({
+      title: result.title.trim() || 'Appointment',
+      location: result.location?.trim() || null,
+      details: result.details?.trim() || null,
+      people: [...new Set(f.people.flatMap((n) => idFor(n) ?? []))],
+      from,
+      to,
+      durationMinutes: Math.min(12 * 60, Math.max(5, f.durationMinutes || 60)),
+      hoursStart: time(f.earliest),
+      hoursEnd: time(f.latest),
+      days: f.days?.length ? f.days : null,
+    });
+  } catch (err) {
+    if (err instanceof FindTimeError) throw new ImportError(err.message);
+    throw err;
+  }
 }
 
 type Repeat = NonNullable<z.infer<typeof classification>['repeat']>;

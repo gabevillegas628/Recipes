@@ -2,17 +2,19 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState, type FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { api } from '../api';
+import { FindTimeResults } from '../components/FindTimeResults';
 import { NoteForm } from '../components/NoteForm';
 import { inputFromValues, nowInWords, valuesFromDraft, type NoteValues } from '../notes';
 import { shrinkPhoto } from '../photos';
-import type { NoteDraft } from '../types';
+import type { FindTimeResult, NoteDraft } from '../types';
 import { extractUrl, PhotoPicker } from './ImportPage';
 
 /**
  * The Add tab: type, dictate, paste or photograph anything, and AI sorts it into
- * an appointment, reminder, note, recipe or grocery list. Notes get a quick check
- * before saving; recipes open in the usual recipe review; grocery lists show the
- * items to add.
+ * an appointment, reminder, note, recipe or grocery list, or finds a time for
+ * something. Notes get a quick check before saving; recipes open in the usual
+ * recipe review; grocery lists show the items to add; a time search shows options,
+ * and the one picked becomes an appointment to check.
  */
 export function CapturePage() {
   const navigate = useNavigate();
@@ -21,6 +23,7 @@ export function CapturePage() {
   const [photos, setPhotos] = useState<File[]>([]);
   const [draft, setDraft] = useState<NoteDraft | null>(null);
   const [groceries, setGroceries] = useState<string | null>(null);
+  const [found, setFound] = useState<FindTimeResult | null>(null);
 
   const config = useQuery({ queryKey: ['capture-config'], queryFn: api.captureConfig });
 
@@ -30,6 +33,7 @@ export function CapturePage() {
     onSuccess: (result) => {
       if (result.kind === 'recipe') navigate('/import', { state: { result: result.recipe } });
       else if (result.kind === 'groceries') setGroceries(result.items.join('\n'));
+      else if (result.kind === 'findTime') setFound(result.find);
       else setDraft(result.note);
     },
   });
@@ -54,6 +58,7 @@ export function CapturePage() {
   function reset() {
     setDraft(null);
     setGroceries(null);
+    setFound(null);
     sort.reset();
     save.reset();
     addGroceries.reset();
@@ -80,9 +85,34 @@ export function CapturePage() {
           saving={save.isPending}
           error={save.error}
           onSubmit={(values) => save.mutate(values)}
-          onCancel={reset}
+          // From a time search, go back to the options.
+          onCancel={found ? () => setDraft(null) : reset}
         />
       </div>
+    );
+  }
+
+  if (found) {
+    return (
+      <FindTimeResults
+        result={found}
+        onCancel={reset}
+        onPick={(option, latest) => {
+          setFound(latest);
+          setDraft({
+            kind: 'APPOINTMENT',
+            title: latest.input.title,
+            body: option.draft.body,
+            date: option.draft.date,
+            time: option.draft.time,
+            endDate: null,
+            endTime: option.draft.endTime,
+            location: latest.input.location,
+            recurrence: null,
+            uploadedImage: null,
+          });
+        }}
+      />
     );
   }
 
@@ -150,8 +180,9 @@ export function CapturePage() {
         <label className="field">
           <span>Type, dictate or paste</span>
           <small>
-            An appointment, a reminder, a note, a grocery list or a recipe. Tap the mic on your
-            keyboard to dictate.
+            An appointment, a reminder, a note, a grocery list or a recipe, or ask to find a time
+            (“schedule Evan an eye appointment the week of 11/2”). Tap the mic on your keyboard to
+            dictate.
           </small>
           <textarea
             rows={5}

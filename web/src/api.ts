@@ -1,6 +1,10 @@
 import type {
   CaptureResult,
   ConnectorStatus,
+  FindTimeInput,
+  FindTimeResult,
+  Household,
+  HouseholdPerson,
   GoogleCalendarChoice,
   GoogleStatus,
   GroceryGroup,
@@ -133,6 +137,13 @@ export const api = {
     photos.forEach((p, i) => form.append('photo', p, `photo-${i + 1}.jpg`));
     return request<CaptureResult>('/api/capture', { method: 'POST', body: form });
   },
+
+  household: () => request<Household>('/api/household'),
+  saveHousehold: (input: Omit<Household, 'people'> & { people: HouseholdPerson[] }) =>
+    request<Household>('/api/household', json('PUT', input)),
+  findTime: (input: FindTimeInput) => request<FindTimeResult>('/api/find-time', json('POST', input)),
+  setEventTag: (title: string, people: string[], everyone: boolean) =>
+    request<{ ok: true }>('/api/event-tags', json('PUT', { title, people, everyone })),
 
   notes: () => request<Note[]>('/api/notes'),
   note: (id: string) => request<Note>(`/api/notes/${id}`),

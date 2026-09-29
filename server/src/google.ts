@@ -266,6 +266,52 @@ export async function updateEvent(calendarId: string, eventId: string, event: Ev
   await api('PUT', `${eventsPath(calendarId)}/${encodeURIComponent(eventId)}`, event);
 }
 
+export interface CalendarEvent {
+  title: string;
+  /** Timed events; all-day ones have `allDayDate` ("YYYY-MM-DD") instead. */
+  start: Date | null;
+  end: Date | null;
+  allDayDate: string | null;
+  /** Marked "free" in Google Calendar (like the app's own reminders). */
+  free: boolean;
+}
+
+/** Events between two instants, with repeating ones expanded into single occurrences. */
+export async function listEvents(calendarId: string, from: Date, to: Date): Promise<CalendarEvent[]> {
+  type Item = {
+    status?: string;
+    summary?: string;
+    transparency?: string;
+    start?: { dateTime?: string; date?: string };
+    end?: { dateTime?: string; date?: string };
+  };
+  const events: CalendarEvent[] = [];
+  let pageToken: string | undefined;
+  do {
+    const params = new URLSearchParams({
+      timeMin: from.toISOString(),
+      timeMax: to.toISOString(),
+      singleEvents: 'true',
+      orderBy: 'startTime',
+      maxResults: '2500',
+      ...(pageToken ? { pageToken } : {}),
+    });
+    const data = await api<{ items?: Item[]; nextPageToken?: string }>('GET', `${eventsPath(calendarId)}?${params}`);
+    for (const e of data?.items ?? []) {
+      if (e.status === 'cancelled' || !e.start) continue;
+      events.push({
+        title: e.summary?.trim() || '(no title)',
+        start: e.start.dateTime ? new Date(e.start.dateTime) : null,
+        end: e.end?.dateTime ? new Date(e.end.dateTime) : null,
+        allDayDate: e.start.date ?? null,
+        free: e.transparency === 'transparent',
+      });
+    }
+    pageToken = data?.nextPageToken;
+  } while (pageToken);
+  return events;
+}
+
 /** Deleting an event that's already gone counts as done. */
 export async function deleteEvent(calendarId: string, eventId: string) {
   try {

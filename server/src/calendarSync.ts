@@ -11,6 +11,7 @@ import {
   type EventBody,
 } from './google.js';
 import { parseRule } from './recurrence.js';
+import { wallTime, zonedInstant } from './zone.js';
 
 /**
  * Copies appointments and dated reminders to Google Calendar: appointments to the
@@ -164,32 +165,6 @@ async function finish(
 const MINUTE = 60_000;
 const day = (d: Date) => d.toISOString().slice(0, 10);
 const nextDay = (d: Date) => day(new Date(d.getTime() + 24 * 60 * MINUTE));
-
-/** "2026-10-06T15:30:00": the wall-clock time in a time zone. */
-function wallTime(d: Date, timeZone: string): string {
-  const p = Object.fromEntries(
-    new Intl.DateTimeFormat('en-US', {
-      timeZone,
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit',
-      hourCycle: 'h23',
-    })
-      .formatToParts(d)
-      .map((x) => [x.type, x.value]),
-  );
-  return `${p.year}-${p.month}-${p.day}T${p.hour}:${p.minute}:${p.second}`;
-}
-
-/** The instant a wall-clock time in a time zone happens. */
-function zonedInstant(wall: string, timeZone: string): Date {
-  const guess = new Date(`${wall}Z`);
-  const offset = new Date(`${wallTime(guess, timeZone)}Z`).getTime() - guess.getTime();
-  return new Date(guess.getTime() - offset);
-}
 
 /**
  * The repeat rule as Google wants it. UNTIL stays a date for all-day events; for

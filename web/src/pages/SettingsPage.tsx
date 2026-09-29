@@ -3,6 +3,7 @@ import { useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../api';
 import { GoogleCalendarSection } from '../components/GoogleCalendarSettings';
+import { HouseholdSection } from '../components/HouseholdSettings';
 import { ChangePassword, PeopleSection } from '../components/UserSettings';
 import { signOut } from '../session';
 import { SHORTCUT_NAME, useTimers } from '../timers';
@@ -26,6 +27,8 @@ export function SettingsPage({ user }: { user: User }) {
       <ConnectorSection />
 
       <GoogleCalendarSection />
+
+      <HouseholdSection />
 
       <PhoneSection />
 

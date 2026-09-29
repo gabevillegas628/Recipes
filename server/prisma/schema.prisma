@@ -273,3 +273,42 @@ model GoogleConnection {
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt
 }
+
+/// Who's in the family, for finding times (see src/findTime.ts).
+model HouseholdPerson {
+  id       String   @id @default(cuid())
+  name     String
+  /// Other ways calendar titles refer to them: nicknames, initials.
+  aliases  String[]
+  /// Kids have school hours and need an adult along.
+  adult    Boolean  @default(true)
+  position Int      @default(0)
+}
+
+/// Settings for finding a time. One row (id "default").
+model Household {
+  id            String   @id @default("default")
+  /// Kids' school on weekdays, "07:20" to "14:50". Times during school count as "better to avoid". Null to ignore.
+  schoolStart   String?
+  schoolEnd     String?
+  /// Added before and after a new appointment for getting there and back.
+  travelMinutes Int      @default(45)
+  /// Usual hours for appointments, on weekdays.
+  hoursStart    String   @default("08:00")
+  hoursEnd      String   @default("17:00")
+  updatedAt     DateTime @updatedAt
+}
+
+/// Who a calendar event is for, by its title, as the AI read it or as corrected by hand.
+model EventTag {
+  /// The title, lowercased with spaces collapsed (see src/eventTags.ts).
+  title     String   @id
+  /// HouseholdPerson ids.
+  people    String[]
+  /// The whole family, or someone outside it (a birthday party).
+  everyone  Boolean  @default(false)
+  /// No one could be told from the title; treated as everyone.
+  unsure    Boolean  @default(false)
+  byHand    Boolean  @default(false)
+  updatedAt DateTime @updatedAt
+}

@@ -4,6 +4,7 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { requireAuth } from '../auth.js';
 import { capture, captureEnabled } from '../capture.js';
+import { prisma } from '../db.js';
 import { ImportError } from '../import/errors.js';
 import { FetchError } from '../import/safeFetch.js';
 import {
@@ -26,7 +27,7 @@ export async function noteRoutes(app: FastifyInstance) {
 
   app.get('/api/capture/config', async () => ({ aiEnabled: captureEnabled }));
 
-  /** Sorts text and/or photos into a note, reminder, appointment, recipe or grocery list. Saves nothing. */
+  /** Sorts text and/or photos into a note, reminder, appointment, recipe or grocery list, or finds a time. Saves nothing. */
   app.post('/api/capture', async (request, reply) => {
     const photos: Buffer[] = [];
     let text = '';
@@ -47,7 +48,8 @@ export async function noteRoutes(app: FastifyInstance) {
       return reply.code(400).send({ error: `Send up to ${MAX_PHOTOS} photos at a time.` });
     }
     try {
-      return await capture(text, photos, now || new Date().toUTCString());
+      const me = request.userId ? await prisma.user.findUnique({ where: { id: request.userId }, select: { name: true } }) : null;
+      return await capture(text, photos, now || new Date().toUTCString(), me?.name ?? null);
     } catch (err) {
       if (err instanceof ImportError || err instanceof FetchError) {
         return reply.code(422).send({ error: err.message });

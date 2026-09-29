@@ -221,7 +221,67 @@ export interface NoteDraft {
 export type CaptureResult =
   | { kind: 'note'; note: NoteDraft }
   | { kind: 'recipe'; recipe: ImportResult }
-  | { kind: 'groceries'; items: string[] };
+  | { kind: 'groceries'; items: string[] }
+  | { kind: 'findTime'; find: FindTimeResult };
+
+export interface HouseholdPerson {
+  /** Missing for someone just added in Settings. */
+  id?: string;
+  name: string;
+  aliases: string[];
+  adult: boolean;
+}
+
+export interface Household {
+  people: (HouseholdPerson & { id: string })[];
+  /** "07:20"; null for no school. */
+  schoolStart: string | null;
+  schoolEnd: string | null;
+  travelMinutes: number;
+  hoursStart: string;
+  hoursEnd: string;
+}
+
+/** A "find a time" request as Capture read it; sent back as-is to search again. */
+export interface FindTimeInput {
+  title: string;
+  location: string | null;
+  details: string | null;
+  people: string[];
+  from: string;
+  to: string;
+  durationMinutes: number;
+  hoursStart: string | null;
+  hoursEnd: string | null;
+  days: string[] | null;
+}
+
+export interface FindTimeOption {
+  day: string;
+  window: string;
+  reasons: string[];
+  missesSchool: boolean;
+  /** The appointment it becomes. */
+  draft: { date: string; time: string; endTime: string; body: string | null };
+}
+
+/** Whose an event is, by its title. No people and not everyone (and not unsure): it takes no one's time. */
+export interface EventTagInfo {
+  title: string;
+  people: string[];
+  everyone: boolean;
+  unsure: boolean;
+  byHand: boolean;
+}
+
+export interface FindTimeResult {
+  input: FindTimeInput;
+  summary: string;
+  options: FindTimeOption[];
+  notes: string[];
+  calendar: EventTagInfo[];
+  people: { id: string; name: string; adult: boolean }[];
+}
 
 export interface GoogleStatus {
   /** GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET are set on the server. */

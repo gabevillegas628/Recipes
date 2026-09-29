@@ -1798,6 +1798,154 @@ html.has-timers .cook {
   color: inherit;
 }
 
+/* Settings → Household. */
+.household-people {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.household-person {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 6px;
+  align-items: center;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+.household-person input,
+.household-person select {
+  min-width: 0;
+  min-height: 42px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  font: inherit;
+  font-size: 16px;
+  color: inherit;
+}
+
+.household-nicknames {
+  grid-column: 1 / -1;
+}
+
+.household-people > .btn {
+  align-self: flex-start;
+}
+
+/* Find a time. */
+.find-title {
+  margin: -8px 0 2px;
+  font-weight: 600;
+}
+
+.find-summary {
+  margin: 0 0 16px;
+}
+
+.find-options {
+  list-style: none;
+  margin: 0 0 8px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.find-option {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+.find-option:active {
+  border-color: var(--accent);
+}
+
+.find-day {
+  font-weight: 700;
+}
+
+.find-window {
+  font-weight: 600;
+  color: var(--accent);
+}
+
+.find-reason {
+  font-size: 14px;
+  color: var(--muted);
+}
+
+.find-reason.warn,
+.tag-who.warn {
+  color: var(--danger);
+}
+
+.find-notes {
+  margin: 12px 0;
+  padding-left: 18px;
+}
+
+.find-calendar {
+  margin: 16px 0;
+}
+
+.tag-list {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+}
+
+.tag-row {
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.tag-row-main {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 2px 8px;
+  align-items: center;
+}
+
+.tag-title {
+  font-weight: 600;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.tag-who {
+  grid-column: 1;
+  font-size: 14px;
+  color: var(--muted);
+}
+
+.tag-row-main .btn {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+}
+
+.tag-edit {
+  margin-top: 8px;
+}
+
+.tag-edit .chips {
+  flex-wrap: wrap;
+}
+
 /* Settings → Google Calendar → Reminders. */
 .reminders-settings {
   margin: 16px 0;
