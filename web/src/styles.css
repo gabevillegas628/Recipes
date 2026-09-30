@@ -2272,10 +2272,29 @@ html.has-timers .cook {
   display: none;
 }
 
-.notes-forget {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 10px;
-  margin-top: 12px;
+.notes-search {
+  margin-bottom: 12px;
+}
+
+/* Today: the date doubles as a date picker. */
+.today-date {
+  position: relative;
+  display: inline-block;
+  cursor: pointer;
+}
+
+.today-date-caret {
+  margin-left: 6px;
+  font-size: 16px;
+  color: var(--muted);
+  vertical-align: middle;
+}
+
+.today-date input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
 }

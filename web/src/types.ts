@@ -242,6 +242,15 @@ export interface TodayCalendar {
   }[];
 }
 
+/** Search across Mise and the family calendar's history. */
+export interface SearchResult {
+  notes: Note[];
+  /** Calendar events Mise doesn't already have (see TodayCalendar). */
+  calendar: TodayCalendar['events'];
+  calendarError: string | null;
+  calendarConnected: boolean;
+}
+
 export interface HouseholdPerson {
   /** Missing for someone just added in Settings. */
   id?: string;

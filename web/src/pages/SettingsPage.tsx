@@ -5,6 +5,7 @@ import { api } from '../api';
 import { GoogleCalendarSection } from '../components/GoogleCalendarSettings';
 import { HouseholdSection } from '../components/HouseholdSettings';
 import { ChangePassword, PeopleSection } from '../components/UserSettings';
+import { comingUpOn } from '../notes';
 import { signOut } from '../session';
 import { SHORTCUT_NAME, useTimers } from '../timers';
 import type { ConnectorStatus, User } from '../types';
@@ -14,6 +15,7 @@ const SECTIONS = [
   { id: 'calendar', title: 'Calendar & reminders', detail: 'Google Calendar, and where reminders go' },
   { id: 'household', title: 'Household', detail: 'The family, school hours, travel time' },
   { id: 'connector', title: 'Claude connector', detail: 'Save recipes and notes from Claude chats' },
+  { id: 'cleanup', title: 'Clean up', detail: 'Remove past appointments from Mise' },
   { id: 'phone', title: 'Phone setup', detail: 'Home screen, Share button, timers' },
   { id: 'people', title: 'People', detail: 'Who can log in', adminOnly: true },
   { id: 'account', title: 'Account', detail: 'Password, log out' },
@@ -51,10 +53,61 @@ export function SettingsPage({ user }: { user: User }) {
       {section.id === 'calendar' && <GoogleCalendarSection />}
       {section.id === 'household' && <HouseholdSection />}
       {section.id === 'connector' && <ConnectorSection />}
+      {section.id === 'cleanup' && <CleanupSection />}
       {section.id === 'phone' && <PhoneSection />}
       {section.id === 'people' && <PeopleSection me={user} />}
       {section.id === 'account' && <AccountSection user={user} />}
     </div>
+  );
+}
+
+/**
+ * Past appointments don't show in Notes (search finds them). This removes them
+ * from Mise for good; their Google Calendar events stay as history.
+ */
+function CleanupSection() {
+  const queryClient = useQueryClient();
+  const notes = useQuery({ queryKey: ['notes'], queryFn: api.notes });
+  const past = (notes.data ?? []).filter((n) => n.kind === 'APPOINTMENT' && n.startsAt && !comingUpOn(n));
+  const [removed, setRemoved] = useState<number | null>(null);
+  const forget = useMutation({
+    mutationFn: () => api.forgetPastAppointments(past.map((n) => n.id)),
+    onSuccess: (r) => {
+      setRemoved(r.removed);
+      queryClient.invalidateQueries({ queryKey: ['notes'] });
+    },
+  });
+
+  return (
+    <section className="settings-section">
+      <h2>Clean up</h2>
+      <p className="muted">
+        Past appointments stay in Mise, where search can find them. Removing them deletes them from Mise
+        only; they stay on Google Calendar, and search still finds them there.
+      </p>
+      {notes.data && (
+        <p>
+          {past.length === 0
+            ? 'No past appointments in Mise.'
+            : `${past.length} past appointment${past.length === 1 ? '' : 's'} in Mise.`}
+        </p>
+      )}
+      {removed !== null && <p className="muted">Removed {removed}.</p>}
+      {forget.error && <p className="error">{forget.error.message}</p>}
+      <div className="settings-actions">
+        <button
+          type="button"
+          className="btn btn-danger"
+          disabled={!past.length || forget.isPending}
+          onClick={() =>
+            confirm(`Remove ${past.length} past appointment${past.length === 1 ? '' : 's'} from Mise? They stay on Google Calendar.`) &&
+            forget.mutate()
+          }
+        >
+          {forget.isPending ? 'Removing…' : 'Remove past appointments'}
+        </button>
+      </div>
+    </section>
   );
 }
 

@@ -20,6 +20,7 @@ import type {
   Recipe,
   RecipeInput,
   RecipeSummary,
+  SearchResult,
   TagCount,
   TodayCalendar,
   User,
@@ -139,7 +140,12 @@ export const api = {
     return request<CaptureResult>('/api/capture', { method: 'POST', body: form });
   },
 
-  today: () => request<TodayCalendar>('/api/today'),
+  /** From the start of today, or of `date` ("YYYY-MM-DD") for that many days. */
+  today: (date?: string, days?: number) => {
+    const qs = new URLSearchParams({ ...(date ? { date } : {}), ...(days ? { days: String(days) } : {}) }).toString();
+    return request<TodayCalendar>(`/api/today${qs ? `?${qs}` : ''}`);
+  },
+  search: (q: string) => request<SearchResult>(`/api/search?q=${encodeURIComponent(q)}`),
   household: () => request<Household>('/api/household'),
   saveHousehold: (input: Omit<Household, 'people'> & { people: HouseholdPerson[] }) =>
     request<Household>('/api/household', json('PUT', input)),

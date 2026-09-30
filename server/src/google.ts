@@ -280,8 +280,11 @@ export interface CalendarEvent {
   noteId: string | null;
 }
 
-/** Events between two instants, with repeating ones expanded into single occurrences. */
-export async function listEvents(calendarId: string, from: Date, to: Date): Promise<CalendarEvent[]> {
+/**
+ * Events between two instants, with repeating ones expanded into single occurrences.
+ * `q` limits it to events with that text in the title, description, location or attendees.
+ */
+export async function listEvents(calendarId: string, from: Date, to: Date, q?: string): Promise<CalendarEvent[]> {
   type Item = {
     status?: string;
     summary?: string;
@@ -300,6 +303,7 @@ export async function listEvents(calendarId: string, from: Date, to: Date): Prom
       singleEvents: 'true',
       orderBy: 'startTime',
       maxResults: '2500',
+      ...(q ? { q } : {}),
       ...(pageToken ? { pageToken } : {}),
     });
     const data = await api<{ items?: Item[]; nextPageToken?: string }>('GET', `${eventsPath(calendarId)}?${params}`);

@@ -1,18 +1,21 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api, thumbUrl } from '../api';
+import { NotesSearch } from '../components/NotesSearch';
 import { comingUpOn, dayLabel, dayOf, isOverdue, reminderDue, repeatLabel, timeLabel } from '../notes';
 import type { Note } from '../types';
 
 /**
  * Everything saved from the Add tab: appointments coming up (by day), open
- * reminders, then notes. Past appointments and ticked-off reminders fold away.
+ * reminders, then notes. Ticked-off reminders fold away; past appointments only
+ * show up in search, which also looks through the family calendar's history.
  */
 export function NotesPage() {
   const queryClient = useQueryClient();
-  const [showPast, setShowPast] = useState(false);
   const [showDone, setShowDone] = useState(false);
+  const [query, setQuery] = useState('');
+  const search = useDebounced(query.trim(), 300);
 
   // Poll gently so a note added on the other phone shows up.
   const list = useQuery({ queryKey: ['notes'], queryFn: api.notes, refetchInterval: 30_000 });
@@ -30,15 +33,6 @@ export function NotesPage() {
     onSettled: () => queryClient.invalidateQueries({ queryKey: ['notes'] }),
   });
 
-  // Past appointments leave Mise; their Google Calendar events stay as history.
-  const forget = useMutation({
-    mutationFn: (ids: string[]) => api.forgetPastAppointments(ids),
-    onSuccess: () => {
-      setShowPast(false);
-      queryClient.invalidateQueries({ queryKey: ['notes'] });
-    },
-  });
-
   // "15:30", local; sorts as text.
   const time = (n: Note) => (n.allDay || !n.startsAt ? '' : new Date(n.startsAt).toTimeString().slice(0, 5));
   // Soonest first; on the same day, all-day items first, then by time.
@@ -46,16 +40,13 @@ export function NotesPage() {
 
   type Dated = { note: Note; day: string };
   const upcoming: Dated[] = [];
-  const past: Note[] = [];
   for (const n of notes) {
     if (n.kind !== 'APPOINTMENT' || !n.startsAt) continue;
-    // Over as soon as it ends (all-day ones at midnight).
+    // Over as soon as it ends (all-day ones at midnight); then it's only found by searching.
     const day = comingUpOn(n);
     if (day) upcoming.push({ note: n, day });
-    else past.push(n);
   }
   upcoming.sort(bySoonest);
-  past.sort((a, b) => b.startsAt!.localeCompare(a.startsAt!));
 
   const open: Dated[] = [];
   const undated: Note[] = [];
@@ -89,7 +80,19 @@ export function NotesPage() {
   return (
     <div className="page">
       <h1 className="form-title">Notes</h1>
+      <input
+        className="search notes-search"
+        type="search"
+        placeholder="Search notes and the calendar"
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+        enterKeyHint="search"
+      />
 
+      {search.length >= 2 ? (
+        <NotesSearch query={search} />
+      ) : (
+      <>
       {list.data && notes.length === 0 && (
         <div className="empty">
           <p>Nothing saved yet.</p>
@@ -168,43 +171,23 @@ export function NotesPage() {
         </section>
       )}
 
-      {past.length > 0 && (
-        <section className="notes-section">
-          <button type="button" className="link-btn notes-fold" onClick={() => setShowPast((v) => !v)}>
-            {showPast ? '▾' : '▸'} Past appointments ({past.length})
-          </button>
-          {showPast && (
-            <>
-              <ul className="note-list">
-                {past.map((n) => (
-                  <NoteRow key={n.id} note={n} meta={timeLabel(n)} />
-                ))}
-              </ul>
-              <div className="notes-forget">
-                <button
-                  type="button"
-                  className="btn btn-small btn-danger"
-                  disabled={forget.isPending}
-                  onClick={() =>
-                    confirm(
-                      `Remove ${past.length} past appointment${past.length === 1 ? '' : 's'} from Mise? They stay on Google Calendar.`,
-                    ) && forget.mutate(past.map((n) => n.id))
-                  }
-                >
-                  {forget.isPending ? 'Removing…' : 'Remove from Mise'}
-                </button>
-                <span className="muted small">They stay on Google Calendar.</span>
-              </div>
-              {forget.error && <p className="error">{forget.error.message}</p>}
-            </>
-          )}
-        </section>
+      </>
       )}
     </div>
   );
 }
 
-function NoteRow({
+/** `value`, once it has stopped changing for `ms`. */
+function useDebounced(value: string, ms: number) {
+  const [settled, setSettled] = useState(value);
+  useEffect(() => {
+    const t = setTimeout(() => setSettled(value), ms);
+    return () => clearTimeout(t);
+  }, [value, ms]);
+  return settled;
+}
+
+export function NoteRow({
   note,
   meta,
   overdue = false,

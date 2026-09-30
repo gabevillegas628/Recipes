@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { api } from '../api';
 import { dayLabel, dayOf, isOverdue, localDate, reminderDue, repeatLabel } from '../notes';
 import type { Note, TodayCalendar, User } from '../types';
@@ -12,14 +12,26 @@ type Item =
   | { type: 'reminder'; note: Note; sort: string };
 
 const DAYS_AHEAD = 7;
+const DATE = /^\d{4}-\d{2}-\d{2}$/;
 
 /**
  * Home: the whole family calendar for today and the week ahead, reminders that
  * are due, and at-a-glance cards for this week's meals and the grocery list.
+ * Tapping the date looks at any other day instead (?date=YYYY-MM-DD).
  */
 export function TodayPage({ user }: { user: User }) {
   const queryClient = useQueryClient();
-  const calendar = useQuery({ queryKey: ['today'], queryFn: api.today, refetchInterval: 5 * 60_000 });
+  const [params, setParams] = useSearchParams();
+  const now = new Date();
+  const today = localDate(now);
+  const asked = params.get('date') ?? '';
+  const picked = DATE.test(asked) && asked !== today ? asked : null;
+
+  const calendar = useQuery({
+    queryKey: ['today', picked ?? 'now'],
+    queryFn: () => (picked ? api.today(picked, 1) : api.today()),
+    refetchInterval: 5 * 60_000,
+  });
   const notes = useQuery({ queryKey: ['notes'], queryFn: api.notes });
   const plan = useQuery({ queryKey: ['plan'], queryFn: api.plan });
   const groceries = useQuery({ queryKey: ['groceries'], queryFn: api.groceries });
@@ -34,9 +46,11 @@ export function TodayPage({ user }: { user: User }) {
     onSettled: () => queryClient.invalidateQueries({ queryKey: ['notes'] }),
   });
 
-  const now = new Date();
-  const today = localDate(now);
-  const days = Array.from({ length: DAYS_AHEAD }, (_, i) => localDate(new Date(now.getFullYear(), now.getMonth(), now.getDate() + i)));
+  // The day at the top, and the days listed: a week from today, or just the picked day.
+  const base = picked ?? today;
+  const days = picked
+    ? [picked]
+    : Array.from({ length: DAYS_AHEAD }, (_, i) => localDate(new Date(now.getFullYear(), now.getMonth(), now.getDate() + i)));
   const byDay = new Map<string, Item[]>(days.map((d) => [d, []]));
   const add = (day: string, item: Item) => byDay.get(day)?.push(item);
 
@@ -47,12 +61,13 @@ export function TodayPage({ user }: { user: User }) {
       if (!e.allDayEnd) add(e.allDayDate, { type: 'event', event: e, allDay: true, sort: '' });
     } else if (e.start) {
       const start = new Date(e.start);
-      // Already under way from an earlier day: show it today.
-      const day = localDate(start) < today ? today : localDate(start);
-      add(day, { type: 'event', event: e, allDay: false, sort: localDate(start) < today ? '00:00' : start.toTimeString().slice(0, 5) });
+      // Already under way from an earlier day: show it on the first day listed.
+      const day = localDate(start) < base ? base : localDate(start);
+      add(day, { type: 'event', event: e, allDay: false, sort: localDate(start) < base ? '00:00' : start.toTimeString().slice(0, 5) });
     }
   }
-  for (const n of notes.data ?? []) {
+  // Reminders to tick off only belong on today's view; another day shows them as they were on the calendar.
+  for (const n of picked ? [] : (notes.data ?? [])) {
     if (n.kind !== 'REMINDER' || !n.startsAt) continue;
     const due = n.recurrence ? reminderDue(n) : n.doneAt ? null : dayOf(n.startsAt, n.allDay);
     if (!due) continue;
@@ -61,7 +76,7 @@ export function TodayPage({ user }: { user: User }) {
   }
   for (const items of byDay.values()) items.sort((a, b) => a.sort.localeCompare(b.sort));
 
-  const todayItems = byDay.get(today) ?? [];
+  const todayItems = byDay.get(base) ?? [];
   const upcoming = days.slice(1).filter((d) => byDay.get(d)!.length);
   const toCook = (plan.data ?? []).filter((p) => !p.cookedAt);
   const toBuy = (groceries.data ?? []).filter((g) => !g.checked).length;
@@ -70,8 +85,33 @@ export function TodayPage({ user }: { user: User }) {
     <div className="page today">
       <header className="today-header">
         <div>
-          <p className="today-eyebrow">Today</p>
-          <h1>{now.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}</h1>
+          <p className="today-eyebrow">{eyebrow(picked, today)}</p>
+          {/* The date is a date picker: an invisible date input laid over it. */}
+          <label className="today-date">
+            <h1>
+              {dateOf(base).toLocaleDateString(undefined, {
+                weekday: 'long',
+                month: 'long',
+                day: 'numeric',
+                ...(base.slice(0, 4) !== today.slice(0, 4) ? { year: 'numeric' } : {}),
+              })}
+              <span className="today-date-caret" aria-hidden>
+                ▾
+              </span>
+            </h1>
+            <input
+              type="date"
+              aria-label="Go to a date"
+              value={base}
+              onClick={(e) => e.currentTarget.showPicker?.()}
+              onChange={(e) => setParams(e.target.value && e.target.value !== today ? { date: e.target.value } : {})}
+            />
+          </label>
+          {picked && (
+            <button type="button" className="link-btn" onClick={() => setParams({})}>
+              ‹ Back to today
+            </button>
+          )}
         </div>
         <Link to="/settings" className="avatar" aria-label="Settings">
           {user.name.charAt(0).toUpperCase()}
@@ -90,14 +130,16 @@ export function TodayPage({ user }: { user: User }) {
         {todayItems.length ? (
           <ul className="agenda-list">
             {todayItems.map((item, i) => (
-              <AgendaRow key={i} item={item} now={now} isToday onToggle={(n) => toggle.mutate(n)} />
+              <AgendaRow key={i} item={item} now={now} isToday={!picked} onToggle={(n) => toggle.mutate(n)} />
             ))}
           </ul>
         ) : (
-          calendar.data && <p className="muted agenda-empty">Nothing on the calendar today.</p>
+          calendar.data && <p className="muted agenda-empty">Nothing on the calendar {picked ? 'that day' : 'today'}.</p>
         )}
       </section>
 
+      {!picked && (
+      <>
       <div className="today-cards">
         <Link to="/week" className="today-card">
           <span className="today-card-label">This week’s meals</span>
@@ -139,8 +181,24 @@ export function TodayPage({ user }: { user: User }) {
           ))}
         </section>
       )}
+      </>
+      )}
     </div>
   );
+}
+
+/** "Today", "Yesterday", "Friday" for days nearby; further off, which way you're looking. */
+function eyebrow(picked: string | null, today: string) {
+  if (!picked) return 'Today';
+  const near = dayLabel(picked);
+  // dayLabel gives words for nearby days and a date otherwise, which the heading already shows.
+  return /\d/.test(near) ? (picked < today ? 'Looking back' : 'Looking ahead') : near;
+}
+
+/** A local Date for "YYYY-MM-DD". */
+function dateOf(day: string) {
+  const [y, m, d] = day.split('-').map(Number);
+  return new Date(y, m - 1, d);
 }
 
 const clock = (iso: string) => new Date(iso).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
