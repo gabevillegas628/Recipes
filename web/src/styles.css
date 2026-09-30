@@ -2271,3 +2271,11 @@ html.has-timers .cook {
 .settings-page .settings-section > h2:first-child {
   display: none;
 }
+
+.notes-forget {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 12px;
+}

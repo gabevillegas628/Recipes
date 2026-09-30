@@ -11,6 +11,7 @@ import {
   createNote,
   createNoteBody,
   deleteNote,
+  forgetPastAppointments,
   getNote,
   listNotes,
   NoteError,
@@ -93,6 +94,13 @@ export async function noteRoutes(app: FastifyInstance) {
       if (err instanceof NoteError) return reply.code(400).send({ error: err.message });
       throw err;
     }
+  });
+
+  /** Removes past appointments from Mise; their Google Calendar events stay. */
+  app.post('/api/notes/forget-past', async (request, reply) => {
+    const parsed = z.object({ ids: z.array(z.string()).min(1).max(1000) }).safeParse(request.body);
+    if (!parsed.success) return reply.code(400).send({ error: 'Nothing to remove' });
+    return { removed: await forgetPastAppointments(parsed.data.ids) };
   });
 
   app.delete('/api/notes/:id', async (request, reply) => {

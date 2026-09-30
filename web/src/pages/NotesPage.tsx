@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api, thumbUrl } from '../api';
-import { dayLabel, dayOf, isOverdue, localDate, nextOn, reminderDue, repeatLabel, timeLabel } from '../notes';
+import { comingUpOn, dayLabel, dayOf, isOverdue, reminderDue, repeatLabel, timeLabel } from '../notes';
 import type { Note } from '../types';
 
 /**
@@ -30,7 +30,15 @@ export function NotesPage() {
     onSettled: () => queryClient.invalidateQueries({ queryKey: ['notes'] }),
   });
 
-  const today = localDate(new Date());
+  // Past appointments leave Mise; their Google Calendar events stay as history.
+  const forget = useMutation({
+    mutationFn: (ids: string[]) => api.forgetPastAppointments(ids),
+    onSuccess: () => {
+      setShowPast(false);
+      queryClient.invalidateQueries({ queryKey: ['notes'] });
+    },
+  });
+
   // "15:30", local; sorts as text.
   const time = (n: Note) => (n.allDay || !n.startsAt ? '' : new Date(n.startsAt).toTimeString().slice(0, 5));
   // Soonest first; on the same day, all-day items first, then by time.
@@ -41,17 +49,10 @@ export function NotesPage() {
   const past: Note[] = [];
   for (const n of notes) {
     if (n.kind !== 'APPOINTMENT' || !n.startsAt) continue;
-    if (n.recurrence) {
-      const next = nextOn(n, today);
-      if (next) upcoming.push({ note: n, day: next });
-      else past.push(n);
-    } else if (dayOf(n.endsAt ?? n.startsAt, n.allDay) >= today) {
-      // Multi-day ones already under way show under today.
-      const start = dayOf(n.startsAt, n.allDay);
-      upcoming.push({ note: n, day: start < today ? today : start });
-    } else {
-      past.push(n);
-    }
+    // Over as soon as it ends (all-day ones at midnight).
+    const day = comingUpOn(n);
+    if (day) upcoming.push({ note: n, day });
+    else past.push(n);
   }
   upcoming.sort(bySoonest);
   past.sort((a, b) => b.startsAt!.localeCompare(a.startsAt!));
@@ -173,11 +174,29 @@ export function NotesPage() {
             {showPast ? '▾' : '▸'} Past appointments ({past.length})
           </button>
           {showPast && (
-            <ul className="note-list">
-              {past.map((n) => (
-                <NoteRow key={n.id} note={n} meta={timeLabel(n)} />
-              ))}
-            </ul>
+            <>
+              <ul className="note-list">
+                {past.map((n) => (
+                  <NoteRow key={n.id} note={n} meta={timeLabel(n)} />
+                ))}
+              </ul>
+              <div className="notes-forget">
+                <button
+                  type="button"
+                  className="btn btn-small btn-danger"
+                  disabled={forget.isPending}
+                  onClick={() =>
+                    confirm(
+                      `Remove ${past.length} past appointment${past.length === 1 ? '' : 's'} from Mise? They stay on Google Calendar.`,
+                    ) && forget.mutate(past.map((n) => n.id))
+                  }
+                >
+                  {forget.isPending ? 'Removing…' : 'Remove from Mise'}
+                </button>
+                <span className="muted small">They stay on Google Calendar.</span>
+              </div>
+              {forget.error && <p className="error">{forget.error.message}</p>}
+            </>
           )}
         </section>
       )}

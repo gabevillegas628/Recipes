@@ -152,6 +152,34 @@ export function nextOn(n: Note, from: string): string | null {
   return rule ? nextOccurrence(rule, start, from) : start;
 }
 
+/** Appointments with no end time count as an hour long, as on Google Calendar. */
+const DEFAULT_APPOINTMENT_MS = 60 * 60_000;
+
+/**
+ * The day an appointment is next coming up, or null once it's over. Timed ones
+ * are over when they end, not at midnight; for a repeating one, today's
+ * occurrence counts as over once it ends, so the next date shows. All-day ones
+ * last the whole day.
+ */
+export function comingUpOn(n: Note, now = new Date()): string | null {
+  const today = localDate(now);
+  const start = new Date(n.startsAt!);
+  const firstDay = dayOf(n.startsAt!, n.allDay);
+  const length = n.endsAt ? new Date(n.endsAt).getTime() - start.getTime() : DEFAULT_APPOINTMENT_MS;
+  const rule = ruleOf(n);
+  if (!rule) {
+    if (n.allDay) return dayOf(n.endsAt ?? n.startsAt!, true) >= today ? (firstDay < today ? today : firstDay) : null;
+    // Already under way from an earlier day: show it under today.
+    return start.getTime() + length > now.getTime() ? (firstDay < today ? today : firstDay) : null;
+  }
+  const next = nextOccurrence(rule, firstDay, today);
+  if (next === today && !n.allDay) {
+    const todays = new Date(`${today}T${localTime(start)}`).getTime();
+    if (todays + length <= now.getTime()) return nextOccurrence(rule, firstDay, addDays(today, 1));
+  }
+  return next;
+}
+
 /** A repeating reminder's current occurrence: the next one after the last tick, and not before today. */
 export function reminderDue(n: Note): string | null {
   const today = localDate(new Date());

@@ -3,7 +3,7 @@ import { kickCalendarSync, removeFromCalendar } from './calendarSync.js';
 import { prisma } from './db.js';
 import type { NoteKind, Prisma } from './generated/prisma/client.js';
 import { deleteImage, uploadExists } from './images.js';
-import { formatRule, parseRule, RuleError } from './recurrence.js';
+import { formatRule, nextOccurrence, parseRule, RuleError } from './recurrence.js';
 
 /**
  * Notes, reminders and appointments. Everyone sees all of them.
@@ -159,4 +159,35 @@ export async function deleteNote(id: string) {
   await deleteImage(note.image);
   void removeFromCalendar(note.googleEventId, note.googleCalendarId);
   return true;
+}
+
+/**
+ * Removes appointments that are completely over from Mise, leaving their Google
+ * Calendar events in place as history. Only past ones are removed, whatever ids
+ * are sent: one-offs whose end has passed, and repeating series with no dates left.
+ */
+export async function forgetPastAppointments(ids: string[]) {
+  const now = new Date();
+  const today = now.toISOString().slice(0, 10);
+  const candidates = await prisma.note.findMany({
+    where: { id: { in: ids }, kind: 'APPOINTMENT' },
+    select: { id: true, startsAt: true, endsAt: true, allDay: true, recurrence: true, image: true },
+  });
+  const past = candidates.filter((n) => {
+    if (!n.startsAt) return false;
+    if (n.recurrence) {
+      // Close enough at the edges: a series ending today is kept until tomorrow.
+      try {
+        return nextOccurrence(parseRule(n.recurrence), n.startsAt.toISOString().slice(0, 10), today) === null;
+      } catch {
+        return false;
+      }
+    }
+    const end = n.endsAt ?? n.startsAt;
+    // All-day items are pinned to noon UTC; count them as over once that day is.
+    return n.allDay ? end.toISOString().slice(0, 10) < today : end < now;
+  });
+  await prisma.note.deleteMany({ where: { id: { in: past.map((n) => n.id) } } });
+  await Promise.all(past.map((n) => deleteImage(n.image)));
+  return past.length;
 }

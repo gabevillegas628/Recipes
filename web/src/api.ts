@@ -154,6 +154,9 @@ export const api = {
   updateNote: (id: string, input: Partial<NoteInput> & { done?: boolean; image?: null }) =>
     request<Note>(`/api/notes/${id}`, json('PATCH', input)),
   deleteNote: (id: string) => request<void>(`/api/notes/${id}`, { method: 'DELETE' }),
+  /** Removes past appointments from Mise; their Google Calendar events stay. */
+  forgetPastAppointments: (ids: string[]) =>
+    request<{ removed: number }>('/api/notes/forget-past', json('POST', { ids })),
 
   googleStatus: () => request<GoogleStatus>('/api/google'),
   googleCalendars: () => request<GoogleCalendarChoice[]>('/api/google/calendars'),
