@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom';
 import { api, thumbUrl } from '../api';
 import { GroceryPicker } from '../components/GroceryPicker';
 import { LibraryTabs } from '../components/LibraryTabs';
+import { recipeQuery } from '../components/MealSwitcher';
 import { servingsLabel } from '../scale';
 import type { PlanItem } from '../types';
 
@@ -160,7 +161,7 @@ function PlanRow({ item, onChange, inMeal = false }: { item: PlanItem; onChange:
       >
         {cooked ? '✓' : ''}
       </button>
-      <Link to={`/r/${item.recipe.id}${item.scale !== 1 ? `?scale=${item.scale}` : ''}`} className="plan-link">
+      <Link to={`/r/${item.recipe.id}${recipeQuery(item.scale, inMeal ? (item.meal?.id ?? null) : null)}`} className="plan-link">
         {img ? <img className="thumb thumb-small" src={img} alt="" /> : <div className="thumb thumb-small thumb-empty">{item.recipe.title.charAt(0)}</div>}
         <div className="recipe-row-body">
           <div className="recipe-row-title">{item.recipe.title}</div>

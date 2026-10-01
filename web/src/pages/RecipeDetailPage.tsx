@@ -4,6 +4,7 @@ import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { api, imageUrl } from '../api';
 import { AddToMeal } from '../components/AddToMeal';
 import { GroceryPicker } from '../components/GroceryPicker';
+import { MealSwitcher, recipeQuery, useMealParam } from '../components/MealSwitcher';
 import { ServingsControl } from '../components/ServingsControl';
 import { StepText } from '../components/StepText';
 import { scaleIngredient } from '../scale';
@@ -24,6 +25,7 @@ function RecipeView({ recipe }: { recipe: Recipe }) {
   const navigate = useNavigate();
   const [params] = useSearchParams();
   const img = imageUrl(recipe.image);
+  const mealId = useMealParam();
 
   const plan = useQuery({ queryKey: ['plan'], queryFn: api.plan });
   const planned = plan.data?.find((p) => p.recipe.id === recipe.id);
@@ -72,6 +74,7 @@ function RecipeView({ recipe }: { recipe: Recipe }) {
 
   return (
     <article className="page recipe">
+      <MealSwitcher mealId={mealId} recipeId={recipe.id} scale={scale} mode="view" />
       {img && (
         <img
           className="hero"
@@ -106,7 +109,7 @@ function RecipeView({ recipe }: { recipe: Recipe }) {
 
       <div className="actions">
         {recipe.instructions.length > 0 && (
-          <Link to={`/r/${recipe.id}/prep${scale !== 1 ? `?scale=${scale}` : ''}`} className="btn btn-primary">
+          <Link to={`/r/${recipe.id}/prep${recipeQuery(scale, mealId)}`} className="btn btn-primary">
             Start cooking
           </Link>
         )}

@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useMemo, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { api } from '../api';
+import { MealSwitcher, recipeQuery, useMealParam } from '../components/MealSwitcher';
 import { scaleIngredient } from '../scale';
 import type { PrepPlan, Recipe } from '../types';
 import { useWakeLock } from '../useWakeLock';
@@ -37,7 +38,7 @@ export function PrepPage() {
 
   if (recipe.isPending) return <div className="cook" />;
   if (recipe.error) return <p className="page error">{recipe.error.message}</p>;
-  return <Prep recipe={recipe.data} />;
+  return <Prep key={recipe.data.id} recipe={recipe.data} />;
 }
 
 // Ticks survive a reload or a locked phone, like the cook mode step.
@@ -61,7 +62,8 @@ function Prep({ recipe }: { recipe: Recipe }) {
   const navigate = useNavigate();
   const [params] = useSearchParams();
   const scale = Number(params.get('scale')) || 1;
-  const query = scale !== 1 ? `?scale=${scale}` : '';
+  const mealId = useMealParam();
+  const query = recipeQuery(scale, mealId);
   useWakeLock({ auto: true });
 
   const prep = usePrep(recipe);
@@ -90,6 +92,7 @@ function Prep({ recipe }: { recipe: Recipe }) {
         </button>
         <div className="cook-title">Prep · {recipe.title}</div>
       </header>
+      <MealSwitcher mealId={mealId} recipeId={recipe.id} scale={scale} mode="prep" />
 
       <main className="cook-body">
         {prep.isPending && (

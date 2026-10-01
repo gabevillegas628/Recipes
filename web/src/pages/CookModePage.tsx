@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { api } from '../api';
+import { MealSwitcher, recipeQuery, useMealParam } from '../components/MealSwitcher';
 import { StepText } from '../components/StepText';
 import { scaleIngredient } from '../scale';
 import type { Recipe } from '../types';
@@ -15,7 +16,8 @@ export function CookModePage() {
 
   if (recipe.isPending) return <div className="cook" />;
   if (recipe.error) return <p className="page error">{recipe.error.message}</p>;
-  return <CookMode recipe={recipe.data} />;
+  // Keyed so switching recipes within a meal starts fresh (at that recipe's saved step).
+  return <CookMode key={recipe.data.id} recipe={recipe.data} />;
 }
 
 interface Step {
@@ -44,6 +46,8 @@ function CookMode({ recipe }: { recipe: Recipe }) {
   const navigate = useNavigate();
   const [params] = useSearchParams();
   const scale = Number(params.get('scale')) || 1;
+  const mealId = useMealParam();
+  const query = recipeQuery(scale, mealId);
   const wakeLock = useWakeLock({ auto: true });
   const steps = useMemo<Step[]>(
     () => recipe.instructions.flatMap((s) => s.items.map((text) => ({ text, section: s.title }))),
@@ -66,8 +70,8 @@ function CookMode({ recipe }: { recipe: Recipe }) {
   );
 
   const exit = useCallback(
-    () => navigate(`/r/${recipe.id}${scale !== 1 ? `?scale=${scale}` : ''}`, { replace: true }),
-    [navigate, recipe.id, scale],
+    () => navigate(`/r/${recipe.id}${query}`, { replace: true }),
+    [navigate, recipe.id, query],
   );
 
   // Arrow keys on a laptop/tablet keyboard.
@@ -115,7 +119,7 @@ function CookMode({ recipe }: { recipe: Recipe }) {
           ✕
         </button>
         <div className="cook-title">{recipe.title}</div>
-        <Link to={`/r/${recipe.id}/prep${scale !== 1 ? `?scale=${scale}` : ''}`} replace className="cook-pill">
+        <Link to={`/r/${recipe.id}/prep${query}`} replace className="cook-pill">
           Prep
         </Link>
         <button
@@ -126,6 +130,7 @@ function CookMode({ recipe }: { recipe: Recipe }) {
           Ingredients
         </button>
       </header>
+      <MealSwitcher mealId={mealId} recipeId={recipe.id} scale={scale} mode="cook" />
 
       {steps.length === 0 ? (
         <main className="cook-body">

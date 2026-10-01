@@ -4,6 +4,7 @@ import { Link, useParams } from 'react-router-dom';
 import { api, thumbUrl } from '../api';
 import { Collage } from '../components/Collage';
 import { GroceryPicker } from '../components/GroceryPicker';
+import { recipeQuery } from '../components/MealSwitcher';
 import { ServingsControl } from '../components/ServingsControl';
 import { servingsLabel } from '../scale';
 import type { Meal } from '../types';
@@ -82,7 +83,7 @@ function MealView({ meal }: { meal: Meal }) {
             const img = thumbUrl(recipe.image);
             return (
               <li key={recipe.id}>
-                <Link to={`/r/${recipe.id}${total !== 1 ? `?scale=${total}` : ''}`} className="recipe-row">
+                <Link to={`/r/${recipe.id}${recipeQuery(total, meal.id)}`} className="recipe-row">
                   {img ? (
                     <img className="thumb thumb-small" src={img} alt="" />
                   ) : (

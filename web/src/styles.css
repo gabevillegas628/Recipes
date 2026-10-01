@@ -791,6 +791,30 @@ a.cook-pill {
   color: var(--on-accent);
 }
 
+/* Recipes in the meal a recipe was opened from (see MealSwitcher). */
+.meal-switcher {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 16px;
+}
+
+.meal-switcher.in-cook {
+  flex: none;
+  margin: 0;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.meal-switcher-name {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.meal-switcher .chip {
+  white-space: nowrap;
+}
+
 .cook-body {
   flex: 1;
   overflow-y: auto;
