@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api, thumbUrl } from '../api';
 import { NotesSearch } from '../components/NotesSearch';
-import { comingUpOn, dayLabel, dayOf, isOverdue, reminderDue, repeatLabel, timeLabel } from '../notes';
+import { comingUpOn, dayLabel, dayOf, firstLine, isOverdue, reminderDue, repeatLabel, timeLabel } from '../notes';
 import type { Note } from '../types';
 
 /**
@@ -165,7 +165,7 @@ export function NotesPage() {
           <h2 className="notes-section-title">Notes</h2>
           <ul className="note-list">
             {plain.map((n) => (
-              <NoteRow key={n.id} note={n} meta={n.body?.split('\n').find((l) => l.trim()) ?? ''} />
+              <NoteRow key={n.id} note={n} meta={firstLine(n.body)} />
             ))}
           </ul>
         </section>
@@ -202,6 +202,8 @@ export function NoteRow({
 }) {
   const thumb = thumbUrl(note.image);
   const repeats = repeatLabel(note);
+  // A plain note's details are already its meta line.
+  const detail = note.kind === 'NOTE' ? '' : firstLine(note.body);
   return (
     <li className={`note-row ${checked ? 'done' : ''}`}>
       {onToggle && (
@@ -219,6 +221,7 @@ export function NoteRow({
           <span className="note-title">{note.title}</span>
           {meta && <span className={`note-meta ${overdue ? 'overdue' : ''}`}>{meta}</span>}
           {repeats && <span className="note-meta">↻ {repeats}</span>}
+          {detail && <span className="note-meta">{detail}</span>}
         </span>
         {thumb && <img className="note-thumb" src={thumb} alt="" />}
       </Link>

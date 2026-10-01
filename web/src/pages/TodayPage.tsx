@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useSearchParams } from 'react-router-dom';
 import { api } from '../api';
-import { dayLabel, dayOf, isOverdue, localDate, movedToDay, reminderDue, repeatLabel } from '../notes';
+import { dayLabel, dayOf, firstLine, isOverdue, localDate, movedToDay, reminderDue, repeatLabel } from '../notes';
 import type { Note, TodayCalendar, User } from '../types';
 
 type CalendarEvent = TodayCalendar['events'][number];
@@ -243,6 +243,7 @@ function MissedRow({ note: n, tomorrow, onToggle }: { note: Note; tomorrow: stri
           {n.title}
         </Link>
         <span className="agenda-meta overdue">{day === localDate(new Date()) ? 'Earlier today' : `Since ${dayLabel(day).replace('Yesterday', 'yesterday')}`}</span>
+        {firstLine(n.body) && <span className="agenda-meta">{firstLine(n.body)}</span>}
         <span className="missed-actions">
           <button type="button" className="btn btn-small" disabled={move.isPending} onClick={() => move.mutate()}>
             Tomorrow
@@ -272,6 +273,7 @@ function AgendaRow({
     const n = item.note;
     const overdue = isOverdue(n);
     const repeats = repeatLabel(n);
+    const detail = firstLine(n.body);
     return (
       <li className="agenda-row">
         <span className="agenda-time">{n.allDay ? 'Due' : clock(n.startsAt!)}</span>
@@ -282,6 +284,7 @@ function AgendaRow({
             {overdue ? `Overdue since ${dayLabel(dayOf(n.startsAt!, n.allDay))}` : n.endsAt ? `Reminder · until ${clock(n.endsAt)}` : 'Reminder'}
             {repeats ? ` · ↻ ${repeats}` : ''}
           </span>
+          {detail && <span className="agenda-meta">{detail}</span>}
         </Link>
       </li>
     );

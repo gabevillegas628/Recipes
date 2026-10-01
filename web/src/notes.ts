@@ -65,6 +65,11 @@ function localTime(d: Date): string {
   return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
+/** The first non-blank line of a note's details, for a one-line preview. */
+export function firstLine(body: string | null | undefined): string {
+  return body?.split('\n').find((l) => l.trim())?.trim() ?? '';
+}
+
 /** The calendar day an instant falls on, as "YYYY-MM-DD". */
 export function dayOf(iso: string, allDay: boolean): string {
   return allDay ? iso.slice(0, 10) : localDate(new Date(iso));
