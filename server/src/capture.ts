@@ -56,33 +56,22 @@ const classification = z.object({
     })
     .nullable()
     .describe('Only for appointments and reminders that repeat'),
-  findTime: z
+  schedule: z
     .object({
-      people: z.array(z.string()).describe('Household names of who has to be there, exactly as listed'),
+      people: z.array(z.string()).describe('findTime: household names of who has to be there, exactly as listed. Empty for a task.'),
+      durationMinutes: z.number().int().describe('How long it takes there, or how long doing the task takes'),
+      travelMinutes: z.number().int().describe("Each way. 0 when there's no trip; -1 for the family's usual travel time"),
       from: z.string().describe('YYYY-MM-DD, first day to look at'),
       to: z.string().describe('YYYY-MM-DD, last day to look at'),
-      durationMinutes: z.number().int().describe('How long it takes there, stated or typical'),
-      earliest: z.string().nullable().describe('HH:MM, only if the request limits the time of day'),
-      latest: z.string().nullable().describe('HH:MM, only if the request limits the time of day'),
-      days: z.array(z.enum(WEEKDAYS)).nullable().describe('Only if the request limits or widens the days, e.g. weekends'),
-      travelMinutes: z.number().int().nullable().describe("Each way. 0 when there's no trip; null for the family's usual travel time"),
+      earliest: z.string().describe('HH:MM, only when it has to fit certain hours; "" otherwise'),
+      latest: z.string().describe('HH:MM, only when it has to fit certain hours; "" otherwise'),
+      days: z.array(z.enum(WEEKDAYS)).describe('findTime: only if the request limits or widens the days, e.g. weekends. Empty otherwise.'),
+      deadline: z.string().describe('Task: YYYY-MM-DD it has to be done by, or the date it leads up to; "" if none'),
+      startBy: z.string().describe('Task with a deadline: YYYY-MM-DD to get started; "" otherwise'),
+      why: z.string().describe('Task with a deadline: one short sentence on the timing, for the person; "" otherwise'),
     })
     .nullable()
-    .describe('Only for findTime'),
-  task: z
-    .object({
-      durationMinutes: z.number().int().describe('How long doing it takes'),
-      travelMinutes: z.number().int().describe('Each way, to wherever it gets done. 0 for calls, online and at home'),
-      deadline: z.string().nullable().describe('YYYY-MM-DD it has to be done by, or the date it leads up to, if stated'),
-      startBy: z.string().nullable().describe('With a deadline: YYYY-MM-DD to get started, working back from it by the lead time'),
-      why: z.string().nullable().describe('With a deadline: one short sentence on the timing, for the person'),
-      from: z.string().describe('YYYY-MM-DD, first day it could be done (no deadline)'),
-      to: z.string().describe('YYYY-MM-DD, last day to look at (no deadline)'),
-      earliest: z.string().nullable().describe('HH:MM, only when it has to happen within certain hours'),
-      latest: z.string().nullable().describe('HH:MM, only when it has to happen within certain hours'),
-    })
-    .nullable()
-    .describe('Only for a reminder to do something, with no time of day stated, that the app should find a slot for'),
+    .describe('For findTime, and for a reminder to do something with no time of day stated, that the app should find a slot for'),
 });
 
 const SYSTEM = `You file things for a family's shared organizer app. The input was typed, dictated (so expect speech-to-text slips and filler words), pasted, or photographed (a flyer, a letter from school, an appointment card, a screenshot).
@@ -100,24 +89,25 @@ Then fill in the fields:
 - title: short and scannable, the way someone would write it in a calendar. For events, lead with what it is, and add who it's for when stated ("Dentist: Maya").
 - details: keep anything useful that isn't in the other fields, such as what to bring, cost, phone numbers, links, or registration deadlines. Keep the person's own wording for dictated notes, minus filler words. Don't repeat the title, date, time or place.
 - Reminders, by how they're timed:
-  - A time is stated ("call Mom at 7", "tonight at 8"), or it repeats: date and time, no task.
-  - A nudge on a day with no time ("remind me Friday it's Grandma's birthday", "trash night Tuesday"): the date, plus a sensible time for it (usually 09:00; the evening for trash and things for the next morning), no task.
-  - Something to do that takes a bit of time, with no time of day stated ("I need to call the insurance company", "renew the passport by March 1", "pay the water bill Friday", "drop the library books off"): fill in task and leave date and time null; the app books a free slot on the person's calendar.
+  - A time is stated ("call Mom at 7", "tonight at 8"), or it repeats: date and time, no schedule.
+  - A nudge on a day with no time ("remind me Friday it's Grandma's birthday", "trash night Tuesday"): the date, plus a sensible time for it (usually 09:00; the evening for trash and things for the next morning), no schedule.
+  - Something to do that takes a bit of time, with no time of day stated ("I need to call the insurance company", "renew the passport by March 1", "pay the water bill Friday", "drop the library books off"): fill in schedule (a task) and leave date and time null; the app books a free slot on the person's calendar. people and days stay empty.
     - durationMinutes: realistic time to do it: a call to an office 30 (they put you on hold), paying a bill online 10, an errand 20 plus travel, a form 30.
-    - travelMinutes: each way to where it's done: 0 for calls, online and at home; around 15 for an errand in town.
+    - travelMinutes: each way to where it's done: 0 for calls, online and at home; around 15 for an errand in town. Never -1 for a task.
     - A deadline, or a date it leads up to ("renew the passport by March 1", "hire a contractor for a renovation starting March 15"): the point of the reminder is to start at the right time, not now. deadline is that date. startBy is when to get started: the deadline minus the realistic lead time, plus some slack. Contractors book up two to three months ahead and need time for quotes; a passport takes six to eight weeks; booking a popular venue months; mail a few days; a bill due Friday a day or two. why says so in a sentence ("Contractors book up 2-3 months out, so start in early December."). Don't repeat the deadline in details; the app adds it.
-    - from and to, when there's no deadline: the days it could be done. A day stated ("Friday") is that day; with no timeframe, today through two days from today. Never before today.
-    - earliest and latest: only when it has to fit certain hours: business hours (09:00-17:00) for calling an office or a business, opening hours for errands. null otherwise.
-  - Someday, with no timeframe ("fix the fence gate someday"): no date, no time, no task.
-- date and time: resolve relative dates ("next Tuesday", "the 14th", "tomorrow at 3") against the current date given below. When a flyer gives a month and day with no year, use the next time that date comes up. For reminders, see below. If only a time is given for a reminder, use today, or tomorrow if that time has passed.
+    - from and to: with a deadline, the same as startBy. Otherwise the days it could be done. A day stated ("Friday") is that day; with no timeframe, today through two days from today. Never before today.
+    - earliest and latest: only when it has to fit certain hours: business hours (09:00-17:00) for calling an office or a business, opening hours for errands. "" otherwise.
+  - Someday, with no timeframe ("fix the fence gate someday"): no date, no time, no schedule.
+- date and time: resolve relative dates ("next Tuesday", "the 14th", "tomorrow at 3") against the current date given below. When a flyer gives a month and day with no year, use the next time that date comes up. For reminders, see above. If only a time is given for a reminder, use today, or tomorrow if that time has passed.
 - repeat: only when it recurs ("every Tuesday", "the first Monday of each month", "every other week", "daily until Friday"). date is then the first occurrence on or after today.
 - For a recipe, a recipe to write or a grocery list, only kind and title matter (plus groceryItems for groceries).
-- findTime: title is what the appointment will be called ("Eye appointment: Evan"); details and location as for appointments. In findTime:
+- findTime: title is what the appointment will be called ("Eye appointment: Evan"); details and location as for appointments. In schedule:
   - people: who has to be there, by household name. "Me" or "I" is the person typing; "us" or "we" is the two adults. For a child's appointment, list just the child; the app adds a parent to take them.
   - from and to: the days to look at. "The week of 11/2" is that Monday to the Sunday after; "next week" is next Monday to Sunday; "this month" runs from today; with no dates given, the next two weeks. Never before today.
   - durationMinutes: as stated, else typical time there: a doctor, dentist or eye exam 60, a haircut 30, a dinner out 90.
-  - earliest, latest and days: only when the request says ("after 4", "mornings", "weekends are fine", "not Monday"); otherwise null, and the family's usual weekday hours apply.
-  - travelMinutes: 0 when there's no trip (a phone or video call, something at home, or at the place the person already is, like their own workplace); null for anywhere else, and the family's usual travel time applies.`;
+  - earliest, latest and days: only when the request says ("after 4", "mornings", "weekends are fine", "not Monday"); otherwise "" and empty, and the family's usual weekday hours apply.
+  - travelMinutes: 0 when there's no trip (a phone or video call, something at home, or at the place the person already is, like their own workplace); -1 for anywhere else, and the family's usual travel time applies.
+  - deadline, startBy and why: "".`;
 
 export type NoteDraft = {
   kind: 'NOTE' | 'REMINDER' | 'APPOINTMENT';
@@ -203,7 +193,7 @@ export async function capture(text: string, photos: Buffer[], now: string, userN
   if (result.kind === 'writeRecipe' && text) {
     return { kind: 'recipe', recipe: { draft: await writeRecipe(text), method: 'generated', duplicateOf: null } };
   }
-  if (result.kind === 'findTime' && result.findTime) return { kind: 'findTime', find: await findTimeFrom(result, household) };
+  if (result.kind === 'findTime' && result.schedule) return { kind: 'findTime', find: await findTimeFrom(result, household) };
   if (result.kind === 'groceries' && result.groceryItems.length > 0) {
     return { kind: 'groceries', items: result.groceryItems.map((s) => s.trim()).filter(Boolean) };
   }
@@ -222,7 +212,7 @@ export async function capture(text: string, photos: Buffer[], now: string, userN
   const valid = (t: string | null) => (t && TIME.test(t) ? t : null);
   // A task with no time stated gets a free slot on the person's calendar.
   const slot =
-    kind === 'REMINDER' && result.task && !valid(result.time) && !rule ? await slotFor(result, household, userName) : null;
+    kind === 'REMINDER' && result.schedule && !valid(result.time) && !rule ? await slotFor(result, household, userName) : null;
   const note: NoteDraft = {
     kind,
     title: result.title.trim() || text.slice(0, 80),
@@ -270,7 +260,7 @@ async function slotFor(
   household: Household,
   userName: string | null,
 ): Promise<Slot & { picked: Pick<NoteDraft, 'date' | 'time' | 'endTime'> | null; lastDay: string; deadline: string | null }> {
-  const t = result.task!;
+  const t = result.schedule!;
   const today = DATE.test(result.today) ? result.today : new Date().toISOString().slice(0, 10);
   const deadline = t.deadline && DATE.test(t.deadline) && t.deadline >= today ? t.deadline : null;
   const given = deadline && t.startBy && DATE.test(t.startBy) && t.startBy <= deadline ? t.startBy : null;
@@ -401,7 +391,7 @@ function familyContext(household: Household, userName: string | null) {
 
 /** The AI's reading of "find a time for ...", checked, then run against the calendar. */
 async function findTimeFrom(result: z.infer<typeof classification>, household: Household): Promise<FindTimeResult> {
-  const f = result.findTime!;
+  const f = result.schedule!;
   const idFor = (name: string) => {
     const n = name.trim().toLowerCase();
     return household.people.find((p) => p.name.toLowerCase() === n || p.aliases.some((a) => a.toLowerCase() === n))?.id;
@@ -421,8 +411,8 @@ async function findTimeFrom(result: z.infer<typeof classification>, household: H
       durationMinutes: Math.min(12 * 60, Math.max(5, f.durationMinutes || 60)),
       hoursStart: time(f.earliest),
       hoursEnd: time(f.latest),
-      days: f.days?.length ? f.days : null,
-      travelMinutes: f.travelMinutes === null ? null : Math.min(240, Math.max(0, f.travelMinutes)),
+      days: f.days.length ? f.days : null,
+      travelMinutes: f.travelMinutes < 0 ? null : Math.min(240, f.travelMinutes),
     });
   } catch (err) {
     if (err instanceof FindTimeError) throw new ImportError(err.message);
