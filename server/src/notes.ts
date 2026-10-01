@@ -59,14 +59,15 @@ export function allDayInstant(date: string): Date {
 
 /**
  * Drops fields that don't apply to the kind: notes have no time, only
- * appointments have an end or a place. Appointments need a start. Only
+ * appointments have a place, and a reminder's end is a time on its day (a
+ * block of time for the task, shown busy). Appointments need a start. Only
  * something with a date can repeat.
  */
 function normalize(fields: Fields) {
   const kind = fields.kind;
   let startsAt = kind === 'NOTE' || !fields.startsAt ? null : new Date(fields.startsAt);
-  let endsAt = kind === 'APPOINTMENT' && fields.endsAt ? new Date(fields.endsAt) : null;
   const allDay = Boolean(startsAt && fields.allDay);
+  let endsAt = fields.endsAt && (kind === 'APPOINTMENT' || (kind === 'REMINDER' && !allDay)) ? new Date(fields.endsAt) : null;
   if (allDay && startsAt) startsAt = allDayInstant(startsAt.toISOString().slice(0, 10));
   if (allDay && endsAt) endsAt = allDayInstant(endsAt.toISOString().slice(0, 10));
   if (startsAt && endsAt && endsAt < startsAt) endsAt = null;

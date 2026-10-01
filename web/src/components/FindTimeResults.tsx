@@ -2,7 +2,7 @@ import { useMutation } from '@tanstack/react-query';
 import { useState } from 'react';
 import { api } from '../api';
 import { FindTimeDay } from './FindTimeDay';
-import type { EventTagInfo, FindTimeOption, FindTimeResult } from '../types';
+import type { EventTagInfo, FindTimeInput, FindTimeOption, FindTimeResult } from '../types';
 
 /**
  * "Find a time" results: the best few windows, with plain reasons and a glance
@@ -14,20 +14,45 @@ export function FindTimeResults({
   result: initial,
   onPick,
   onCancel,
+  hint = 'Tap one to make it an appointment. You can change the time before saving.',
 }: {
   result: FindTimeResult;
+  /** Under the options: what tapping one does. */
+  hint?: string;
   onPick: (option: FindTimeOption, result: FindTimeResult) => void;
   onCancel: () => void;
 }) {
   const [result, setResult] = useState(initial);
   const [showCalendar, setShowCalendar] = useState(false);
-  const rerun = useMutation({ mutationFn: () => api.findTime(result.input), onSuccess: setResult });
+  const rerun = useMutation({ mutationFn: (input: FindTimeInput) => api.findTime(input), onSuccess: setResult });
 
   return (
     <div className="page">
       <h1 className="form-title">Find a time</h1>
       <p className="find-title">{result.input.title}</p>
       <p className="muted small find-summary">{result.summary}</p>
+      <div className="find-travel">
+        <span className="muted small">Travel each way</span>
+        <div className="chips">
+          {TRAVEL_CHOICES.map((m) => (
+            <button
+              key={m}
+              type="button"
+              className={`chip ${result.travelMinutes === m ? 'chip-on' : ''}`}
+              aria-pressed={result.travelMinutes === m}
+              disabled={rerun.isPending}
+              onClick={() => rerun.mutate({ ...result.input, travelMinutes: m })}
+            >
+              {m ? `${m} min` : 'None'}
+            </button>
+          ))}
+          {!TRAVEL_CHOICES.includes(result.travelMinutes) && (
+            <button type="button" className="chip chip-on" aria-pressed disabled>
+              {result.travelMinutes} min
+            </button>
+          )}
+        </div>
+      </div>
 
       {result.options.length === 0 ? (
         <div className="banner">
@@ -52,7 +77,7 @@ export function FindTimeResults({
           ))}
         </ul>
       )}
-      {result.options.length > 0 && <p className="muted small">Tap one to make it an appointment. You can change the time before saving.</p>}
+      {result.options.length > 0 && <p className="muted small">{hint}</p>}
 
       {result.notes.length > 0 && (
         <ul className="find-notes">
@@ -72,14 +97,14 @@ export function FindTimeResults({
           {showCalendar && (
             <ul className="tag-list">
               {result.calendar.map((e) => (
-                <TagRow key={e.title} event={e} people={result.people} onSaved={() => rerun.mutate()} />
+                <TagRow key={e.title} event={e} people={result.people} onSaved={() => rerun.mutate(result.input)} />
               ))}
             </ul>
           )}
-          {rerun.isPending && <p className="muted small">Looking again…</p>}
-          {rerun.error && <p className="error">{rerun.error.message}</p>}
         </section>
       )}
+      {rerun.isPending && <p className="muted small">Looking again…</p>}
+      {rerun.error && <p className="error">{rerun.error.message}</p>}
 
       <div className="form-actions">
         <button type="button" className="btn" onClick={onCancel}>
@@ -89,6 +114,8 @@ export function FindTimeResults({
     </div>
   );
 }
+
+const TRAVEL_CHOICES = [0, 15, 30, 45, 60];
 
 /** One event title and whose it is; tap Change to correct it. */
 function TagRow({

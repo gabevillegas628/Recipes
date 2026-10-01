@@ -10,7 +10,9 @@ import { wallTime, zonedInstant } from './zone.js';
  * "Find a time": reads the family calendar for the dates asked about, works out
  * whose each event is (eventTags.ts), runs the finder (findTime.ts), and words
  * the options. Capture fills in the request from what was typed; the options
- * screen re-runs it after a tag is corrected.
+ * screen re-runs it after a tag or the travel time is changed. Also finds a slot
+ * for one person's task (capture.ts), with the reminders calendar counted as
+ * that calendar's owner's busy time.
  */
 
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
@@ -30,6 +32,8 @@ export const findTimeInput = z.object({
   hoursStart: z.string().regex(HHMM).nullable(),
   hoursEnd: z.string().regex(HHMM).nullable(),
   days: z.array(z.enum(WEEKDAYS)).min(1).nullable(),
+  /** Each way. 0 for a call or something at home; null for the household's usual travel time. */
+  travelMinutes: z.number().int().min(0).max(240).nullable().optional(),
 });
 
 export type FindTimeInput = z.infer<typeof findTimeInput>;
@@ -38,6 +42,15 @@ export class FindTimeError extends Error {}
 
 const MAX_DAYS = 31;
 const WEEKDAYS_ONLY = WEEKDAYS.slice(0, 5);
+/** Nothing is offered sooner than this from now. */
+const LEAD_MINUTES = 15;
+
+/** The household person a user is, by name or alias. */
+export function personFor(household: Household, name: string | null | undefined) {
+  const n = name?.trim().toLowerCase();
+  if (!n) return null;
+  return household.people.find((p) => p.name.toLowerCase() === n || p.aliases.some((a) => a.toLowerCase() === n)) ?? null;
+}
 
 export async function runFindTime(input: FindTimeInput) {
   if (input.to < input.from) [input.from, input.to] = [input.to, input.from];
@@ -56,18 +69,27 @@ export async function runFindTime(input: FindTimeInput) {
   // A day either side, so travel time around the edges sees what's there.
   const from = zonedInstant(`${addDays(input.from, -1)}T00:00:00`, timeZone);
   const to = zonedInstant(`${addDays(input.to, 2)}T00:00:00`, timeZone);
-  const all = await listEvents(connection.calendarId, from, to);
+  // The reminders calendar is its owner's (whoever connected Google): busy blocks there,
+  // like a task slot already booked, are their busy time. Free ones (plain reminders) aren't.
+  const owner = connection.remindersCalendarId && connection.remindersCalendarId !== connection.calendarId ? personFor(household, connection.connectedBy?.name) : null;
+  const [all, ownerEvents] = await Promise.all([
+    listEvents(connection.calendarId, from, to),
+    owner ? listEvents(connection.remindersCalendarId!, from, to) : Promise.resolve([]),
+  ]);
   const timed = all.filter((e) => e.start && e.end && !e.free);
   const tags = await tagTitles(timed.map((e) => e.title), household);
   const tagOf = (title: string) => tags.get(tagKey(title))!;
 
-  const busy: BusyEvent[] = [];
-  for (const e of timed) {
-    const tag = tagOf(e.title);
-    // A tag with no one on it (set by hand) takes no one's time.
-    if (!tag.everyone && !tag.unsure && !tag.people.length) continue;
-    busy.push({ title: e.title, start: e.start!, end: e.end!, people: tag.people, everyone: tag.everyone || tag.unsure });
-  }
+  // Every timed, busy event with whose it is. A tag with no one on it (set by hand) takes no one's time.
+  const shown: BusyEvent[] = [
+    ...timed.map((e) => {
+      const tag = tagOf(e.title);
+      return { title: e.title, start: e.start!, end: e.end!, people: tag.people, everyone: tag.everyone || tag.unsure };
+    }),
+    ...ownerEvents.filter((e) => e.start && e.end && !e.free).map((e) => ({ title: e.title, start: e.start!, end: e.end!, people: [owner!.id], everyone: false })),
+  ];
+  const busy = shown.filter((e) => e.everyone || e.people.length);
+  const travelMinutes = input.travelMinutes ?? household.travelMinutes;
 
   // "After 6" moves only the start; past the usual end, the evening runs to 10 (and "before 7 AM" from 6).
   const hoursStart = input.hoursStart ?? (input.hoursEnd && input.hoursEnd <= household.hoursStart ? '06:00' : household.hoursStart);
@@ -83,9 +105,10 @@ export async function runFindTime(input: FindTimeInput) {
       hoursStart,
       hoursEnd,
       days: input.days ?? WEEKDAYS_ONLY,
+      notBefore: Date.now() + LEAD_MINUTES * 60_000,
     },
     {
-      travelMinutes: household.travelMinutes,
+      travelMinutes,
       schoolStart: household.schoolStart,
       schoolEnd: household.schoolEnd,
       timeZone,
@@ -112,11 +135,13 @@ export async function runFindTime(input: FindTimeInput) {
   }
 
   return {
-    input: { ...input, people },
-    summary: summarize(input, people, household),
+    input: { ...input, people, travelMinutes: input.travelMinutes ?? null },
+    summary: summarize(input, people, household, travelMinutes),
+    /** Each way, as used: the request's, or the household's usual. */
+    travelMinutes,
     options: options.map((o) => ({
       ...describe(o, input, people, household),
-      dayView: dayView(o, all, tagOf, { hoursStart, hoursEnd, timeZone, travelMinutes: household.travelMinutes, durationMinutes: input.durationMinutes, household }),
+      dayView: dayView(o, all, shown, { hoursStart, hoursEnd, timeZone, travelMinutes, durationMinutes: input.durationMinutes, household }),
     })),
     notes,
     calendar: [...seen.values()].map(({ title, tag }) => ({ title, ...tag })),
@@ -141,25 +166,16 @@ const minutesOf = (hhmm: string) => {
 function dayView(
   o: TimeOption,
   all: CalendarEvent[],
-  tagOf: (title: string) => Tag,
+  shown: BusyEvent[],
   s: { hoursStart: string; hoursEnd: string; timeZone: string; travelMinutes: number; durationMinutes: number; household: Household },
 ) {
   const dayStart = zonedInstant(`${o.day}T00:00:00`, s.timeZone);
   const dayEnd = zonedInstant(`${addDays(o.day, 1)}T00:00:00`, s.timeZone);
   const minutesInto = (d: Date) => (d <= dayStart ? 0 : d >= dayEnd ? 24 * 60 : minutesOf(wallTime(d, s.timeZone).slice(11, 16)));
 
-  const events = all
-    .filter((e) => e.start && e.end && !e.free && e.start < dayEnd && e.end > dayStart)
-    .map((e) => {
-      const tag = tagOf(e.title);
-      return {
-        title: e.title,
-        start: minutesInto(e.start!),
-        end: minutesInto(e.end!),
-        everyone: tag.everyone || tag.unsure,
-        people: tag.people,
-      };
-    })
+  const events = shown
+    .filter((e) => e.start < dayEnd && e.end > dayStart)
+    .map((e) => ({ title: e.title, start: minutesInto(e.start), end: minutesInto(e.end), everyone: e.everyone, people: e.people }))
     .sort((a, b) => a.start - b.start || a.end - b.end);
 
   const trip = {
@@ -214,10 +230,10 @@ function duration(minutes: number) {
 
 const names = (list: string[]) => (list.length <= 2 ? list.join(' and ') : `${list.slice(0, -1).join(', ')} and ${list.at(-1)}`);
 
-function summarize(input: FindTimeInput, people: string[], household: Household) {
+function summarize(input: FindTimeInput, people: string[], household: Household, travelMinutes: number) {
   const who = names(people.map((id) => household.people.find((p) => p.id === id)!.name));
   const when = input.from === input.to ? dayLabel(input.from) : `${dayLabel(input.from)} – ${dayLabel(input.to)}`;
-  const travel = household.travelMinutes ? ` · ${household.travelMinutes} min travel each way` : '';
+  const travel = travelMinutes ? ` · ${travelMinutes} min travel each way` : ' · no travel';
   return `${who} · ${when} · about ${duration(input.durationMinutes)}${travel}`;
 }
 

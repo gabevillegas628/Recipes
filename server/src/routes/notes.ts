@@ -3,7 +3,9 @@ import multipart from '@fastify/multipart';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { requireAuth } from '../auth.js';
-import { capture, captureEnabled } from '../capture.js';
+import { capture, captureEnabled, findTimeForReminder } from '../capture.js';
+import { FindTimeError } from '../findTimeService.js';
+import { GoogleApiError, GoogleAuthError } from '../google.js';
 import { prisma } from '../db.js';
 import { ImportError } from '../import/errors.js';
 import { FetchError } from '../import/safeFetch.js';
@@ -101,6 +103,23 @@ export async function noteRoutes(app: FastifyInstance) {
     const parsed = z.object({ ids: z.array(z.string()).min(1).max(1000) }).safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ error: 'Nothing to remove' });
     return { removed: await forgetPastAppointments(parsed.data.ids) };
+  });
+
+  /** Free times to move a missed reminder to. `today` is the phone's date. */
+  app.post('/api/notes/:id/find-time', async (request, reply) => {
+    const { id } = idParams.parse(request.params);
+    const parsed = z.object({ today: z.string().regex(/^\d{4}-\d{2}-\d{2}$/) }).safeParse(request.body);
+    if (!parsed.success) return reply.code(400).send({ error: 'Send today’s date' });
+    const note = await prisma.note.findUnique({ where: { id }, select: { kind: true, title: true, body: true, startsAt: true, endsAt: true } });
+    if (!note || note.kind !== 'REMINDER') return reply.code(404).send({ error: 'Reminder not found' });
+    const me = request.userId ? await prisma.user.findUnique({ where: { id: request.userId }, select: { name: true } }) : null;
+    try {
+      return await findTimeForReminder(note, me?.name ?? null, parsed.data.today);
+    } catch (err) {
+      if (err instanceof FindTimeError) return reply.code(422).send({ error: err.message });
+      if (err instanceof GoogleAuthError || err instanceof GoogleApiError) return reply.code(502).send({ error: err.message });
+      throw err;
+    }
   });
 
   app.delete('/api/notes/:id', async (request, reply) => {

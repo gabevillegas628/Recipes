@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useSearchParams } from 'react-router-dom';
 import { api } from '../api';
-import { dayLabel, dayOf, isOverdue, localDate, reminderDue, repeatLabel } from '../notes';
+import { dayLabel, dayOf, isOverdue, localDate, movedToDay, reminderDue, repeatLabel } from '../notes';
 import type { Note, TodayCalendar, User } from '../types';
 
 type CalendarEvent = TodayCalendar['events'][number];
@@ -15,8 +15,9 @@ const DAYS_AHEAD = 7;
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 
 /**
- * Home: the whole family calendar for today and the week ahead, reminders that
- * are due, and at-a-glance cards for this week's meals and the grocery list.
+ * Home: reminders that were missed, at the top so they get dealt with; the whole
+ * family calendar for today and the week ahead, reminders that are due, and
+ * at-a-glance cards for this week's meals and the grocery list.
  * Tapping the date looks at any other day instead (?date=YYYY-MM-DD).
  */
 export function TodayPage({ user }: { user: User }) {
@@ -67,14 +68,20 @@ export function TodayPage({ user }: { user: User }) {
     }
   }
   // Reminders to tick off only belong on today's view; another day shows them as they were on the calendar.
+  const missed: Note[] = [];
   for (const n of picked ? [] : (notes.data ?? [])) {
     if (n.kind !== 'REMINDER' || !n.startsAt) continue;
+    if (isOverdue(n)) {
+      missed.push(n);
+      continue;
+    }
     const due = n.recurrence ? reminderDue(n) : n.doneAt ? null : dayOf(n.startsAt, n.allDay);
     if (!due) continue;
     const sort = n.allDay ? '' : new Date(n.startsAt).toTimeString().slice(0, 5);
     add(due < today ? today : due, { type: 'reminder', note: n, sort });
   }
   for (const items of byDay.values()) items.sort((a, b) => a.sort.localeCompare(b.sort));
+  missed.sort((a, b) => a.startsAt!.localeCompare(b.startsAt!));
 
   const todayItems = byDay.get(base) ?? [];
   const upcoming = days.slice(1).filter((d) => byDay.get(d)!.length);
@@ -125,6 +132,22 @@ export function TodayPage({ user }: { user: User }) {
         </div>
       )}
       {calendar.error && <p className="error">Couldn’t load the calendar: {calendar.error.message}</p>}
+
+      {missed.length > 0 && (
+        <section className="missed">
+          <h2 className="notes-section-title">Missed</h2>
+          <ul className="agenda-list">
+            {missed.map((n) => (
+              <MissedRow
+                key={n.id}
+                note={n}
+                tomorrow={localDate(new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1))}
+                onToggle={() => toggle.mutate(n)}
+              />
+            ))}
+          </ul>
+        </section>
+      )}
 
       <section className="agenda">
         {todayItems.length ? (
@@ -203,6 +226,37 @@ function dateOf(day: string) {
 
 const clock = (iso: string) => new Date(iso).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
 
+/** A reminder whose time has passed: tick it off, move it to tomorrow, or find it a new free time. */
+function MissedRow({ note: n, tomorrow, onToggle }: { note: Note; tomorrow: string; onToggle: () => void }) {
+  const queryClient = useQueryClient();
+  const move = useMutation({
+    mutationFn: () => api.updateNote(n.id, movedToDay(n, tomorrow)),
+    onSettled: () => queryClient.invalidateQueries({ queryKey: ['notes'] }),
+  });
+  const day = dayOf(n.startsAt!, n.allDay);
+  return (
+    <li className="agenda-row missed-row">
+      <span className="agenda-time">{n.allDay ? 'Due' : clock(n.startsAt!)}</span>
+      <button type="button" className="check-circle" aria-label="Mark done" onClick={onToggle} />
+      <div className="agenda-body">
+        <Link to={`/n/${n.id}`} className="agenda-title">
+          {n.title}
+        </Link>
+        <span className="agenda-meta overdue">{day === localDate(new Date()) ? 'Earlier today' : `Since ${dayLabel(day).replace('Yesterday', 'yesterday')}`}</span>
+        <span className="missed-actions">
+          <button type="button" className="btn btn-small" disabled={move.isPending} onClick={() => move.mutate()}>
+            Tomorrow
+          </button>
+          <Link to={`/n/${n.id}/time`} className="btn btn-small">
+            Another time
+          </Link>
+        </span>
+        {move.error && <span className="error">{move.error.message}</span>}
+      </div>
+    </li>
+  );
+}
+
 function AgendaRow({
   item,
   now,
@@ -225,7 +279,7 @@ function AgendaRow({
         <Link to={`/n/${n.id}`} className="agenda-body">
           <span className="agenda-title">{n.title}</span>
           <span className={`agenda-meta ${overdue ? 'overdue' : ''}`}>
-            {overdue ? `Overdue since ${dayLabel(dayOf(n.startsAt!, n.allDay))}` : 'Reminder'}
+            {overdue ? `Overdue since ${dayLabel(dayOf(n.startsAt!, n.allDay))}` : n.endsAt ? `Reminder · until ${clock(n.endsAt)}` : 'Reminder'}
             {repeats ? ` · ↻ ${repeats}` : ''}
           </span>
         </Link>

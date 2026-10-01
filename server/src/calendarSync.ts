@@ -226,8 +226,9 @@ export function toEvent(note: Note, t: Pick<Target, 'appUrl' | 'timeZone' | 'rem
     // Reminders alert when they're due (for the connected account; Google keeps alerts per person).
     // Appointments use each person's own defaults for the calendar.
     reminders: reminder ? { useDefault: false, overrides: [{ method: 'popup', minutes: 0 }] } : { useDefault: true },
-    // Reminders show as free time, in their own color if one is set.
-    ...(reminder ? { transparency: 'transparent' } : {}),
+    // Reminders show as free time, in their own color if one is set; one with an end is a
+    // block of time set aside for the task, so it shows busy.
+    ...(reminder && !note.endsAt ? { transparency: 'transparent' } : {}),
     ...(reminder && t.remindersColor ? { colorId: t.remindersColor } : {}),
     extendedProperties: { private: { noteId: note.id } },
   };

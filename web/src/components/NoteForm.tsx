@@ -73,6 +73,14 @@ export function NoteForm({
               <input type="time" value={v.time} onChange={(e) => set('time', e.target.value)} disabled={!v.date} />
             </label>
           </div>
+          {v.kind === 'REMINDER' && v.time && (
+            <div className="field-row field-row-2">
+              <label className="field">
+                <span>Until</span>
+                <input type="time" value={v.endTime} min={v.time} onChange={(e) => set('endTime', e.target.value)} />
+              </label>
+            </div>
+          )}
           {v.kind === 'APPOINTMENT' && (
             <div className="field-row field-row-2">
               <label className="field">
@@ -92,7 +100,11 @@ export function NoteForm({
             </div>
           )}
           <small className="muted field-hint">
-            {v.kind === 'APPOINTMENT' ? 'Leave the time empty for all day.' : 'Leave empty for no due date.'}
+            {v.kind === 'APPOINTMENT'
+              ? 'Leave the time empty for all day.'
+              : v.time
+                ? 'With an end, the time is blocked on your calendar for doing it.'
+                : 'Leave empty for no due date.'}
           </small>
           {v.date && <RepeatFields date={v.date} value={v.repeat} onChange={(repeat) => set('repeat', repeat)} />}
         </>

@@ -10,6 +10,7 @@ import { MealEditPage } from './pages/MealEditPage';
 import { MealPage } from './pages/MealPage';
 import { MealsPage } from './pages/MealsPage';
 import { NotePage } from './pages/NotePage';
+import { ReminderTimePage } from './pages/ReminderTimePage';
 import { NotesPage } from './pages/NotesPage';
 import { PrepPage } from './pages/PrepPage';
 import { WeekPage } from './pages/WeekPage';
@@ -48,6 +49,7 @@ export function App() {
         <Route path="add" element={<CapturePage />} />
         <Route path="notes" element={<NotesPage />} />
         <Route path="n/:id" element={<NotePage />} />
+        <Route path="n/:id/time" element={<ReminderTimePage />} />
         <Route path="import" element={<ImportPage />} />
         <Route path="import/bulk" element={<BulkImportPage />} />
         <Route path="r/:id" element={<RecipeDetailPage />} />

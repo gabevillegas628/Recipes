@@ -219,7 +219,7 @@ export interface NoteDraft {
 }
 
 export type CaptureResult =
-  | { kind: 'note'; note: NoteDraft }
+  | { kind: 'note'; note: NoteDraft; slot?: TaskSlot }
   | { kind: 'recipe'; recipe: ImportResult }
   | { kind: 'groceries'; items: string[] }
   | { kind: 'findTime'; find: FindTimeResult };
@@ -281,6 +281,19 @@ export interface FindTimeInput {
   hoursStart: string | null;
   hoursEnd: string | null;
   days: string[] | null;
+  /** Each way; null for the household's usual. */
+  travelMinutes?: number | null;
+}
+
+/** How the app picked a task's time, for the check screen. */
+export interface TaskSlot {
+  /** What was looked at, or why nothing could be. */
+  summary: string;
+  /** The search, for "Pick another time"; null when it couldn't run. */
+  input: FindTimeInput | null;
+  notes: string[];
+  /** The booked time's day, for the timeline, and who's who in it. */
+  day: { view: FindTimeDayView; people: FindTimeResult['people'] } | null;
 }
 
 export interface FindTimeOption {
@@ -318,6 +331,8 @@ export interface EventTagInfo {
 export interface FindTimeResult {
   input: FindTimeInput;
   summary: string;
+  /** Each way, as used. */
+  travelMinutes: number;
   options: FindTimeOption[];
   notes: string[];
   calendar: EventTagInfo[];

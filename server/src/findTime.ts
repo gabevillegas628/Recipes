@@ -42,6 +42,8 @@ export interface FindRequest {
   hoursStart: string;
   hoursEnd: string;
   days: Weekday[];
+  /** No trip may start before this instant (ms): now, so nothing is offered in the past. */
+  notBefore?: number;
 }
 
 export interface FindSettings {
@@ -108,6 +110,7 @@ export function findTimes(people: Person[], events: BusyEvent[], req: FindReques
     for (let start = open; start + duration <= close; start += STEP_MINUTES * MINUTE) {
       const tripStart = start - travel;
       const tripEnd = start + duration + travel;
+      if (req.notBefore !== undefined && tripStart < req.notBefore) continue;
       const inTrip = events.filter((e) => overlaps(e, tripStart, tripEnd));
       const busy = (id: string) => inTrip.find((e) => involves(e, id));
 

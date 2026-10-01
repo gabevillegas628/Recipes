@@ -150,6 +150,8 @@ export const api = {
   saveHousehold: (input: Omit<Household, 'people'> & { people: HouseholdPerson[] }) =>
     request<Household>('/api/household', json('PUT', input)),
   findTime: (input: FindTimeInput) => request<FindTimeResult>('/api/find-time', json('POST', input)),
+  /** Free times to move a missed reminder to. */
+  findTimeForReminder: (id: string, today: string) => request<FindTimeResult>(`/api/notes/${id}/find-time`, json('POST', { today })),
   setEventTag: (title: string, people: string[], everyone: boolean) =>
     request<{ ok: true }>('/api/event-tags', json('PUT', { title, people, everyone })),
 

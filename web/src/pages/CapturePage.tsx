@@ -2,11 +2,12 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState, type FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { api } from '../api';
+import { FindTimeDay } from '../components/FindTimeDay';
 import { FindTimeResults } from '../components/FindTimeResults';
 import { NoteForm } from '../components/NoteForm';
-import { inputFromValues, nowInWords, valuesFromDraft, type NoteValues } from '../notes';
+import { dayLabel, inputFromValues, nowInWords, valuesFromDraft, type NoteValues } from '../notes';
 import { shrinkPhoto } from '../photos';
-import type { FindTimeResult, NoteDraft } from '../types';
+import type { FindTimeResult, NoteDraft, TaskSlot } from '../types';
 import { extractUrl, PhotoPicker } from './ImportPage';
 
 /**
@@ -24,6 +25,9 @@ export function CapturePage() {
   const [draft, setDraft] = useState<NoteDraft | null>(null);
   const [groceries, setGroceries] = useState<string | null>(null);
   const [found, setFound] = useState<FindTimeResult | null>(null);
+  // A task's auto-picked time, and other times for it when asked.
+  const [slot, setSlot] = useState<TaskSlot | null>(null);
+  const [otherTimes, setOtherTimes] = useState<FindTimeResult | null>(null);
 
   const config = useQuery({ queryKey: ['capture-config'], queryFn: api.captureConfig });
 
@@ -34,9 +38,14 @@ export function CapturePage() {
       if (result.kind === 'recipe') navigate('/import', { state: { result: result.recipe } });
       else if (result.kind === 'groceries') setGroceries(result.items.join('\n'));
       else if (result.kind === 'findTime') setFound(result.find);
-      else setDraft(result.note);
+      else {
+        setDraft(result.note);
+        setSlot(result.slot ?? null);
+      }
     },
   });
+
+  const pickAnother = useMutation({ mutationFn: api.findTime, onSuccess: setOtherTimes });
 
   const save = useMutation({
     mutationFn: (values: NoteValues) =>
@@ -59,6 +68,9 @@ export function CapturePage() {
     setDraft(null);
     setGroceries(null);
     setFound(null);
+    setSlot(null);
+    setOtherTimes(null);
+    pickAnother.reset();
     sort.reset();
     save.reset();
     addGroceries.reset();
@@ -75,11 +87,57 @@ export function CapturePage() {
     sort.mutate();
   }
 
+  if (draft && otherTimes) {
+    return (
+      <FindTimeResults
+        result={otherTimes}
+        hint="Tap one to use it instead. You can change the time before saving."
+        onCancel={() => setOtherTimes(null)}
+        onPick={(option) => {
+          // The whole trip is the task's time: travel there, doing it, travel back.
+          const { start, end } = option.dayView.trip;
+          setDraft({ ...draft, date: option.draft.date, time: hhmm(start), endTime: hhmm(Math.min(end, 24 * 60 - 1)), endDate: null });
+          if (slot) setSlot({ ...slot, day: { view: option.dayView, people: otherTimes.people } });
+          setOtherTimes(null);
+        }}
+      />
+    );
+  }
+
   if (draft) {
     return (
       <div className="page">
         <h1 className="form-title">Check and save</h1>
+        {slot && draft.kind === 'REMINDER' && (
+          <div className="slot-banner">
+            {draft.time ? (
+              <p className="slot-picked">
+                Booked a free time: {dayLabel(draft.date!)}, {clock(draft.time)}
+                {draft.endTime ? `–${clock(draft.endTime)}` : ''}
+              </p>
+            ) : (
+              <p className="slot-picked">No free time found.</p>
+            )}
+            {slot.day && draft.time && (
+              <FindTimeDay view={slot.day.view} title={draft.title} who={slot.input?.people ?? []} people={slot.day.people} />
+            )}
+            <p className="muted small">{slot.summary}</p>
+            {slot.notes.map((n) => (
+              <p key={n} className="muted small">
+                {n}
+              </p>
+            ))}
+            {slot.input && (
+              <button type="button" className="btn btn-small" disabled={pickAnother.isPending} onClick={() => pickAnother.mutate(slot.input!)}>
+                {pickAnother.isPending ? 'Looking…' : 'Pick another time'}
+              </button>
+            )}
+            {pickAnother.error && <p className="error">{pickAnother.error.message}</p>}
+          </div>
+        )}
         <NoteForm
+          // A new time picked: start the form over from it.
+          key={`${draft.date}-${draft.time}-${draft.endTime}`}
           initial={valuesFromDraft(draft)}
           image={draft.uploadedImage}
           saving={save.isPending}
@@ -224,4 +282,12 @@ export function CapturePage() {
       </div>
     </div>
   );
+}
+
+const hhmm = (minutes: number) => `${String(Math.floor(minutes / 60)).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}`;
+
+/** "14:30" as "2:30 PM". */
+function clock(time: string) {
+  const [h, m] = time.split(':').map(Number);
+  return `${((h + 11) % 12) + 1}:${String(m).padStart(2, '0')} ${h < 12 ? 'AM' : 'PM'}`;
 }

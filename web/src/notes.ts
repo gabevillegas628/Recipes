@@ -224,9 +224,23 @@ export function valuesFromNote(n: Note): NoteValues {
 const allDayIso = (date: string) => `${date}T12:00:00.000Z`;
 const localIso = (date: string, time: string) => new Date(`${date}T${time}`).toISOString();
 
+/** A one-off reminder moved to another day, keeping its time of day (and how long its block is). */
+export function movedToDay(n: Note, day: string): Pick<NoteInput, 'startsAt' | 'endsAt'> {
+  if (n.allDay) return { startsAt: allDayIso(day), endsAt: null };
+  const startsAt = localIso(day, localTime(new Date(n.startsAt!)));
+  const length = n.endsAt ? new Date(n.endsAt).getTime() - new Date(n.startsAt!).getTime() : null;
+  return { startsAt, endsAt: length !== null ? new Date(new Date(startsAt).getTime() + length).toISOString() : null };
+}
+
+/** A reminder set to a time block on a day; times are minutes since midnight. */
+export function blockOn(day: string, start: number, end: number): Pick<NoteInput, 'startsAt' | 'endsAt' | 'allDay'> {
+  const t = (m: number) => `${pad(Math.floor(m / 60))}:${pad(m % 60)}`;
+  return { startsAt: localIso(day, t(start)), endsAt: localIso(day, t(Math.min(end, 24 * 60 - 1))), allDay: false };
+}
+
 /**
  * No start time means all day. An end needs an end time, or a later end date for
- * all-day ones. A repeating item starts on its first occurrence, so "every
+ * all-day ones; a reminder's end is a time later the same day. A repeating item starts on its first occurrence, so "every
  * Thursday" dated a Monday moves to that Thursday (and its end with it).
  */
 export function inputFromValues(v: NoteValues): NoteInput {
@@ -248,6 +262,9 @@ export function inputFromValues(v: NoteValues): NoteInput {
     if (v.kind === 'APPOINTMENT') {
       if (allDay) endsAt = endDate && endDate > date ? allDayIso(endDate) : null;
       else if (v.endTime) endsAt = localIso(endDate || date, v.endTime);
+    } else if (!allDay && v.endTime > v.time) {
+      // A reminder's end makes it a block of time on its day.
+      endsAt = localIso(date, v.endTime);
     }
   }
   return {

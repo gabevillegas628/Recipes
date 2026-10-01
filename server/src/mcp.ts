@@ -466,7 +466,10 @@ export function buildMcpServer(baseUrl: string) {
         title: z.string().describe('Short, scannable title, e.g. "Dentist: Maya"'),
         details: z.string().nullish().describe('Anything else worth keeping: what to bring, phone numbers, links'),
         startsAt: when.describe('When the appointment starts or the reminder is due. ' + when.description),
-        endsAt: when.describe('Appointments only: when it ends, if known. ' + when.description),
+        endsAt: when.describe(
+          "When an appointment ends, if known. For a reminder, a time later the same day makes it a block set aside for doing the task, shown busy on the calendar. " +
+            when.description,
+        ),
         location: z.string().nullish().describe('Appointments only: the place or address'),
         repeats,
       },
