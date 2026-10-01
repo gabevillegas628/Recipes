@@ -7,7 +7,7 @@ import { extractFromUrl } from './import/extract.js';
 import { FetchError } from './import/safeFetch.js';
 import { draftToInput, findExistingRecipe } from './import/worker.js';
 import { addMealToPlan, createMeal, getMeal, listMeals } from './meals.js';
-import { allDayInstant, createNote, listNotes, NOTE_KINDS, NoteError, updateNote } from './notes.js';
+import { allDayInstant, createNote, deleteNote, listNotes, NOTE_KINDS, NoteError, updateNote } from './notes.js';
 import { describeRule, nextOccurrence, parseRule } from './recurrence.js';
 import { addGroceries, addToPlan, getGroceries, getPlan } from './plan.js';
 import { recipeInput } from './recipeInput.js';
@@ -564,6 +564,22 @@ export function buildMcpServer(baseUrl: string) {
         if (err instanceof NoteError) return toolError(err.message);
         throw err;
       }
+    },
+  );
+
+  server.registerTool(
+    'delete_note',
+    {
+      title: 'Delete a note, reminder or appointment',
+      description:
+        "Permanently delete a saved item (find its id with list_notes), for both people; it can't be undone. Its Google Calendar event is removed too, and for a repeating item that's every occurrence. To tick off a reminder that's done, use update_note with done: true instead.",
+      inputSchema: { id: z.string() },
+      annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true },
+    },
+    async ({ id }) => {
+      const note = await prisma.note.findUnique({ where: { id }, select: { title: true, kind: true } });
+      if (!note || !(await deleteNote(id))) return toolError(`No note with id ${id}`);
+      return text({ deleted: true, id, ...note });
     },
   );
 
