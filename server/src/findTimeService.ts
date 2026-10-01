@@ -1,10 +1,10 @@
 import { z } from 'zod';
 import { tagKey, tagTitles, type Tag } from './eventTags.js';
 import { findTimes, type BusyEvent, type TimeOption } from './findTime.js';
-import { calendarTimeZone, getConnection, listEvents } from './google.js';
+import { calendarTimeZone, getConnection, listEvents, type CalendarEvent } from './google.js';
 import { getHousehold, type Household } from './household.js';
-import { addDays, WEEKDAYS } from './recurrence.js';
-import { zonedInstant } from './zone.js';
+import { addDays, weekdayOf, WEEKDAYS } from './recurrence.js';
+import { wallTime, zonedInstant } from './zone.js';
 
 /**
  * "Find a time": reads the family calendar for the dates asked about, works out
@@ -69,6 +69,9 @@ export async function runFindTime(input: FindTimeInput) {
     busy.push({ title: e.title, start: e.start!, end: e.end!, people: tag.people, everyone: tag.everyone || tag.unsure });
   }
 
+  // "After 6" moves only the start; past the usual end, the evening runs to 10 (and "before 7 AM" from 6).
+  const hoursStart = input.hoursStart ?? (input.hoursEnd && input.hoursEnd <= household.hoursStart ? '06:00' : household.hoursStart);
+  const hoursEnd = input.hoursEnd ?? (input.hoursStart && input.hoursStart >= household.hoursEnd ? '22:00' : household.hoursEnd);
   const options = findTimes(
     household.people,
     busy,
@@ -77,9 +80,8 @@ export async function runFindTime(input: FindTimeInput) {
       to: input.to,
       durationMinutes: input.durationMinutes,
       people,
-      // "After 6" moves only the start; past the usual end, the evening runs to 10 (and "before 7 AM" from 6).
-      hoursStart: input.hoursStart ?? (input.hoursEnd && input.hoursEnd <= household.hoursStart ? '06:00' : household.hoursStart),
-      hoursEnd: input.hoursEnd ?? (input.hoursStart && input.hoursStart >= household.hoursEnd ? '22:00' : household.hoursEnd),
+      hoursStart,
+      hoursEnd,
       days: input.days ?? WEEKDAYS_ONLY,
     },
     {
@@ -112,7 +114,10 @@ export async function runFindTime(input: FindTimeInput) {
   return {
     input: { ...input, people },
     summary: summarize(input, people, household),
-    options: options.map((o) => describe(o, input, people, household)),
+    options: options.map((o) => ({
+      ...describe(o, input, people, household),
+      dayView: dayView(o, all, tagOf, { hoursStart, hoursEnd, timeZone, travelMinutes: household.travelMinutes, durationMinutes: input.durationMinutes, household }),
+    })),
     notes,
     calendar: [...seen.values()].map(({ title, tag }) => ({ title, ...tag })),
     people: household.people.map(({ id, name, adult }) => ({ id, name, adult })),
@@ -120,6 +125,69 @@ export async function runFindTime(input: FindTimeInput) {
 }
 
 export type FindTimeResult = Awaited<ReturnType<typeof runFindTime>>;
+
+// ---------- The day, for a glance ----------
+
+const minutesOf = (hhmm: string) => {
+  const [h, m] = hhmm.split(':').map(Number);
+  return h * 60 + m;
+};
+
+/**
+ * One option's day, for the little timeline under it: the hours to draw, each
+ * timed event as minutes since midnight with whose lanes it fills, the trip
+ * (travel, then the visit, then travel) at the earliest start, and school.
+ */
+function dayView(
+  o: TimeOption,
+  all: CalendarEvent[],
+  tagOf: (title: string) => Tag,
+  s: { hoursStart: string; hoursEnd: string; timeZone: string; travelMinutes: number; durationMinutes: number; household: Household },
+) {
+  const dayStart = zonedInstant(`${o.day}T00:00:00`, s.timeZone);
+  const dayEnd = zonedInstant(`${addDays(o.day, 1)}T00:00:00`, s.timeZone);
+  const minutesInto = (d: Date) => (d <= dayStart ? 0 : d >= dayEnd ? 24 * 60 : minutesOf(wallTime(d, s.timeZone).slice(11, 16)));
+
+  const events = all
+    .filter((e) => e.start && e.end && !e.free && e.start < dayEnd && e.end > dayStart)
+    .map((e) => {
+      const tag = tagOf(e.title);
+      return {
+        title: e.title,
+        start: minutesInto(e.start!),
+        end: minutesInto(e.end!),
+        everyone: tag.everyone || tag.unsure,
+        people: tag.people,
+      };
+    })
+    .sort((a, b) => a.start - b.start || a.end - b.end);
+
+  const trip = {
+    start: minutesOf(o.firstStart) - s.travelMinutes,
+    visitStart: minutesOf(o.firstStart),
+    visitEnd: minutesOf(o.firstStart) + s.durationMinutes,
+    end: minutesOf(o.firstStart) + s.durationMinutes + s.travelMinutes,
+    /** Latest start in the window, when there's a range. */
+    lastStart: minutesOf(o.lastStart),
+  };
+  const school =
+    s.household.schoolStart && s.household.schoolEnd && WEEKDAYS_ONLY.includes(weekdayOf(o.day))
+      ? { start: minutesOf(s.household.schoolStart), end: minutesOf(s.household.schoolEnd) }
+      : null;
+
+  // The usual hours, widened to whole hours that take in the trip.
+  const from = Math.max(0, Math.floor(Math.min(minutesOf(s.hoursStart), trip.start) / 60) * 60);
+  const to = Math.min(24 * 60, Math.ceil(Math.max(minutesOf(s.hoursEnd), trip.end + trip.lastStart - trip.visitStart) / 60) * 60);
+
+  return {
+    from,
+    to,
+    events,
+    allDay: all.filter((e) => e.allDayDate && e.allDayDate <= o.day && o.day < (e.allDayEnd ?? addDays(e.allDayDate, 1))).map((e) => e.title),
+    trip,
+    school,
+  };
+}
 
 // ---------- Words ----------
 

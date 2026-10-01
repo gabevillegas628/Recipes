@@ -5,6 +5,7 @@ import { env } from './env.js';
 import { saveImage } from './images.js';
 import type { RecipeDraft, ImportMethod } from './import/draft.js';
 import { ImportError } from './import/errors.js';
+import { writeRecipe } from './import/ai.js';
 import { extractFromPhotos, extractFromText, extractFromUrl, preparePhotos } from './import/extract.js';
 import { FetchError } from './import/safeFetch.js';
 import { FindTimeError, runFindTime, type FindTimeResult } from './findTimeService.js';
@@ -15,9 +16,10 @@ import { firstOccurrence, formatRule, nextOccurrence, WEEKDAYS, type Rule } from
 /**
  * "Capture": something typed, dictated, pasted or photographed, sorted by Claude
  * into a note, reminder, appointment, recipe or grocery list, or a request to
- * find a time for something. Nothing is saved here; the app shows the result for
- * a quick check first. Recipes and grocery lists hand off to the existing recipe
- * import and grocery list; finding a time runs findTimeService.ts.
+ * find a time for something or to write a recipe. Nothing is saved here; the app
+ * shows the result for a quick check first. Recipes (found or written) and grocery
+ * lists hand off to the existing recipe review and grocery list; finding a time
+ * runs findTimeService.ts.
  */
 
 const client = env.anthropicApiKey ? new Anthropic({ apiKey: env.anthropicApiKey }) : null;
@@ -27,7 +29,7 @@ const TIME = /^([01]\d|2[0-3]):[0-5]\d$/;
 
 const classification = z.object({
   today: z.string().describe("Today's date, YYYY-MM-DD, from the current date given"),
-  kind: z.enum(['note', 'reminder', 'appointment', 'recipe', 'groceries', 'findTime']),
+  kind: z.enum(['note', 'reminder', 'appointment', 'recipe', 'writeRecipe', 'groceries', 'findTime']),
   title: z.string().describe('Short title, e.g. "Dentist: Maya" or "Call the plumber"'),
   details: z
     .string()
@@ -74,6 +76,7 @@ Decide what it is:
 - reminder: something someone needs to do, with or without a deadline: "remind me to call the plumber", "pay the water bill Friday", "return library books".
 - note: information to keep, not an action or event: gift ideas, a wifi password, sizes, a phone number, a thought.
 - recipe: ingredients or cooking steps for a dish, or a link to a recipe.
+- writeRecipe: asking for a recipe to be written or suggested, with no recipe given: "give me a weeknight chili recipe", "what can I make with chicken thighs and rice", "a gluten-free birthday cake for Saturday". Just naming a dish to remember or try ("try Mom's lasagna sometime") is a note or reminder instead.
 - groceries: a list of things to buy at the store.
 - findTime: asking when something could be scheduled, with no time settled yet: "I need to schedule Evan an eye appointment sometime the week of 11/2", "when could I fit in a haircut next week", "find a night for date night this month". If a time is already set, it's an appointment instead.
 
@@ -82,7 +85,7 @@ Then fill in the fields:
 - details: keep anything useful that isn't in the other fields, such as what to bring, cost, phone numbers, links, or registration deadlines. Keep the person's own wording for dictated notes, minus filler words. Don't repeat the title, date, time or place.
 - date and time: resolve relative dates ("next Tuesday", "the 14th", "tomorrow at 3") against the current date given below. When a flyer gives a month and day with no year, use the next time that date comes up. A reminder gets a date only when one is stated or clearly implied. If only a time is given for a reminder, use today, or tomorrow if that time has passed.
 - repeat: only when it recurs ("every Tuesday", "the first Monday of each month", "every other week", "daily until Friday"). date is then the first occurrence on or after today.
-- For a recipe or a grocery list, only kind and title matter (plus groceryItems for groceries).
+- For a recipe, a recipe to write or a grocery list, only kind and title matter (plus groceryItems for groceries).
 - findTime: title is what the appointment will be called ("Eye appointment: Evan"); details and location as for appointments. In findTime:
   - people: who has to be there, by household name. "Me" or "I" is the person typing; "us" or "we" is the two adults. For a child's appointment, list just the child; the app adds a parent to take them.
   - from and to: the days to look at. "The week of 11/2" is that Monday to the Sunday after; "next week" is next Monday to Sunday; "this month" runs from today; with no dates given, the next two weeks. Never before today.
@@ -170,6 +173,9 @@ export async function capture(text: string, photos: Buffer[], now: string, userN
   if (!result) throw new ImportError("Couldn't make sense of that. Try again, or add a bit more detail.");
 
   if (result.kind === 'recipe') return { kind: 'recipe', recipe: await recipeFrom(text, photos) };
+  if (result.kind === 'writeRecipe' && text) {
+    return { kind: 'recipe', recipe: { draft: await writeRecipe(text), method: 'generated', duplicateOf: null } };
+  }
   if (result.kind === 'findTime' && result.findTime) return { kind: 'findTime', find: await findTimeFrom(result, household) };
   if (result.kind === 'groceries' && result.groceryItems.length > 0) {
     return { kind: 'groceries', items: result.groceryItems.map((s) => s.trim()).filter(Boolean) };

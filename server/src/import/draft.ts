@@ -16,7 +16,8 @@ export interface RecipeDraft {
   tags: string[];
 }
 
-export type ImportMethod = 'jsonld' | 'microdata' | 'ai';
+/** 'generated': written by Claude on request ("a weeknight chili"), not read from anywhere. */
+export type ImportMethod = 'jsonld' | 'microdata' | 'ai' | 'generated';
 
 export function hasContent(draft: RecipeDraft) {
   const count = (sections: Section[]) => sections.reduce((n, s) => n + s.items.length, 0);

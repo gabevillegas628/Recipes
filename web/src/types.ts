@@ -61,7 +61,7 @@ export interface RecipeDraft {
   uploadedImage?: string | null;
 }
 
-export type ImportMethod = 'jsonld' | 'microdata' | 'ai';
+export type ImportMethod = 'jsonld' | 'microdata' | 'ai' | 'generated';
 
 export interface ImportResult {
   draft: RecipeDraft;
@@ -290,6 +290,20 @@ export interface FindTimeOption {
   missesSchool: boolean;
   /** The appointment it becomes. */
   draft: { date: string; time: string; endTime: string; body: string | null };
+  dayView: FindTimeDayView;
+}
+
+/** An option's day, for the timeline. Times are minutes since midnight. */
+export interface FindTimeDayView {
+  /** The hours to draw. */
+  from: number;
+  to: number;
+  /** Timed events that day. No people and not everyone: it takes no one's time. */
+  events: { title: string; start: number; end: number; everyone: boolean; people: string[] }[];
+  allDay: string[];
+  /** Travel there, the visit, travel back, at the earliest start; lastStart is the latest start that works. */
+  trip: { start: number; visitStart: number; visitEnd: number; end: number; lastStart: number };
+  school: { start: number; end: number } | null;
 }
 
 /** Whose an event is, by its title. No people and not everyone (and not unsure): it takes no one's time. */

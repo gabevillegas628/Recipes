@@ -72,6 +72,9 @@ export function ImportPage() {
                   <Link to={`/r/${result.duplicateOf.id}`}>{result.duplicateOf.title}</Link>
                 </div>
               )}
+              {result.method === 'generated' && (
+                <div className="banner">Claude wrote this recipe for you. Look it over and change anything before saving.</div>
+              )}
               {result.method === 'ai' && (
                 <div className="banner">
                   {result.uploadedImage

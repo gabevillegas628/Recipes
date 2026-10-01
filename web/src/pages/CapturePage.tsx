@@ -11,8 +11,8 @@ import { extractUrl, PhotoPicker } from './ImportPage';
 
 /**
  * The Add tab: type, dictate, paste or photograph anything, and AI sorts it into
- * an appointment, reminder, note, recipe or grocery list, or finds a time for
- * something. Notes get a quick check before saving; recipes open in the usual
+ * an appointment, reminder, note, recipe or grocery list, finds a time for
+ * something, or writes a recipe asked for. Notes get a quick check before saving; recipes open in the usual
  * recipe review; grocery lists show the items to add; a time search shows options,
  * and the one picked becomes an appointment to check.
  */
@@ -180,9 +180,9 @@ export function CapturePage() {
         <label className="field">
           <span>Type, dictate or paste</span>
           <small>
-            An appointment, a reminder, a note, a grocery list or a recipe, or ask to find a time
-            (“schedule Evan an eye appointment the week of 11/2”). Tap the mic on your keyboard to
-            dictate.
+            An appointment, a reminder, a note, a grocery list or a recipe. Or ask to find a time
+            (“schedule Evan an eye appointment the week of 11/2”) or for a recipe (“a weeknight
+            chili”). Tap the mic on your keyboard to dictate.
           </small>
           <textarea
             rows={5}

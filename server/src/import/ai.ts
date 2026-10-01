@@ -123,7 +123,45 @@ export async function extractWithAi(
   const result = response.parsed_output;
   if (!result) throw new ImportError("The AI couldn't read a recipe from this page.");
   if (!result.found) throw new NoRecipeFoundError("Couldn't find a recipe on this page.");
+  return draftFrom(result, sourceUrl);
+}
 
+const WRITE_SYSTEM = `You write recipes for a family's personal recipe box, on request: "a weeknight chili", "something with the leftover chicken and rice", "a gluten-free birthday cake".
+
+Write one dependable, well-tested-style recipe a home cook can follow on a phone in the kitchen: common grocery-store ingredients, US measurements, and clear steps, one action each, with temperatures, times and doneness cues. Honor every constraint in the request (ingredients to use up, diet, time, equipment, servings). With no serving count given, make 4 servings. Group ingredients and steps into sections (e.g. "For the sauce") only when the dish has distinct parts. Put useful tips, substitutions or make-ahead and storage notes in notes. Give honest prep and cook times.`;
+
+const written = extraction.omit({ found: true });
+
+/** A new recipe, written by Claude from a request like "a weeknight chili". */
+export async function writeRecipe(request: string): Promise<RecipeDraft> {
+  if (!client) throw new ImportError("Writing recipes needs AI, which isn't set up (no ANTHROPIC_API_KEY).");
+
+  const response = await client.beta.messages.parse({
+    model: env.anthropicModel,
+    max_tokens: 16000,
+    betas: ['server-side-fallback-2026-07-01'],
+    fallbacks: 'default',
+    output_config: { effort: 'low', format: zodOutputFormat(written) },
+    system: WRITE_SYSTEM,
+    messages: [{ role: 'user', content: `<request>\n${request.slice(0, 5000)}\n</request>` }],
+  });
+
+  console.info(
+    JSON.stringify({
+      msg: 'ai recipe written',
+      model: response.model,
+      stopReason: response.stop_reason,
+      inputTokens: response.usage.input_tokens,
+      outputTokens: response.usage.output_tokens,
+    }),
+  );
+
+  if (response.stop_reason === 'refusal') throw new ImportError('The AI declined to write that recipe.');
+  if (!response.parsed_output) throw new ImportError("The AI couldn't write a recipe for that. Try saying it another way.");
+  return draftFrom(response.parsed_output, null);
+}
+
+function draftFrom(result: z.infer<typeof written>, sourceUrl: string | null): RecipeDraft {
   const nonNegative = (n: number | null) => (n != null && n > 0 ? n : null);
   return {
     title: result.title.trim(),

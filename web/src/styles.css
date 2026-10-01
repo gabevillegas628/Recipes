@@ -9,6 +9,8 @@
   /* Text on accent-colored backgrounds. */
   --on-accent: #ffffff;
   --danger: #b3261e;
+  /* Busy time on the find-a-time day view. */
+  --busy: #d8cdbf;
   --radius: 12px;
   --tabbar-h: 64px;
   --safe-bottom: env(safe-area-inset-bottom, 0px);
@@ -26,6 +28,7 @@
     --accent-soft: #3d2a21;
     --on-accent: #ffffff;
     --danger: #f2877f;
+    --busy: #4d463f;
     color-scheme: dark;
   }
 }
@@ -1895,6 +1898,166 @@ html.has-timers .cook {
 .find-reason.warn,
 .tag-who.warn {
   color: var(--danger);
+}
+
+/* Find a time: an option's day at a glance (FindTimeDay.tsx). */
+.day-view {
+  display: block;
+  width: 100%;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+
+.day-allday {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.day-lanes {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  grid-auto-rows: 16px;
+  column-gap: 8px;
+  row-gap: 3px;
+}
+
+.day-lane {
+  display: contents;
+}
+
+.day-name {
+  grid-column: 1;
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--muted);
+}
+
+.day-name.on {
+  color: var(--text);
+  font-weight: 700;
+}
+
+.day-track,
+.day-trip,
+.day-axis {
+  grid-column: 2;
+  position: relative;
+}
+
+.day-track {
+  border-radius: 4px;
+  overflow: hidden;
+  /* A faint line at each hour. */
+  background:
+    repeating-linear-gradient(
+      to right,
+      transparent 0,
+      transparent calc(100% / var(--hours) - 1px),
+      var(--border) calc(100% / var(--hours) - 1px),
+      var(--border) calc(100% / var(--hours))
+    ),
+    var(--bg);
+}
+
+.day-track > span,
+.day-trip > span {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+}
+
+.day-busy {
+  background: var(--busy);
+  border-radius: 3px;
+}
+
+.day-school {
+  background: repeating-linear-gradient(135deg, var(--busy) 0 3px, transparent 3px 7px);
+}
+
+.day-trip {
+  pointer-events: none;
+  margin: -2px 0;
+}
+
+.day-visit {
+  background: var(--accent);
+  opacity: 0.7;
+  border-radius: 3px;
+}
+
+.day-travel {
+  background: var(--accent-soft);
+  border: 1px solid var(--accent);
+  border-radius: 3px;
+  opacity: 0.6;
+}
+
+.day-window {
+  border: 1px dashed var(--accent);
+  border-radius: 4px;
+}
+
+.day-axis {
+  height: 14px;
+  font-size: 10px;
+  line-height: 14px;
+  color: var(--muted);
+}
+
+.day-axis > span {
+  position: absolute;
+  transform: translateX(-50%);
+}
+
+.day-axis > span:first-child {
+  transform: none;
+}
+
+.day-axis > span:last-child {
+  transform: translateX(-100%);
+}
+
+.day-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 8px;
+  font-size: 13px;
+}
+
+.day-row {
+  display: grid;
+  grid-template-columns: 7.5em minmax(0, 1fr);
+  gap: 8px;
+  color: var(--muted);
+}
+
+.day-row.mine {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.day-time {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.day-what {
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.day-row.mine .day-what {
+  color: var(--accent);
+}
+
+.day-who {
+  color: var(--muted);
+  font-weight: 400;
 }
 
 .find-notes {

@@ -1,10 +1,12 @@
 import { useMutation } from '@tanstack/react-query';
 import { useState } from 'react';
 import { api } from '../api';
+import { FindTimeDay } from './FindTimeDay';
 import type { EventTagInfo, FindTimeOption, FindTimeResult } from '../types';
 
 /**
- * "Find a time" results: the best few windows, with plain reasons. Tapping one
+ * "Find a time" results: the best few windows, with plain reasons and a glance
+ * at each one's day (FindTimeDay). Tapping one
  * turns it into an appointment to check and save. Below, whose each calendar
  * event was taken to be, which can be corrected (and the search runs again).
  */
@@ -44,6 +46,7 @@ export function FindTimeResults({
                     {r}
                   </span>
                 ))}
+                <FindTimeDay view={o.dayView} title={result.input.title} who={result.input.people} people={result.people} />
               </button>
             </li>
           ))}
