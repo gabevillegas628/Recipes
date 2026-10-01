@@ -572,7 +572,7 @@ export function buildMcpServer(baseUrl: string) {
     {
       title: 'Delete a note, reminder or appointment',
       description:
-        "Permanently delete a saved item (find its id with list_notes), for both people; it can't be undone. Its Google Calendar event is removed too, and for a repeating item that's every occurrence. To tick off a reminder that's done, use update_note with done: true instead.",
+        "Delete a saved note, reminder or appointment (find its id with list_notes). Use it when the user asks to delete or remove an item; that request is all it needs. The item goes for both people, along with its Google Calendar event (every occurrence, if it repeats), so when the request could match more than one item, check which one first. For a reminder that's been done, prefer update_note with done: true unless they ask for it gone.",
       inputSchema: { id: z.string() },
       annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true },
     },
