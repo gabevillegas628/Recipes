@@ -118,6 +118,7 @@ export function CapturePage() {
             ) : (
               <p className="slot-picked">No free time found.</p>
             )}
+            {slot.why && <p className="slot-why">{slot.why}</p>}
             {slot.day && draft.time && (
               <FindTimeDay view={slot.day.view} title={draft.title} who={slot.input?.people ?? []} people={slot.day.people} />
             )}

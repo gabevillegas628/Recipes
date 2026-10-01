@@ -1936,6 +1936,10 @@ html.has-timers .cook {
   font-weight: 600;
 }
 
+.slot-why {
+  font-size: 14px;
+}
+
 /* Find a time: an option's day at a glance (FindTimeDay.tsx). */
 .day-view {
   display: block;
@@ -2094,6 +2098,12 @@ html.has-timers .cook {
 .day-who {
   color: var(--muted);
   font-weight: 400;
+}
+
+.find-shift {
+  display: flex;
+  justify-content: space-between;
+  margin: 8px 0;
 }
 
 .find-notes {

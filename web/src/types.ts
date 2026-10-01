@@ -292,6 +292,8 @@ export interface TaskSlot {
   /** The search, for "Pick another time"; null when it couldn't run. */
   input: FindTimeInput | null;
   notes: string[];
+  /** With a deadline: when it's due and why this time ("By Mon, Mar 15, 2027. Contractors book up…"). */
+  why: string | null;
   /** The booked time's day, for the timeline, and who's who in it. */
   day: { view: FindTimeDayView; people: FindTimeResult['people'] } | null;
 }

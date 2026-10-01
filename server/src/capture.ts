@@ -73,8 +73,11 @@ const classification = z.object({
     .object({
       durationMinutes: z.number().int().describe('How long doing it takes'),
       travelMinutes: z.number().int().describe('Each way, to wherever it gets done. 0 for calls, online and at home'),
-      from: z.string().describe('YYYY-MM-DD, first day it could be done'),
-      to: z.string().describe('YYYY-MM-DD, last day to look at'),
+      deadline: z.string().nullable().describe('YYYY-MM-DD it has to be done by, or the date it leads up to, if stated'),
+      startBy: z.string().nullable().describe('With a deadline: YYYY-MM-DD to get started, working back from it by the lead time'),
+      why: z.string().nullable().describe('With a deadline: one short sentence on the timing, for the person'),
+      from: z.string().describe('YYYY-MM-DD, first day it could be done (no deadline)'),
+      to: z.string().describe('YYYY-MM-DD, last day to look at (no deadline)'),
       earliest: z.string().nullable().describe('HH:MM, only when it has to happen within certain hours'),
       latest: z.string().nullable().describe('HH:MM, only when it has to happen within certain hours'),
     })
@@ -102,7 +105,8 @@ Then fill in the fields:
   - Something to do that takes a bit of time, with no time of day stated ("I need to call the insurance company", "renew the passport by March 1", "pay the water bill Friday", "drop the library books off"): fill in task and leave date and time null; the app books a free slot on the person's calendar.
     - durationMinutes: realistic time to do it: a call to an office 30 (they put you on hold), paying a bill online 10, an errand 20 plus travel, a form 30.
     - travelMinutes: each way to where it's done: 0 for calls, online and at home; around 15 for an errand in town.
-    - from and to: the days it could be done. A day stated ("Friday") is that day. With a deadline, end early enough for the lead time the task needs (a passport takes weeks to process, mail takes days), and keep the deadline in details. With no timeframe, today through two days from today. At most two weeks apart; never before today.
+    - A deadline, or a date it leads up to ("renew the passport by March 1", "hire a contractor for a renovation starting March 15"): the point of the reminder is to start at the right time, not now. deadline is that date. startBy is when to get started: the deadline minus the realistic lead time, plus some slack. Contractors book up two to three months ahead and need time for quotes; a passport takes six to eight weeks; booking a popular venue months; mail a few days; a bill due Friday a day or two. why says so in a sentence ("Contractors book up 2-3 months out, so start in early December."). Don't repeat the deadline in details; the app adds it.
+    - from and to, when there's no deadline: the days it could be done. A day stated ("Friday") is that day; with no timeframe, today through two days from today. Never before today.
     - earliest and latest: only when it has to fit certain hours: business hours (09:00-17:00) for calling an office or a business, opening hours for errands. null otherwise.
   - Someday, with no timeframe ("fix the fence gate someday"): no date, no time, no task.
 - date and time: resolve relative dates ("next Tuesday", "the 14th", "tomorrow at 3") against the current date given below. When a flyer gives a month and day with no year, use the next time that date comes up. For reminders, see below. If only a time is given for a reminder, use today, or tomorrow if that time has passed.
@@ -236,7 +240,9 @@ export async function capture(text: string, photos: Buffer[], now: string, userN
   // No slot: keep it due on the last day it was meant for, at least.
   else if (slot && !note.date) note.date = slot.lastDay;
   if (!slot) return { kind: 'note', note };
-  const { picked: _picked, lastDay: _lastDay, ...shown } = slot;
+  // The deadline goes with the reminder, for when it goes off months from now.
+  if (slot.deadline) note.body = [`By ${dayName(slot.deadline, true)}`, note.body].filter(Boolean).join('\n\n');
+  const { picked: _picked, lastDay: _lastDay, deadline: _deadline, ...shown } = slot;
   return { kind: 'note', note, slot: shown };
 }
 
@@ -247,6 +253,8 @@ export type Slot = {
   /** The search, to run again for other options; null when it couldn't run. */
   input: FindTimeInput | null;
   notes: string[];
+  /** With a deadline: when it's for and why the time was picked ("By Mon, Mar 15, 2027. Contractors book up…"). */
+  why: string | null;
   /** The booked time's day, for the timeline (FindTimeDay), and who's who in it. */
   day: { view: FindTimeResult['options'][number]['dayView']; people: FindTimeResult['people'] } | null;
 };
@@ -261,15 +269,39 @@ async function slotFor(
   result: z.infer<typeof classification>,
   household: Household,
   userName: string | null,
-): Promise<Slot & { picked: Pick<NoteDraft, 'date' | 'time' | 'endTime'> | null; lastDay: string }> {
+): Promise<Slot & { picked: Pick<NoteDraft, 'date' | 'time' | 'endTime'> | null; lastDay: string; deadline: string | null }> {
   const t = result.task!;
   const today = DATE.test(result.today) ? result.today : new Date().toISOString().slice(0, 10);
-  const from = DATE.test(t.from) && t.from > today ? t.from : today;
-  let to = DATE.test(t.to) && t.to >= from ? t.to : addDays(from, 2);
-  if (addDays(from, 14) < to) to = addDays(from, 14);
+  const deadline = t.deadline && DATE.test(t.deadline) && t.deadline >= today ? t.deadline : null;
+  const given = deadline && t.startBy && DATE.test(t.startBy) && t.startBy <= deadline ? t.startBy : null;
+  // No start given: two weeks ahead of the deadline.
+  const startBy = deadline ? (given ?? addDays(deadline, -14)) : null;
+  let from: string;
+  let to: string;
+  if (deadline) {
+    // Around when to start; once that's passed, as soon as possible.
+    from = startBy && startBy > today ? startBy : today;
+    to = addDays(from, from === today ? 2 : 4);
+    if (to > deadline) to = deadline < from ? from : deadline;
+  } else {
+    from = DATE.test(t.from) && t.from > today ? t.from : today;
+    to = DATE.test(t.to) && t.to >= from ? t.to : addDays(from, 2);
+    if (addDays(from, 14) < to) to = addDays(from, 14);
+  }
+  const timing = deadline
+    ? {
+        deadline,
+        why: [
+          `By ${dayName(deadline, true)}.`,
+          startBy && startBy > today ? (given ? t.why?.trim() : 'Two weeks ahead of it.') : 'That’s soon, so the first free time.',
+        ]
+          .filter(Boolean)
+          .join(' '),
+      }
+    : { deadline: null, why: null };
   const me = personFor(household, userName);
   if (!me) {
-    return { summary: 'Add yourself to the household in Settings so the app can find you a free time.', input: null, notes: [], day: null, picked: null, lastDay: to };
+    return { summary: 'Add yourself to the household in Settings so the app can find you a free time.', input: null, notes: [], day: null, picked: null, lastDay: to, ...timing };
   }
   const time = (v: string | null) => (v && TIME.test(v) ? v : null);
   const input: FindTimeInput = {
@@ -306,10 +338,11 @@ async function slotFor(
       picked: o ? { date: o.draft.date, time: hhmm(trip!.start), endTime: hhmm(Math.min(trip!.end, 24 * 60 - 1)) } : null,
       day: o ? { view: o.dayView, people: found.people } : null,
       lastDay: to,
+      ...timing,
     };
   } catch (err) {
     if (err instanceof FindTimeError || err instanceof GoogleAuthError || err instanceof GoogleApiError) {
-      return { summary: `Couldn’t look for a free time: ${err.message}`, input: null, notes: [], day: null, picked: null, lastDay: to };
+      return { summary: `Couldn’t look for a free time: ${err.message}`, input: null, notes: [], day: null, picked: null, lastDay: to, ...timing };
     }
     throw err;
   }
@@ -349,8 +382,15 @@ export async function findTimeForReminder(
 
 const hhmm = (minutes: number) => `${String(Math.floor(minutes / 60)).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}`;
 
-const dayName = (day: string) =>
-  new Date(`${day}T12:00:00Z`).toLocaleDateString('en-US', { timeZone: 'UTC', weekday: 'short', month: 'short', day: 'numeric' });
+/** "Mon, Dec 7"; with the year when asked for, or when it isn't this year's. */
+const dayName = (day: string, withYear = false) =>
+  new Date(`${day}T12:00:00Z`).toLocaleDateString('en-US', {
+    timeZone: 'UTC',
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+    ...(withYear || day.slice(0, 4) !== new Date().toISOString().slice(0, 4) ? { year: 'numeric' } : {}),
+  });
 
 /** Who's in the family and who's typing, for "me", "us" and names in the input. */
 function familyContext(household: Household, userName: string | null) {
