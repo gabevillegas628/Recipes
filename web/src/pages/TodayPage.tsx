@@ -1,6 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useSearchParams } from 'react-router-dom';
-import { freeFor, layoutDay, type Entry, type Line } from '../agenda';
 import { api } from '../api';
 import { dayLabel, dayOf, firstLine, isOverdue, localDate, movedToDay, reminderDue, repeatLabel } from '../notes';
 import type { Note, TodayCalendar, User } from '../types';
@@ -84,12 +83,6 @@ export function TodayPage({ user }: { user: User }) {
   for (const items of byDay.values()) items.sort((a, b) => a.sort.localeCompare(b.sort));
   missed.sort((a, b) => a.startsAt!.localeCompare(b.startsAt!));
 
-  const travelMinutes = calendar.data?.travelMinutes ?? 0;
-  const lay = (day: string, main: boolean) =>
-    layoutDay(
-      byDay.get(day)!.map((item) => entryOf(item, day)),
-      { now: main && !picked ? now : null, gaps: main, travelMinutes },
-    );
   const todayItems = byDay.get(base) ?? [];
   const upcoming = days.slice(1).filter((d) => byDay.get(d)!.length);
   const toCook = (plan.data ?? []).filter((p) => !p.cookedAt);
@@ -158,7 +151,11 @@ export function TodayPage({ user }: { user: User }) {
 
       <section className="agenda">
         {todayItems.length ? (
-          <AgendaLines lines={lay(base, true)} now={now} isToday={!picked} onToggle={(n) => toggle.mutate(n)} />
+          <ul className="agenda-list">
+            {todayItems.map((item, i) => (
+              <AgendaRow key={i} item={item} now={now} isToday={!picked} onToggle={(n) => toggle.mutate(n)} />
+            ))}
+          </ul>
         ) : (
           calendar.data && <p className="muted agenda-empty">Nothing on the calendar {picked ? 'that day' : 'today'}.</p>
         )}
@@ -198,7 +195,11 @@ export function TodayPage({ user }: { user: User }) {
           {upcoming.map((day) => (
             <div key={day} className="aisle">
               <h2>{dayLabel(day)}</h2>
-              <AgendaLines lines={lay(day, false)} now={now} onToggle={(n) => toggle.mutate(n)} />
+              <ul className="agenda-list">
+                {byDay.get(day)!.map((item, i) => (
+                  <AgendaRow key={i} item={item} now={now} onToggle={(n) => toggle.mutate(n)} />
+                ))}
+              </ul>
             </div>
           ))}
         </section>
@@ -221,77 +222,6 @@ function eyebrow(picked: string | null, today: string) {
 function dateOf(day: string) {
   const [y, m, d] = day.split('-').map(Number);
   return new Date(y, m - 1, d);
-}
-
-/** An item placed in time on its day, for laying the day out (see agenda.ts). */
-function entryOf(item: Item, day: string): Entry<Item> {
-  if (item.type === 'event') {
-    const e = item.event;
-    return {
-      item,
-      title: e.title,
-      start: item.allDay || !e.start ? null : new Date(e.start).getTime(),
-      end: item.allDay || !e.end ? null : new Date(e.end).getTime(),
-      who: e.who ?? [],
-      everyone: Boolean(e.everyone),
-      free: Boolean(e.free),
-      place: e.location,
-    };
-  }
-  const n = item.note;
-  // A repeating reminder's occurrence on this day, at its usual time.
-  const start = n.allDay || !n.startsAt ? null : new Date(`${day}T${item.sort}`).getTime();
-  const length = n.endsAt && n.startsAt ? new Date(n.endsAt).getTime() - new Date(n.startsAt).getTime() : 0;
-  return { item, title: n.title, start, end: start === null ? null : start + length, who: [], everyone: false, free: false, place: null };
-}
-
-/** A day's lines: things in order, overlaps grouped, and the free time between. */
-function AgendaLines({
-  lines,
-  now,
-  isToday = false,
-  onToggle,
-}: {
-  lines: Line<Item>[];
-  now: Date;
-  isToday?: boolean;
-  onToggle: (n: Note) => void;
-}) {
-  return (
-    <ul className="agenda-list">
-      {lines.map((line, i) => {
-        if (line.type === 'gap') {
-          return (
-            <li
-              key={i}
-              className={`agenda-gap ${line.now ? 'now' : isToday && line.until !== null && line.until < now.getTime() ? 'past' : ''}`}
-            >
-              {line.now
-                ? line.until === null
-                  ? 'Now · nothing else on'
-                  : `Now · free for ${freeFor(line.minutes)}`
-                : `Free ${freeFor(line.minutes)}`}
-            </li>
-          );
-        }
-        if (line.type === 'overlap') {
-          return (
-            <li key={i} className={`agenda-overlap ${line.clash.length ? 'clash' : ''}`}>
-              <span className="agenda-overlap-head">
-                {line.clash.length ? `Double-booked: ${line.clash.join(', ')}` : 'At the same time'}
-              </span>
-              <ul className="agenda-list">
-                {line.rows.map((row, j) => (
-                  <AgendaRow key={j} item={row.item} tight={row.tight} now={now} isToday={isToday} onToggle={onToggle} />
-                ))}
-              </ul>
-            </li>
-          );
-        }
-        return <AgendaRow key={i} item={line.row.item} tight={line.row.tight} now={now} isToday={isToday} onToggle={onToggle} />;
-      })}
-    </ul>
-  );
 }
 
 const clock = (iso: string) => new Date(iso).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
@@ -330,14 +260,11 @@ function MissedRow({ note: n, tomorrow, onToggle }: { note: Note; tomorrow: stri
 
 function AgendaRow({
   item,
-  tight,
   now,
   isToday = false,
   onToggle,
 }: {
   item: Item;
-  /** Too little time to get here from the last place (see agenda.ts). */
-  tight: string | null;
   now: Date;
   isToday?: boolean;
   onToggle: (n: Note) => void;
@@ -358,7 +285,6 @@ function AgendaRow({
             {repeats ? ` · ↻ ${repeats}` : ''}
           </span>
           {detail && <span className="agenda-meta">{detail}</span>}
-          {tight && <span className="agenda-meta overdue">⚠ {tight}</span>}
         </Link>
       </li>
     );
@@ -374,7 +300,6 @@ function AgendaRow({
     <>
       <span className="agenda-title">{e.title}</span>
       {meta && <span className="agenda-meta">{meta}</span>}
-      {tight && <span className="agenda-meta overdue">⚠ {tight}</span>}
     </>
   );
   return (

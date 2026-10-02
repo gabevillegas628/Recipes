@@ -229,8 +229,6 @@ export interface TodayCalendar {
   connected: boolean;
   error: string | null;
   calendarName: string | null;
-  /** The household's usual travel time each way, for spotting a tight squeeze between places. */
-  travelMinutes: number;
   events: {
     title: string;
     /** Timed events; all-day ones have allDayDate and allDayEnd (exclusive) instead. */
@@ -241,12 +239,6 @@ export interface TodayCalendar {
     location: string | null;
     /** Set when it's an appointment saved in this app. */
     noteId: string | null;
-    /** Today only: marked "free" on the calendar, so it takes no one's time. */
-    free?: boolean;
-    /** Today only: who in the household it's for, by name (none when it can't tell). */
-    who?: string[];
-    /** Today only: a whole-family occasion. */
-    everyone?: boolean;
   }[];
 }
 
