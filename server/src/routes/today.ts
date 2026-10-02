@@ -2,7 +2,9 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { requireAuth } from '../auth.js';
 import { prisma } from '../db.js';
+import { tagKey, tagTitles } from '../eventTags.js';
 import { calendarTimeZone, getConnection, GoogleApiError, GoogleAuthError, listEvents, type CalendarEvent } from '../google.js';
+import { getHousehold } from '../household.js';
 import { addDays } from '../recurrence.js';
 import { wallTime, zonedInstant } from '../zone.js';
 
@@ -23,7 +25,11 @@ const MAX_NOTE_RESULTS = 60;
  * app shows its own, with a checkbox), and an event only links back to Mise if
  * its appointment is still there.
  */
-async function forApp(events: CalendarEvent[], { skipReminders }: { skipReminders: boolean }) {
+async function forApp<T extends object = object>(
+  events: CalendarEvent[],
+  { skipReminders }: { skipReminders: boolean },
+  extra: (e: CalendarEvent) => T = () => ({}) as T,
+) {
   const ids = [...new Set(events.flatMap((e) => (e.noteId ? [e.noteId] : [])))];
   const notes = new Map(
     (await prisma.note.findMany({ where: { id: { in: ids } }, select: { id: true, kind: true } })).map((n) => [n.id, n.kind]),
@@ -38,6 +44,7 @@ async function forApp(events: CalendarEvent[], { skipReminders }: { skipReminder
       allDayEnd: e.allDayEnd,
       location: e.location,
       noteId: e.noteId && notes.has(e.noteId) ? e.noteId : null,
+      ...extra(e),
     }));
 }
 
@@ -53,20 +60,33 @@ export async function todayRoutes(app: FastifyInstance) {
       .parse(request.query);
     const connection = await getConnection();
     if (!connection?.calendarId || connection.error) {
-      return { connected: false, error: connection?.error ?? null, calendarName: null, events: [] };
+      return { connected: false, error: connection?.error ?? null, calendarName: null, travelMinutes: 0, events: [] };
     }
     try {
       const timeZone = (await calendarTimeZone(connection.calendarId, connection.timeZone)) ?? 'UTC';
       const first = date ?? wallTime(new Date(), timeZone).slice(0, 10);
       const from = zonedInstant(`${first}T00:00:00`, timeZone);
       const to = zonedInstant(`${addDays(first, days)}T00:00:00`, timeZone);
-      const events = await listEvents(connection.calendarId, from, to);
+      const [events, household] = await Promise.all([listEvents(connection.calendarId, from, to), getHousehold()]);
+      // Whose each timed event is, for spotting someone double-booked (read once per title; see eventTags.ts).
+      const timed = events.filter((e) => e.start && e.end && !e.free);
+      const tags = await tagTitles(timed.map((e) => e.title), household);
+      const names = new Map(household.people.map((p) => [p.id, p.name]));
+      const whose = (e: CalendarEvent) => {
+        const tag = e.start && e.end && !e.free ? tags.get(tagKey(e.title)) : undefined;
+        return {
+          free: e.free,
+          who: tag ? tag.people.flatMap((id) => names.get(id) ?? []) : [],
+          everyone: Boolean(tag?.everyone),
+        };
+      };
       return {
         connected: true,
         error: null,
         calendarName: connection.calendarName,
+        travelMinutes: household.travelMinutes,
         // Looking back at another day, the app's reminders show as they were on the calendar.
-        events: await forApp(events, { skipReminders: !date }),
+        events: await forApp(events, { skipReminders: !date }, whose),
       };
     } catch (err) {
       if (err instanceof GoogleAuthError || err instanceof GoogleApiError) return reply.code(502).send({ error: err.message });
