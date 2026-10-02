@@ -78,7 +78,7 @@ export function NoteForm({
           {v.kind === 'REMINDER' && v.time && (
             <div className="field">
               <span>How long</span>
-              <div className="chips length-picks" role="group" aria-label="How long">
+              <div className="chips wrap-chips" role="group" aria-label="How long">
                 {/* A length set some other way (Find a time, say) shows as its own choice. */}
                 {(LENGTHS.includes(reminderLength) ? LENGTHS : [...LENGTHS, reminderLength].sort((a, b) => a - b)).map((m) => (
                   <button

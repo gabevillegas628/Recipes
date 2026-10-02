@@ -195,9 +195,31 @@ button {
   cursor: pointer;
 }
 
-.length-picks {
+.wrap-chips {
   flex-wrap: wrap;
   overflow: visible;
+}
+
+/* A chip with a number typed into it ("Other…" amounts). */
+.chip-input {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.field .chip-input input {
+  width: 3.5em;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font-size: 16px; /* 16px stops iOS from zooming on focus */
+  text-align: right;
+}
+
+.field .chip-input input:focus {
+  outline: none;
+  box-shadow: none;
 }
 
 .chip-on {

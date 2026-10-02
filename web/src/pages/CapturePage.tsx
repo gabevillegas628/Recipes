@@ -3,11 +3,12 @@ import { useState, type FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { api } from '../api';
 import { FindTimeDay } from '../components/FindTimeDay';
+import { FindTimeForm } from '../components/FindTimeForm';
 import { FindTimeResults } from '../components/FindTimeResults';
 import { NoteForm } from '../components/NoteForm';
 import { dayLabel, inputFromValues, nowInWords, valuesFromDraft, type NoteValues } from '../notes';
 import { shrinkPhoto } from '../photos';
-import type { FindTimeResult, NoteDraft, TaskSlot } from '../types';
+import type { FindTimeInput, FindTimeResult, NoteDraft, TaskSlot } from '../types';
 import { extractUrl, PhotoPicker } from './ImportPage';
 
 /**
@@ -28,6 +29,9 @@ export function CapturePage() {
   // A task's auto-picked time, and other times for it when asked.
   const [slot, setSlot] = useState<TaskSlot | null>(null);
   const [otherTimes, setOtherTimes] = useState<FindTimeResult | null>(null);
+  // Finding a time by hand (no AI), and the last search, to come back to from its results.
+  const [manual, setManual] = useState(false);
+  const [manualInput, setManualInput] = useState<FindTimeInput | null>(null);
 
   const config = useQuery({ queryKey: ['capture-config'], queryFn: api.captureConfig });
 
@@ -46,6 +50,7 @@ export function CapturePage() {
   });
 
   const pickAnother = useMutation({ mutationFn: api.findTime, onSuccess: setOtherTimes });
+  const findByHand = useMutation({ mutationFn: api.findTime, onSuccess: setFound });
 
   const save = useMutation({
     mutationFn: (values: NoteValues) =>
@@ -70,7 +75,10 @@ export function CapturePage() {
     setFound(null);
     setSlot(null);
     setOtherTimes(null);
+    setManual(false);
+    setManualInput(null);
     pickAnother.reset();
+    findByHand.reset();
     sort.reset();
     save.reset();
     addGroceries.reset();
@@ -155,7 +163,8 @@ export function CapturePage() {
     return (
       <FindTimeResults
         result={found}
-        onCancel={reset}
+        // Searched by hand: back to the form, as it was.
+        onCancel={manual ? () => setFound(null) : reset}
         onPick={(option, latest) => {
           setFound(latest);
           setDraft({
@@ -171,6 +180,21 @@ export function CapturePage() {
             uploadedImage: null,
           });
         }}
+      />
+    );
+  }
+
+  if (manual) {
+    return (
+      <FindTimeForm
+        initial={manualInput}
+        searching={findByHand.isPending}
+        error={findByHand.error}
+        onSubmit={(input) => {
+          setManualInput(input);
+          findByHand.mutate(input);
+        }}
+        onCancel={reset}
       />
     );
   }
@@ -266,6 +290,15 @@ export function CapturePage() {
           </button>
         </div>
       </form>
+
+      <div className="import-more">
+        <p className="muted">Looking for a time for something?</p>
+        <div className="settings-actions">
+          <button type="button" className="btn" onClick={() => setManual(true)}>
+            Find a time
+          </button>
+        </div>
+      </div>
 
       <div className="import-more">
         <p className="muted">Adding a recipe?</p>
