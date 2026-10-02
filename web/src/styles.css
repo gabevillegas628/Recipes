@@ -195,6 +195,11 @@ button {
   cursor: pointer;
 }
 
+.length-picks {
+  flex-wrap: wrap;
+  overflow: visible;
+}
+
 .chip-on {
   background: var(--accent);
   border-color: var(--accent);

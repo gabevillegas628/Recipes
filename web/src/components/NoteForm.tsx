@@ -32,6 +32,10 @@ export function NoteForm({
 }) {
   const [v, setV] = useState(initial);
   const set = <K extends keyof NoteValues>(key: K, value: NoteValues[K]) => setV((prev) => ({ ...prev, [key]: value }));
+  // A reminder's end follows its start, so moving the time keeps how long it is.
+  const reminderLength = v.kind === 'REMINDER' ? lengthOf(v.time, v.endTime) : 0;
+  const setTime = (time: string) =>
+    setV((prev) => ({ ...prev, time, endTime: prev.kind === 'REMINDER' ? endAfter(time, reminderLength) : prev.endTime }));
   const photo = imageUrl(image ?? null);
 
   function submit(e: FormEvent) {
@@ -68,15 +72,26 @@ export function NoteForm({
             </label>
             <label className="field">
               <span>Time</span>
-              <input type="time" value={v.time} onChange={(e) => set('time', e.target.value)} disabled={!v.date} />
+              <input type="time" value={v.time} onChange={(e) => setTime(e.target.value)} disabled={!v.date} />
             </label>
           </div>
           {v.kind === 'REMINDER' && v.time && (
-            <div className="field-row field-row-2">
-              <label className="field">
-                <span>Until</span>
-                <input type="time" value={v.endTime} min={v.time} onChange={(e) => set('endTime', e.target.value)} />
-              </label>
+            <div className="field">
+              <span>How long</span>
+              <div className="chips length-picks" role="group" aria-label="How long">
+                {/* A length set some other way (Find a time, say) shows as its own choice. */}
+                {(LENGTHS.includes(reminderLength) ? LENGTHS : [...LENGTHS, reminderLength].sort((a, b) => a - b)).map((m) => (
+                  <button
+                    key={m}
+                    type="button"
+                    className={`chip ${m === reminderLength ? 'chip-on' : ''}`}
+                    aria-pressed={m === reminderLength}
+                    onClick={() => set('endTime', endAfter(v.time, m))}
+                  >
+                    {m ? lengthLabel(m) : 'Just a reminder'}
+                  </button>
+                ))}
+              </div>
             </div>
           )}
           {v.kind === 'APPOINTMENT' && (
@@ -101,7 +116,9 @@ export function NoteForm({
             {v.kind === 'APPOINTMENT'
               ? 'Leave the time empty for all day.'
               : v.time
-                ? 'With an end, the time is blocked on your calendar for doing it.'
+                ? reminderLength
+                  ? 'The time is blocked on your calendar, and Find a time works around it.'
+                  : 'Just a nudge at that time: it doesn’t block your calendar.'
                 : 'Leave empty for no due date.'}
           </small>
           {v.date && <RepeatFields date={v.date} value={v.repeat} onChange={(repeat) => set('repeat', repeat)} />}
@@ -147,6 +164,28 @@ export function NoteForm({
       </div>
     </form>
   );
+}
+
+/** Reminder lengths to pick from, in minutes; 0 is just a reminder, with no end. */
+const LENGTHS = [0, 15, 30, 45, 60, 90];
+
+const minutesOf = (hhmm: string) => Number(hhmm.slice(0, 2)) * 60 + Number(hhmm.slice(3, 5));
+
+/** Minutes from a start to an end time the same day; 0 without both. */
+function lengthOf(time: string, endTime: string) {
+  return time && endTime && endTime > time ? minutesOf(endTime) - minutesOf(time) : 0;
+}
+
+/** The end time that many minutes after a start, kept on the same day; '' for no end. */
+function endAfter(time: string, minutes: number) {
+  if (!time || !minutes) return '';
+  const end = Math.min(minutesOf(time) + minutes, 23 * 60 + 59);
+  return `${String(Math.floor(end / 60)).padStart(2, '0')}:${String(end % 60).padStart(2, '0')}`;
+}
+
+/** "15 min", "1 hr", "1.5 hr". */
+function lengthLabel(minutes: number) {
+  return minutes < 60 ? `${minutes} min` : `${Math.round((minutes / 60) * 100) / 100} hr`;
 }
 
 const UNITS: Record<Freq, string> = { DAILY: 'day', WEEKLY: 'week', MONTHLY: 'month', YEARLY: 'year' };
