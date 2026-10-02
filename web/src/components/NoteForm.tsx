@@ -1,4 +1,4 @@
-import { useState, type FormEvent, type ReactNode } from 'react';
+import { useState, type FormEvent } from 'react';
 import { WEEKDAYS, weekdayOf, type Freq, type Weekday } from '../../../server/src/recurrence';
 import { imageUrl } from '../api';
 import { monthlyPositions, type NoteValues, type RepeatValues } from '../notes';
@@ -20,7 +20,6 @@ export function NoteForm({
   submitLabel = 'Save',
   onSubmit,
   onCancel,
-  footer,
 }: {
   initial: NoteValues;
   image?: string | null;
@@ -30,7 +29,6 @@ export function NoteForm({
   submitLabel?: string;
   onSubmit: (values: NoteValues) => void;
   onCancel?: () => void;
-  footer?: ReactNode;
 }) {
   const [v, setV] = useState(initial);
   const set = <K extends keyof NoteValues>(key: K, value: NoteValues[K]) => setV((prev) => ({ ...prev, [key]: value }));
@@ -147,7 +145,6 @@ export function NoteForm({
           {saving ? 'Saving…' : submitLabel}
         </button>
       </div>
-      {footer}
     </form>
   );
 }
