@@ -17,6 +17,7 @@ import { planRoutes } from './routes/plan.js';
 import { recipeRoutes } from './routes/recipes.js';
 import { todayRoutes } from './routes/today.js';
 import { userRoutes } from './routes/users.js';
+import { weatherRoutes } from './routes/weather.js';
 
 export async function buildApp() {
   const app = Fastify({
@@ -54,6 +55,7 @@ export async function buildApp() {
   await app.register(googleRoutes);
   await app.register(householdRoutes);
   await app.register(todayRoutes);
+  await app.register(weatherRoutes);
   app.addHook('onReady', resumeImportJobs);
 
   // Recipe images from the upload dir (a Railway volume in production).

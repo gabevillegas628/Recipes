@@ -34,9 +34,14 @@ export function WeekPage() {
             Tap <strong>Add to this week</strong> on any recipe. Recipes drop off by themselves 7 days
             after you add them.
           </p>
-          <Link to="/recipes" className="btn">
-            Browse recipes
-          </Link>
+          <div className="settings-actions week-empty-actions">
+            <Link to="/week/plan" className="btn btn-primary">
+              Plan meals together
+            </Link>
+            <Link to="/recipes" className="btn">
+              Browse recipes
+            </Link>
+          </div>
         </div>
       )}
 
@@ -59,6 +64,9 @@ export function WeekPage() {
             <button type="button" className="btn btn-primary" onClick={() => setPicking(true)}>
               Add groceries for the week
             </button>
+            <Link to="/week/plan" className="btn">
+              Plan more together
+            </Link>
             <button
               type="button"
               className="btn"

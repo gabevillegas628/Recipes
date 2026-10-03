@@ -131,6 +131,9 @@ function RecipeView({ recipe }: { recipe: Recipe }) {
         <button type="button" className="btn" onClick={() => setChoosingMeal(true)}>
           Add to meal
         </button>
+        <Link to={`/week/plan?recipe=${recipe.id}`} className="btn">
+          Plan meals around this
+        </Link>
         <Link to={`/r/${recipe.id}/edit`} className="btn">
           Edit
         </Link>

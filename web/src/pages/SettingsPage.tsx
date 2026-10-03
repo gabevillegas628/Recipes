@@ -5,6 +5,7 @@ import { api } from '../api';
 import { GoogleCalendarSection } from '../components/GoogleCalendarSettings';
 import { HouseholdSection } from '../components/HouseholdSettings';
 import { ChangePassword, PeopleSection } from '../components/UserSettings';
+import { WeatherSection } from '../components/WeatherSettings';
 import { comingUpOn } from '../notes';
 import { signOut } from '../session';
 import { SHORTCUT_NAME, useTimers } from '../timers';
@@ -14,6 +15,7 @@ import type { ConnectorStatus, User } from '../types';
 const SECTIONS = [
   { id: 'calendar', title: 'Calendar & reminders', detail: 'Google Calendar, and where reminders go' },
   { id: 'household', title: 'Household', detail: 'The family, school hours, travel time' },
+  { id: 'weather', title: 'Weather', detail: 'Where Today’s forecast is for' },
   { id: 'connector', title: 'Claude connector', detail: 'Save recipes and notes from Claude chats' },
   { id: 'cleanup', title: 'Clean up', detail: 'Remove past appointments from Mise' },
   { id: 'phone', title: 'Phone setup', detail: 'Home screen, Share button, timers' },
@@ -52,6 +54,7 @@ export function SettingsPage({ user }: { user: User }) {
       <h1 className="form-title">{section.title}</h1>
       {section.id === 'calendar' && <GoogleCalendarSection />}
       {section.id === 'household' && <HouseholdSection />}
+      {section.id === 'weather' && <WeatherSection />}
       {section.id === 'connector' && <ConnectorSection />}
       {section.id === 'cleanup' && <CleanupSection />}
       {section.id === 'phone' && <PhoneSection />}

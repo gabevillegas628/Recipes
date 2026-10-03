@@ -33,35 +33,36 @@ enum RecipeSource {
 }
 
 model Recipe {
-  id           String        @id @default(cuid())
-  title        String
-  description  String?
-  source       RecipeSource  @default(MANUAL)
-  sourceUrl    String?
+  id              String             @id @default(cuid())
+  title           String
+  description     String?
+  source          RecipeSource       @default(MANUAL)
+  sourceUrl       String?
   /// Filename inside UPLOAD_DIR, served at /images/<image>
-  image        String?
-  servings     String?
-  prepMinutes  Int?
-  cookMinutes  Int?
-  totalMinutes Int?
+  image           String?
+  servings        String?
+  prepMinutes     Int?
+  cookMinutes     Int?
+  totalMinutes    Int?
   /// Section[]: [{ title: string | null, items: string[] }]
-  ingredients  Json          @default("[]")
+  ingredients     Json               @default("[]")
   /// Section[]: [{ title: string | null, items: string[] }]
-  instructions Json          @default("[]")
-  notes        String?
-  favorite     Boolean       @default(false)
+  instructions    Json               @default("[]")
+  notes           String?
+  favorite        Boolean            @default(false)
   /// Set when the recipe was extracted by AI rather than structured data; cleared on the next manual save.
-  needsReview  Boolean       @default(false)
-  tags         Tag[]
-  createdBy    User?         @relation(fields: [createdById], references: [id], onDelete: SetNull)
-  createdById  String?
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @updatedAt
-  importJobs   ImportJob[]
-  planItems    PlanItem[]
-  groceryItems GroceryItem[]
-  mealRecipes  MealRecipe[]
-  prep         RecipePrep?
+  needsReview     Boolean            @default(false)
+  tags            Tag[]
+  createdBy       User?              @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  createdById     String?
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+  importJobs      ImportJob[]
+  planItems       PlanItem[]
+  groceryItems    GroceryItem[]
+  mealRecipes     MealRecipe[]
+  prep            RecipePrep?
+  ingredientIndex RecipeIngredients?
 
   @@index([createdAt])
   @@index([sourceUrl])
@@ -157,6 +158,19 @@ model RecipePrep {
   hash      String
   plan      Json
   createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+/// Each ingredient line read as name, amount and unit (see src/ingredients.ts), for
+/// planning recipes that share ingredients. Rebuilt when the ingredients no longer match the hash.
+model RecipeIngredients {
+  recipe    Recipe   @relation(fields: [recipeId], references: [id], onDelete: Cascade)
+  recipeId  String   @id
+  hash      String
+  /// A dish that's dinner by itself, not a side or sauce; the planner only suggests these.
+  main      Boolean  @default(true)
+  /// IndexedItem[]: [{ line, name, amount, unit, kind }]
+  items     Json
   updatedAt DateTime @updatedAt
 }
 
@@ -296,6 +310,10 @@ model Household {
   /// Usual hours for appointments, on weekdays.
   hoursStart    String   @default("08:00")
   hoursEnd      String   @default("17:00")
+  /// Where Today's weather is for: the place as shown ("Austin, Texas") and its coordinates.
+  weatherPlace  String?
+  weatherLat    Float?
+  weatherLon    Float?
   updatedAt     DateTime @updatedAt
 }
 

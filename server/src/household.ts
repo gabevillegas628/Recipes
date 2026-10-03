@@ -35,7 +35,8 @@ export async function getHousehold() {
     prisma.household.upsert({ where: { id: 'default' }, create: { id: 'default' }, update: {} }),
     prisma.householdPerson.findMany({ orderBy: { position: 'asc' } }),
   ]);
-  const { id: _id, updatedAt: _u, ...rest } = settings;
+  // The weather location has its own setting (see weather.ts).
+  const { id: _id, updatedAt: _u, weatherPlace: _p, weatherLat: _la, weatherLon: _lo, ...rest } = settings;
   return { ...rest, people: people.map(({ id, name, aliases, adult }) => ({ id, name, aliases, adult })) };
 }
 

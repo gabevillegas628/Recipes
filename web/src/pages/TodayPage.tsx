@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useSearchParams } from 'react-router-dom';
 import { api } from '../api';
 import { dayLabel, dayOf, firstLine, isOverdue, localDate, movedToDay, reminderDue, repeatLabel } from '../notes';
-import type { Note, TodayCalendar, User } from '../types';
+import type { Note, TodayCalendar, User, Weather } from '../types';
 
 type CalendarEvent = TodayCalendar['events'][number];
 
@@ -36,6 +36,7 @@ export function TodayPage({ user }: { user: User }) {
   const notes = useQuery({ queryKey: ['notes'], queryFn: api.notes });
   const plan = useQuery({ queryKey: ['plan'], queryFn: api.plan });
   const groceries = useQuery({ queryKey: ['groceries'], queryFn: api.groceries });
+  const weather = useQuery({ queryKey: ['weather'], queryFn: api.weather, refetchInterval: 30 * 60_000 });
 
   // Same as the Notes tab: a repeating reminder ticks off one occurrence and moves on.
   const toggle = useMutation({
@@ -124,6 +125,8 @@ export function TodayPage({ user }: { user: User }) {
           {user.name.charAt(0).toUpperCase()}
         </Link>
       </header>
+
+      {!picked && weather.data?.weather && <WeatherLine weather={weather.data.weather} />}
 
       {calendar.data && !calendar.data.connected && (
         <div className="banner">
@@ -313,5 +316,23 @@ function AgendaRow({
         <span className="agenda-body">{body}</span>
       )}
     </li>
+  );
+}
+
+/** What to know when packing: an umbrella (or boots) if it's likely, and the high and low. */
+function WeatherLine({ weather }: { weather: Weather }) {
+  const { wet, high, low } = weather;
+  return (
+    <p className={`weather-line${wet ? ' weather-line-wet' : ''}`} title={weather.place}>
+      {wet && (
+        <span className="weather-wet">
+          <span aria-hidden>{wet.kind === 'snow' ? '❄️' : '☂️'}</span> {wet.kind === 'snow' ? 'Snow' : 'Rain'} likely {wet.when}
+          <span className="weather-chance"> · {wet.chance}%</span>
+        </span>
+      )}
+      <span className="weather-temps">
+        High {high}° · Low {low}°
+      </span>
+    </p>
   );
 }

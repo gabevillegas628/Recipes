@@ -59,10 +59,17 @@ const sortResult = z.object({
   ),
 });
 
+/**
+ * How an ingredient's plain name is written, so lines for the same thing match.
+ * Shared with the recipe ingredient index (ingredients.ts) so the planner and
+ * the grocery list agree on what's the same item.
+ */
+export const ITEM_NAME_RULES = `Lowercase, no amounts, sizes or prep: "2 large carrots, peeled" and "1 lb carrots" are both "carrots"; "4 cloves garlic" and "2 garlic cloves" are both "garlic"; "sweet Italian sausage, casings removed" is "sweet italian sausage". Keep differences that matter when shopping: "baby carrots" is not "carrots", "unsalted butter" is not "salted butter", "chicken thighs" is not "chicken breasts", "hot italian sausage" is not "sweet italian sausage". Things a shopper would buy either of get one name: "heavy whipping cream" is "heavy cream", "chicken stock" is "chicken broth", "fresh parsley" is "fresh flat-leaf parsley". Use the plural where it's natural ("lemons", "eggs") and the mass noun otherwise ("flour", "celery").`;
+
 const SORT_SYSTEM = `You organize a household grocery list. For each numbered line:
 - aisle: the store section. Butter, milk, cream, cheese and eggs are Dairy & Eggs.
 - item: the line rewritten as a short shopping entry. Keep quantities and the ingredient; drop preparation instructions.
-- name: the plain name of the thing to buy, used to combine lines for the same item. Lowercase, no amounts, sizes or prep: "2 large carrots, peeled" and "1 lb carrots" are both "carrots"; "4 cloves garlic" and "2 garlic cloves" are both "garlic". Keep differences that matter when shopping: "baby carrots" is not "carrots", "unsalted butter" is not "salted butter", "chicken thighs" is not "chicken breasts". Use the plural where it's natural ("lemons", "eggs") and the mass noun otherwise ("flour", "celery").
+- name: the plain name of the thing to buy, used to combine lines for the same item. ${ITEM_NAME_RULES}
 Never merge or drop lines.`;
 
 interface SortedItem {

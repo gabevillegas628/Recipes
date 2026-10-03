@@ -14,6 +14,7 @@ import { NotePage } from './pages/NotePage';
 import { ReminderTimePage } from './pages/ReminderTimePage';
 import { NotesPage } from './pages/NotesPage';
 import { PrepPage } from './pages/PrepPage';
+import { PlanMealsPage } from './pages/PlanMealsPage';
 import { WeekPage } from './pages/WeekPage';
 import { TimerProvider, TimerTray } from './timers';
 import { ImportPage } from './pages/ImportPage';
@@ -46,6 +47,7 @@ export function App() {
         <Route path="m/:id" element={<MealPage />} />
         <Route path="m/:id/edit" element={<MealEditPage />} />
         <Route path="week" element={<WeekPage />} />
+        <Route path="week/plan" element={<PlanMealsPage />} />
         <Route path="groceries" element={<GroceriesPage />} />
         <Route path="add" element={<CapturePage />} />
         <Route path="notes" element={<NotesPage />} />

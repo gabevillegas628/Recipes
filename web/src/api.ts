@@ -13,7 +13,9 @@ import type {
   MealSummary,
   Note,
   NoteInput,
+  PlanDraft,
   PlanItem,
+  PlanSuggestion,
   PrepPlan,
   ImportJob,
   ImportResult,
@@ -24,6 +26,8 @@ import type {
   TagCount,
   TodayCalendar,
   User,
+  Weather,
+  WeatherPlace,
 } from './types';
 
 export class ApiError extends Error {
@@ -106,6 +110,12 @@ export const api = {
     request<{ ok: true }>(`/api/plan/${id}`, json('PATCH', input)),
   removePlanItem: (id: string) => request<void>(`/api/plan/${id}`, { method: 'DELETE' }),
   clearPlan: () => request<{ ok: true }>('/api/plan', { method: 'DELETE' }),
+  suggestPlan: (input: { count: number; anchorId?: string; keep?: string[]; exclude?: string[] }) =>
+    request<PlanSuggestion>('/api/plan/suggest', json('POST', input)),
+  inventPlan: (input: { count: number; anchorId?: string; keep?: PlanDraft[]; avoid?: string[] }) =>
+    request<PlanSuggestion>('/api/plan/invent', json('POST', input)),
+  acceptPlan: (recipeIds: string[], drafts: PlanDraft[]) =>
+    request<{ added: number; recipeIds: string[] }>('/api/plan/accept', json('POST', { recipeIds, drafts })),
 
   removeMealFromPlan: (mealId: string) =>
     request<{ ok: true }>(`/api/plan/meal/${mealId}`, { method: 'DELETE' }),
@@ -146,6 +156,13 @@ export const api = {
     return request<TodayCalendar>(`/api/today${qs ? `?${qs}` : ''}`);
   },
   search: (q: string) => request<SearchResult>(`/api/search?q=${encodeURIComponent(q)}`),
+  weather: () => request<{ weather: Weather | null }>('/api/weather'),
+  weatherPlace: () => request<{ place: WeatherPlace | null }>('/api/weather/place'),
+  findWeatherPlaces: (q: string) =>
+    request<{ places: WeatherPlace[] }>(`/api/weather/places?${new URLSearchParams({ q })}`),
+  setWeatherPlace: (place: WeatherPlace | null) =>
+    request<{ place: WeatherPlace | null }>('/api/weather/place', json('PUT', { place })),
+
   household: () => request<Household>('/api/household'),
   saveHousehold: (input: Omit<Household, 'people'> & { people: HouseholdPerson[] }) =>
     request<Household>('/api/household', json('PUT', input)),

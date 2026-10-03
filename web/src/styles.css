@@ -664,6 +664,21 @@ button {
 
 /* ---------- Settings ---------- */
 
+.weather-places {
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.weather-places .btn {
+  width: 100%;
+  justify-content: flex-start;
+  text-align: left;
+}
+
 .settings-section {
   padding: 16px 0 24px;
   border-bottom: 1px solid var(--border);
@@ -2530,6 +2545,33 @@ html.has-timers .cook {
   font-size: 13px;
 }
 
+.weather-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 4px 12px;
+  margin: 0 0 16px;
+  font-size: 14px;
+  color: var(--muted);
+}
+
+.weather-line-wet {
+  padding: 10px 12px;
+  border-radius: var(--radius);
+  background: var(--accent-soft);
+}
+
+.weather-wet {
+  font-weight: 600;
+  color: var(--text);
+}
+
+.weather-chance {
+  font-weight: 400;
+  color: var(--muted);
+}
+
 .today-cards {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -2648,4 +2690,145 @@ html.has-timers .cook {
   height: 100%;
   opacity: 0;
   cursor: pointer;
+}
+
+/* ---------- Planning meals together ---------- */
+
+.plan-count {
+  margin: 16px 0;
+}
+
+.plan-modes {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.plan-mode {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.plan-mode.on {
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+
+.plan-picker {
+  margin-bottom: 8px;
+}
+
+.plan-picked {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 4px 12px;
+  padding: 10px 12px;
+  border-radius: var(--radius);
+  background: var(--accent-soft);
+  margin-bottom: 8px;
+}
+
+.plan-pick {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.plan-pick-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 8px 8px 10px;
+}
+
+.plan-link-btn {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.plan-pick .recipe-row-meta {
+  white-space: normal;
+}
+
+.plan-swap {
+  flex: none;
+  min-height: 34px;
+  padding: 0 12px;
+  font-size: 14px;
+}
+
+.plan-draft {
+  padding: 0 12px 12px;
+  border-top: 1px solid var(--border);
+  font-size: 15px;
+}
+
+.plan-draft h3 {
+  margin: 12px 0 4px;
+  font-size: 15px;
+}
+
+.plan-draft ul,
+.plan-draft ol {
+  margin: 0;
+  padding-left: 20px;
+}
+
+.plan-shared {
+  margin: 24px 0 8px;
+}
+
+.plan-shared > ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.plan-shared-head {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 4px 12px;
+}
+
+.plan-shared-name {
+  font-weight: 600;
+}
+
+.plan-shared-name::first-letter {
+  text-transform: uppercase;
+}
+
+.plan-shared-total {
+  font-weight: 600;
+  color: var(--accent);
+}
+
+.plan-shared-uses {
+  margin: 2px 0 0;
+  padding-left: 18px;
+  font-size: 14px;
+}
+
+.week-empty-actions {
+  justify-content: center;
 }

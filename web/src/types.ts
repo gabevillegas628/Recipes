@@ -365,3 +365,55 @@ export interface GoogleCalendarChoice {
   name: string;
   primary: boolean;
 }
+
+/** A place Today's weather is for (Settings → Weather). */
+export interface WeatherPlace {
+  name: string;
+  lat: number;
+  lon: number;
+}
+
+export interface Weather {
+  place: string;
+  high: number;
+  low: number;
+  /** Only when rain or snow is likely during the rest of the day. */
+  wet: { kind: 'rain' | 'snow'; chance: number; when: string } | null;
+}
+
+/** A recipe Claude wrote for a plan; saved only when the plan is added to the week. */
+export interface PlanDraft {
+  key: string;
+  title: string;
+  description: string;
+  servings: string;
+  prepMinutes: number;
+  cookMinutes: number;
+  ingredients: string[];
+  steps: string[];
+  items: { line: number; name: string; amount: number | null; unit: string | null; kind: 'staple' | 'keeps' | 'perishable' | 'meat' }[];
+}
+
+/** Recipes planned together because they share ingredients (see server/src/weekPlanner.ts). */
+export interface PlanSuggestion {
+  recipes: {
+    /** Recipe id, or a draft's key. */
+    key: string;
+    id: string | null;
+    title: string;
+    image: string | null;
+    totalMinutes: number | null;
+    /** Ingredients it shares with the others. */
+    shares: string[];
+    draft: PlanDraft | null;
+  }[];
+  shared: {
+    name: string;
+    kind: 'staple' | 'keeps' | 'perishable' | 'meat';
+    uses: { key: string; title: string; line: string }[];
+    /** All of it together, when the amounts add up. */
+    total: string | null;
+  }[];
+  /** Different things to buy, staples aside. */
+  toBuy: number;
+}

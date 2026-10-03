@@ -1,6 +1,7 @@
 import { prisma } from './db.js';
 import type { Prisma } from './generated/prisma/client.js';
 import { deleteImage, saveImageFromUrl, uploadExists } from './images.js';
+import { scheduleIndex } from './ingredients.js';
 import type { RecipeInput } from './recipeInput.js';
 
 /**
@@ -75,6 +76,7 @@ export async function createRecipe(
     },
     include: withTags,
   });
+  scheduleIndex();
   return serialize(recipe);
 }
 
@@ -103,6 +105,7 @@ export async function updateRecipe(id: string, input: RecipeInput) {
     include: withTags,
   });
   if (image !== existing.image) await deleteImage(existing.image);
+  scheduleIndex();
   return serialize(recipe);
 }
 
