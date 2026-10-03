@@ -59,6 +59,7 @@ export function CapturePage() {
       api.createNote({ ...inputFromValues(values), uploadedImage: image }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['notes'] });
+      queryClient.invalidateQueries({ queryKey: ['note-groups'] });
       navigate('/notes');
     },
   });
@@ -100,6 +101,7 @@ export function CapturePage() {
       endTime: null,
       location: null,
       recurrence: null,
+      group: null,
       uploadedImage: null,
     });
   }
@@ -197,6 +199,7 @@ export function CapturePage() {
             endTime: option.draft.endTime,
             location: latest.input.location,
             recurrence: null,
+            group: null,
             uploadedImage: null,
           });
         }}
@@ -260,6 +263,7 @@ export function CapturePage() {
               endTime: null,
               location: null,
               recurrence: null,
+              group: null,
               uploadedImage: null,
             })
           }

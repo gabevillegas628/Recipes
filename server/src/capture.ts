@@ -11,6 +11,7 @@ import { FetchError } from './import/safeFetch.js';
 import { FindTimeError, personFor, runFindTime, type FindTimeInput, type FindTimeResult } from './findTimeService.js';
 import { GoogleApiError, GoogleAuthError } from './google.js';
 import { getHousehold, type Household } from './household.js';
+import { listGroups } from './notes.js';
 import { findExistingRecipe } from './import/worker.js';
 import { addDays, firstOccurrence, formatRule, nextOccurrence, WEEKDAYS, type Rule } from './recurrence.js';
 
@@ -42,6 +43,7 @@ const classification = z.object({
   endTime: z.string().nullable().describe('HH:MM, 24-hour, when the appointment ends, if stated'),
   location: z.string().nullable().describe('Appointments only: the place or address, as given'),
   groceryItems: z.array(z.string()).describe('Groceries only: one item per entry, with amounts. Empty otherwise.'),
+  group: z.string().describe('Notes only: the group to file it under, from the existing groups when one fits. "" otherwise.'),
   repeat: z
     .object({
       freq: z.enum(['daily', 'weekly', 'monthly', 'yearly']),
@@ -100,6 +102,7 @@ Then fill in the fields:
   - Someday, with no timeframe ("fix the fence gate someday"): no date, no time, no schedule.
 - date and time: resolve relative dates ("next Tuesday", "the 14th", "tomorrow at 3") against the current date given below. When a flyer gives a month and day with no year, use the next time that date comes up. For reminders, see above. If only a time is given for a reminder, use today, or tomorrow if that time has passed.
 - repeat: only when it recurs ("every Tuesday", "the first Monday of each month", "every other week", "daily until Friday"). date is then the first occurrence on or after today.
+- group (notes only): what the note is about, as a short plural-free heading people would file it under: "Medical" (prescriptions, doses, doctors' instructions), "Work", "Ideas", "Gifts", "House", "Kids". Use one of the existing groups listed below whenever it fits, spelled exactly as listed, even if the fit is loose; only start a new one when none does. "" for anything that isn't a note.
 - For a recipe, a recipe to write or a grocery list, only kind and title matter (plus groceryItems for groceries).
 - findTime: title is what the appointment will be called ("Eye appointment: Evan"); details and location as for appointments. In schedule:
   - people: who has to be there, by household name. "Me" or "I" is the person typing; "us" or "we" is the two adults. For a child's appointment, list just the child; the app adds a parent to take them.
@@ -118,6 +121,8 @@ export type NoteDraft = {
   endDate: string | null;
   endTime: string | null;
   location: string | null;
+  /** Notes only: the group Claude filed it under, or null. */
+  group: string | null;
   /** An RRULE when it repeats (see recurrence.ts). */
   recurrence: string | null;
   /** The photo, stored, to keep with the note. */
@@ -148,7 +153,7 @@ export async function capture(text: string, photos: Buffer[], now: string, userN
   text = text.trim().slice(0, 20_000);
   if (!text && photos.length === 0) throw new ImportError('Type something or add a photo first.');
 
-  const [prepared, household] = await Promise.all([preparePhotos(photos), getHousehold()]);
+  const [prepared, household, groups] = await Promise.all([preparePhotos(photos), getHousehold(), listGroups()]);
   const response = await client.beta.messages.parse({
     model: env.anthropicModel,
     max_tokens: 4000,
@@ -166,7 +171,7 @@ export async function capture(text: string, photos: Buffer[], now: string, userN
           })),
           {
             type: 'text' as const,
-            text: `It is now ${now}.${familyContext(household, userName)}${text ? `\n\n<input>\n${text}\n</input>` : ''}`,
+            text: `It is now ${now}.${familyContext(household, userName)}${groupContext(groups)}${text ? `\n\n<input>\n${text}\n</input>` : ''}`,
           },
         ],
       },
@@ -223,6 +228,7 @@ export async function capture(text: string, photos: Buffer[], now: string, userN
     endDate: date && result.endDate && DATE.test(result.endDate) ? result.endDate : null,
     endTime: date ? valid(result.endTime) : null,
     location: result.location?.trim() || null,
+    group: kind === 'NOTE' ? result.group.trim().slice(0, 60) || null : null,
     recurrence: rule ? formatRule(rule) : null,
     uploadedImage: photos.length ? await saveImage(photos[0]).catch(() => null) : null,
   };
@@ -381,6 +387,11 @@ const dayName = (day: string, withYear = false) =>
     day: 'numeric',
     ...(withYear || day.slice(0, 4) !== new Date().toISOString().slice(0, 4) ? { year: 'numeric' } : {}),
   });
+
+/** The note groups already in use, so capture files into them rather than inventing near-duplicates. */
+function groupContext(groups: string[]) {
+  return `\n\nExisting note groups: ${groups.length ? groups.join(', ') : 'none yet'}.`;
+}
 
 /** Who's in the family and who's typing, for "me", "us" and names in the input. */
 function familyContext(household: Household, userName: string | null) {

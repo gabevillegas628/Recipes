@@ -174,6 +174,9 @@ export const api = {
 
   notes: () => request<Note[]>('/api/notes'),
   note: (id: string) => request<Note>(`/api/notes/${id}`),
+  noteGroups: () => request<string[]>('/api/notes/groups'),
+  renameNoteGroup: (from: string, to: string) =>
+    request<{ renamed: number }>('/api/notes/groups/rename', { method: 'POST', body: JSON.stringify({ from, to }) }),
   createNote: (input: NoteInput & { uploadedImage?: string | null }) =>
     request<Note>('/api/notes', json('POST', input)),
   updateNote: (id: string, input: Partial<NoteInput> & { done?: boolean; image?: null; uploadedImage?: string }) =>

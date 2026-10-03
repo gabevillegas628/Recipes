@@ -92,6 +92,7 @@ export async function todayRoutes(app: FastifyInstance) {
             { title: { contains: w, mode: 'insensitive' as const } },
             { body: { contains: w, mode: 'insensitive' as const } },
             { location: { contains: w, mode: 'insensitive' as const } },
+            { group: { contains: w, mode: 'insensitive' as const } },
           ],
         })),
       },

@@ -473,6 +473,7 @@ export function buildMcpServer(baseUrl: string) {
     repeats: n.recurrence,
     repeatsInWords: n.recurrence && n.startsAt ? describeRule(parseRule(n.recurrence), startDay(n)) : null,
     location: n.location,
+    group: n.group,
     done: n.doneAt !== null,
     hasPhoto: Boolean(n.image),
     addedBy: n.createdBy?.name ?? null,
@@ -495,11 +496,15 @@ export function buildMcpServer(baseUrl: string) {
             when.description,
         ),
         location: z.string().nullish().describe('Appointments only: the place or address'),
+        group: z
+          .string()
+          .nullish()
+          .describe('NOTE only: the group to file it under, e.g. "Medical", "Work", "Ideas". Reuse a group already in use (see list_notes) when one fits.'),
         repeats,
       },
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false },
     },
-    async ({ kind, title, details, startsAt, endsAt, location, repeats: recurrence }) => {
+    async ({ kind, title, details, startsAt, endsAt, location, group, repeats: recurrence }) => {
       try {
         const start = parseWhen(startsAt, 'startsAt');
         const end = parseWhen(endsAt, 'endsAt');
@@ -512,6 +517,7 @@ export function buildMcpServer(baseUrl: string) {
             endsAt: end.iso,
             allDay: start.allDay,
             location: location ?? null,
+            group: group ?? null,
             recurrence,
           },
           null,
@@ -569,6 +575,7 @@ export function buildMcpServer(baseUrl: string) {
         startsAt: when.optional(),
         endsAt: when.optional(),
         location: z.string().nullable().optional(),
+        group: z.string().nullable().optional().describe('NOTE only: the group it is filed under; null to ungroup'),
         repeats: repeats.optional(),
         done: z.boolean().optional(),
       },

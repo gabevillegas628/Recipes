@@ -23,6 +23,7 @@ export function NoteEditPage() {
     onSuccess: (updated) => {
       queryClient.setQueryData(['note', id], updated);
       queryClient.invalidateQueries({ queryKey: ['notes'] });
+      queryClient.invalidateQueries({ queryKey: ['note-groups'] });
       back();
     },
   });

@@ -41,6 +41,7 @@ export interface NoteValues {
   endDate: string;
   endTime: string;
   location: string;
+  group: string;
   repeat: RepeatValues;
 }
 
@@ -214,6 +215,7 @@ export function valuesFromDraft(d: NoteDraft): NoteValues {
     endDate: d.endDate ?? '',
     endTime: d.endTime ?? '',
     location: d.location ?? '',
+    group: d.group ?? '',
     repeat: repeatFromRule(d.recurrence),
   };
 }
@@ -232,6 +234,7 @@ export function valuesFromNote(n: Note): NoteValues {
     endDate: endDay && endDay !== startDay ? endDay : '',
     endTime: end && !n.allDay ? localTime(new Date(end)) : '',
     location: n.location ?? '',
+    group: n.group ?? '',
     repeat: repeatFromRule(n.recurrence),
   };
 }
@@ -290,6 +293,7 @@ export function inputFromValues(v: NoteValues): NoteInput {
     endsAt,
     allDay,
     location: v.kind === 'APPOINTMENT' ? v.location.trim() || null : null,
+    group: v.kind === 'NOTE' ? v.group.trim() || null : null,
     recurrence: rule ? formatRule(rule) : null,
   };
 }

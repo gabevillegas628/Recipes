@@ -180,6 +180,8 @@ export interface Note {
   endsAt: string | null;
   allDay: boolean;
   location: string | null;
+  /** Notes only: the group it's filed under ("Medical"), or null. */
+  group: string | null;
   /** An RRULE when it repeats; startsAt is the first occurrence. */
   recurrence: string | null;
   image: string | null;
@@ -201,6 +203,7 @@ export interface NoteInput {
   endsAt: string | null;
   allDay: boolean;
   location: string | null;
+  group: string | null;
   recurrence: string | null;
 }
 
@@ -214,6 +217,7 @@ export interface NoteDraft {
   endDate: string | null;
   endTime: string | null;
   location: string | null;
+  group: string | null;
   recurrence: string | null;
   uploadedImage: string | null;
 }

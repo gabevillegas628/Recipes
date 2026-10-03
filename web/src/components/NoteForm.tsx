@@ -1,4 +1,4 @@
-import { useMutation } from '@tanstack/react-query';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import { useState, type FormEvent } from 'react';
 import { WEEKDAYS, weekdayOf, type Freq, type Weekday } from '../../../server/src/recurrence';
 import { api, imageUrl } from '../api';
@@ -38,6 +38,8 @@ export function NoteForm({
   const [v, setV] = useState(initial);
   const [formKind, setFormKind] = useState<FormKind>(() => formKindOf(initial));
   const [kept, setKept] = useState(image);
+  // Groups already in use, to pick from; typing a new name starts one.
+  const groups = useQuery({ queryKey: ['note-groups'], queryFn: api.noteGroups, enabled: formKind === 'NOTE' });
   const upload = useMutation({
     mutationFn: async (file: File) => api.uploadImage(await shrinkPhoto(file)),
     onSuccess: ({ image }) => setKept(image),
@@ -74,6 +76,25 @@ export function NoteForm({
         <span>Title</span>
         <input value={v.title} onChange={(e) => set('title', e.target.value)} required />
       </label>
+
+      {formKind === 'NOTE' && (
+        <label className="field">
+          <span>Group</span>
+          <input
+            value={v.group}
+            onChange={(e) => set('group', e.target.value)}
+            list="note-groups"
+            placeholder="Medical, Work, Ideas…"
+            autoCapitalize="words"
+            maxLength={60}
+          />
+          <datalist id="note-groups">
+            {(groups.data ?? []).map((g) => (
+              <option key={g} value={g} />
+            ))}
+          </datalist>
+        </label>
+      )}
 
       {formKind !== 'NOTE' && formKind !== 'TODO' && (
         <>

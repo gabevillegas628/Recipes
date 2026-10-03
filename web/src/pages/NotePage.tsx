@@ -51,7 +51,10 @@ export function NotePage() {
 
   return (
     <article className="page note-view">
-      <p className="note-kind">{isTodo(n) ? 'To-do' : KIND_LABELS[n.kind]}</p>
+      <p className="note-kind">
+        {isTodo(n) ? 'To-do' : KIND_LABELS[n.kind]}
+        {n.group && ` · ${n.group}`}
+      </p>
       <h1 className={`note-view-title ${done ? 'done' : ''}`}>{n.title}</h1>
 
       {(when || repeats || done) && (

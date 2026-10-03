@@ -2881,3 +2881,14 @@ html.has-timers .cook {
   padding: 4px 0 8px;
   text-decoration: none;
 }
+
+.note-group-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.note-group-head .link-btn {
+  font-size: 13px;
+}

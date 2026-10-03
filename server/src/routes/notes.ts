@@ -15,8 +15,10 @@ import {
   deleteNote,
   forgetPastAppointments,
   getNote,
+  listGroups,
   listNotes,
   NoteError,
+  renameGroup,
   updateNote,
   updateNoteBody,
 } from '../notes.js';
@@ -69,6 +71,15 @@ export async function noteRoutes(app: FastifyInstance) {
   });
 
   app.get('/api/notes', async () => listNotes());
+
+  app.get('/api/notes/groups', async () => listGroups());
+
+  /** Renames a group everywhere; renaming onto an existing group merges them, and "" ungroups. */
+  app.post('/api/notes/groups/rename', async (request, reply) => {
+    const parsed = z.object({ from: z.string().trim().min(1).max(60), to: z.string().trim().max(60) }).safeParse(request.body);
+    if (!parsed.success) return reply.code(400).send({ error: 'Which group, and its new name?' });
+    return { renamed: await renameGroup(parsed.data.from, parsed.data.to || null) };
+  });
 
   app.get('/api/notes/:id', async (request, reply) => {
     const note = await getNote(idParams.parse(request.params).id);

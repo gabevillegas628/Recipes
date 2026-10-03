@@ -241,6 +241,8 @@ model Note {
   endsAt           DateTime?
   allDay           Boolean   @default(false)
   location         String?
+  /// Notes only: the group it's filed under ("Medical", "Work"), or null. Named by people and capture; no fixed list.
+  group            String?
   /// Repeats: an RRULE such as "FREQ=WEEKLY;BYDAY=TU" (see src/recurrence.ts). startsAt is the first occurrence.
   recurrence       String?
   /// A photo kept with it (the flyer it came from), stored like recipe images.

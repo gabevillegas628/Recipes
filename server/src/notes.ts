@@ -35,6 +35,8 @@ export const noteFields = z.object({
   endsAt: instant,
   allDay: z.boolean().optional(),
   location: optionalText(500),
+  /** Notes only: the group it's filed under. */
+  group: optionalText(60),
   /** An RRULE (see recurrence.ts), or null for a one-off. */
   recurrence: z.string().trim().max(300).nullish(),
 });
@@ -61,7 +63,7 @@ export function allDayInstant(date: string): Date {
 
 /**
  * Drops fields that don't apply to the kind: notes have no time, only
- * appointments have a place, and a reminder's end is a time on its day (a
+ * appointments have a place, only notes have a group, and a reminder's end is a time on its day (a
  * block of time for the task, shown busy). Appointments need a start. Only
  * something with a date can repeat.
  */
@@ -91,11 +93,52 @@ function normalize(fields: Fields) {
     endsAt,
     allDay,
     location: kind === 'APPOINTMENT' ? (fields.location ?? null) : null,
+    group: kind === 'NOTE' ? matchGroup(fields.group ?? null) : null,
     recurrence,
   };
 }
 
 export class NoteError extends Error {}
+
+/** Groups are compared ignoring case and spacing; this is the form they're stored in. */
+function matchGroup(group: string | null) {
+  return group ? group.replace(/\s+/g, ' ').trim() : null;
+}
+
+/** The group as already spelled, if one matches ignoring case ("medical" → "Medical"). */
+async function canonicalGroup(group: string | null | undefined) {
+  const name = matchGroup(group ?? null);
+  if (!name) return null;
+  const existing = await prisma.note.findFirst({
+    where: { kind: 'NOTE', group: { equals: name, mode: 'insensitive' } },
+    select: { group: true },
+  });
+  return existing?.group ?? name;
+}
+
+/** The groups in use, most used first. */
+export async function listGroups(): Promise<string[]> {
+  const rows = await prisma.note.groupBy({
+    by: ['group'],
+    where: { kind: 'NOTE', group: { not: null } },
+    _count: { _all: true },
+    orderBy: { _count: { group: 'desc' } },
+  });
+  return rows.map((r) => r.group!).filter(Boolean);
+}
+
+/**
+ * Renames a group on every note in it. Renaming to a group that already exists
+ * merges the two; an empty name ungroups them. Returns how many notes moved.
+ */
+export async function renameGroup(from: string, to: string | null) {
+  const { count } = await prisma.note.updateMany({
+    where: { kind: 'NOTE', group: { equals: from, mode: 'insensitive' } },
+    // Just changing its capitals keeps the new spelling; otherwise join a group already spelled that way.
+    data: { group: to && to.trim().toLowerCase() === from.trim().toLowerCase() ? matchGroup(to) : await canonicalGroup(to) },
+  });
+  return count;
+}
 
 export async function listNotes() {
   // Ticked-off reminders drop off after a month; repeating ones only tick off one occurrence.
@@ -114,7 +157,7 @@ export async function getNote(id: string) {
 export async function createNote(input: z.infer<typeof createNoteBody>, userId: string | null) {
   const image = input.uploadedImage ? await uploadExists(input.uploadedImage) : null;
   const note = await prisma.note.create({
-    data: { ...normalize(input), image, createdById: userId, syncPending: true },
+    data: { ...normalize({ ...input, group: await canonicalGroup(input.group) }), image, createdById: userId, syncPending: true },
     include,
   });
   kickCalendarSync();
@@ -138,6 +181,7 @@ export async function updateNote(id: string, input: z.infer<typeof updateNoteBod
     endsAt: changes.endsAt !== undefined ? changes.endsAt : current.endsAt?.toISOString(),
     allDay: changes.allDay ?? current.allDay,
     location: changes.location !== undefined ? changes.location : current.location,
+    group: changes.group !== undefined ? await canonicalGroup(changes.group) : current.group,
     recurrence: changes.recurrence !== undefined ? changes.recurrence : current.recurrence,
   };
   const note = await prisma.note.update({

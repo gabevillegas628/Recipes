@@ -18,7 +18,7 @@ const SECTIONS: { key: Section; label: string }[] = [
 const SHOWN_KEY = 'notes-shown';
 
 /**
- * Everything saved from the Add tab: notes, to-dos (reminders with no date),
+ * Everything saved from the Add tab: notes (by group), to-dos (reminders with no date),
  * reminders, then appointments coming up (by day), with chips to show just one
  * kind. Ticked-off items fold away; past appointments only show up in search,
  * which also looks through the family calendar's history.
@@ -103,6 +103,23 @@ export function NotesPage() {
   doneTodos.sort(byDone);
 
   const plain = notes.filter((n) => n.kind === 'NOTE');
+  // Notes under a heading per group, biggest group first; ungrouped ones last.
+  const groups = new Map<string, Note[]>();
+  for (const n of plain) if (n.group) groups.set(n.group, [...(groups.get(n.group) ?? []), n]);
+  const grouped = [...groups].sort((a, b) => b[1].length - a[1].length || a[0].localeCompare(b[0]));
+  const ungrouped = plain.filter((n) => !n.group);
+
+  const rename = useMutation({
+    mutationFn: ({ from, to }: { from: string; to: string }) => api.renameNoteGroup(from, to),
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['notes'] });
+      queryClient.invalidateQueries({ queryKey: ['note-groups'] });
+    },
+  });
+  function askRename(group: string) {
+    const to = prompt(`Rename "${group}" to (an existing group's name merges them; empty ungroups):`, group);
+    if (to !== null && to.trim() !== group) rename.mutate({ from: group, to: to.trim() });
+  }
 
   // Upcoming appointments under a heading per day.
   const days = new Map<string, Note[]>();
@@ -173,11 +190,32 @@ export function NotesPage() {
       {show('notes') && (
         <section className="notes-section">
           <h2 className="notes-section-title">Notes</h2>
-          <ul className="note-list">
-            {plain.map((n) => (
-              <NoteRow key={n.id} note={n} meta={firstLine(n.body)} />
-            ))}
-          </ul>
+          {rename.error && <p className="error">{rename.error.message}</p>}
+          {grouped.map(([group, items]) => (
+            <div key={group} className="aisle">
+              <div className="note-group-head">
+                <h2>{group}</h2>
+                <button type="button" className="link-btn" onClick={() => askRename(group)}>
+                  Rename
+                </button>
+              </div>
+              <ul className="note-list">
+                {items.map((n) => (
+                  <NoteRow key={n.id} note={n} meta={firstLine(n.body)} />
+                ))}
+              </ul>
+            </div>
+          ))}
+          {ungrouped.length > 0 && (
+            <div className="aisle">
+              {grouped.length > 0 && <h2>Other</h2>}
+              <ul className="note-list">
+                {ungrouped.map((n) => (
+                  <NoteRow key={n.id} note={n} meta={firstLine(n.body)} />
+                ))}
+              </ul>
+            </div>
+          )}
         </section>
       )}
 
