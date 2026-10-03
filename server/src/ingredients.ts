@@ -127,6 +127,12 @@ export async function readIngredients(recipes: string[][], knownNames: string[] 
   }
 }
 
+/** Stores ingredients already read (by the planner or a duplicate check) so the recipe isn't read again. */
+export async function saveIndex(recipeId: string, sections: Section[], read: ReadRecipe) {
+  const data = { hash: hashOf(sections), main: read.main, items: read.items as unknown as object };
+  await prisma.recipeIngredients.upsert({ where: { recipeId }, create: { recipeId, ...data }, update: data });
+}
+
 /**
  * Names already in the index, most used first, so new recipes reuse them. Leaves
  * out recipes still to be read again, whose names may be from an older prompt.

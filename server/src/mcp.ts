@@ -5,7 +5,9 @@ import type { Prisma } from './generated/prisma/client.js';
 import { ImportError } from './import/errors.js';
 import { extractFromUrl } from './import/extract.js';
 import { FetchError } from './import/safeFetch.js';
+import { findDuplicates } from './duplicates.js';
 import { draftToInput, findExistingRecipe } from './import/worker.js';
+import { ingredientLines, namesInUse, readIngredients, saveIndex } from './ingredients.js';
 import { addMealToPlan, createMeal, getMeal, listMeals } from './meals.js';
 import { allDayInstant, createNote, deleteNote, listNotes, NOTE_KINDS, NoteError, updateNote } from './notes.js';
 import { describeRule, nextOccurrence, parseRule } from './recurrence.js';
@@ -79,11 +81,17 @@ export function buildMcpServer(baseUrl: string) {
     {
       title: 'Save recipe',
       description:
-        "Save a recipe to the user's personal recipe box. Use this when the user asks to save, keep or store a recipe from the conversation. Include the complete ingredient list with quantities and every step; don't summarize. Returns the saved recipe's link.",
-      inputSchema: recipeFields,
+        "Save a recipe to the user's personal recipe box. Use this when the user asks to save, keep or store a recipe from the conversation. Include the complete ingredient list with quantities and every step; don't summarize. Returns the saved recipe's link. If the box already has essentially the same dish, nothing is saved and the similar recipes are returned instead: tell the user which ones, and ask whether to save this one anyway (call again with saveEvenIfSimilar), update the existing one with update_recipe, or leave it.",
+      inputSchema: {
+        ...recipeFields,
+        saveEvenIfSimilar: z
+          .boolean()
+          .nullish()
+          .describe('Only after the user has seen the similar recipes and still wants this one saved'),
+      },
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false },
     },
-    async (args) => {
+    async ({ saveEvenIfSimilar, ...args }) => {
       const parsed = recipeInput.safeParse({
         ...args,
         tags: args.tags ?? [],
@@ -91,7 +99,23 @@ export function buildMcpServer(baseUrl: string) {
         source: 'CLAUDE',
       });
       if (!parsed.success) return toolError(z.prettifyError(parsed.error));
+
+      // Read the ingredients now: the duplicate check needs them, and the saved recipe keeps them.
+      const lines = ingredientLines(parsed.data.ingredients);
+      const read = (await readIngredients([lines], await namesInUse()))?.[0] ?? null;
+      if (!saveEvenIfSimilar) {
+        const similar = (await findDuplicates([{ key: 'new', title: parsed.data.title, lines, items: read?.items ?? [] }])).get('new') ?? [];
+        if (similar.length) {
+          return text({
+            saved: false,
+            reason: 'The recipe box already has essentially this dish. Ask the user before saving.',
+            similarRecipes: similar.map((r) => ({ ...r, url: link(r.id) })),
+          });
+        }
+      }
+
       const recipe = await createRecipe(parsed.data, { userId: null });
+      if (read) await saveIndex(recipe.id, parsed.data.ingredients, read);
       return text({ saved: true, id: recipe.id, title: recipe.title, url: link(recipe.id) });
     },
   );

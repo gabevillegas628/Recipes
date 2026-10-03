@@ -47,7 +47,7 @@ export function PlanMealsPage() {
   const run = useMutation({
     mutationFn: (args: { keep?: string[]; keepDrafts?: PlanDraft[]; exclude?: string[]; avoid?: string[]; anchorId?: string }) =>
       mode === 'invent'
-        ? api.inventPlan({ count, anchorId: args.anchorId, keep: args.keepDrafts, avoid: args.avoid })
+        ? api.inventPlan({ count, anchorId: args.anchorId, keep: args.keepDrafts, keepIds: args.keep, avoid: args.avoid })
         : api.suggestPlan({ count, anchorId: args.anchorId, keep: args.keep, exclude: args.exclude }),
     onSuccess: setPlan,
   });
@@ -85,12 +85,28 @@ export function PlanMealsPage() {
     if (mode === 'invent') {
       const nextAvoid = [...avoid, out.title];
       setAvoid(nextAvoid);
-      run.mutate({ anchorId: first.id!, keepDrafts: rest.flatMap((r) => (r.draft ? [r.draft] : [])), avoid: nextAvoid });
+      run.mutate({ anchorId: first.id!, ...keeping(rest), avoid: nextAvoid });
     } else {
       const nextExcluded = [...excluded, key];
       setExcluded(nextExcluded);
       run.mutate({ keep: rest.map((r) => r.key), exclude: nextExcluded });
     }
+  }
+
+  /** In adventurous plans: Claude's recipes and any of the collection's chosen instead, besides the first. */
+  function keeping(recipes: PlanSuggestion['recipes']) {
+    return {
+      keepDrafts: recipes.flatMap((r) => (r.draft ? [r.draft] : [])),
+      keep: recipes.slice(recipes[0]?.key === first?.key ? 1 : 0).flatMap((r) => (r.id ? [r.id] : [])),
+    };
+  }
+
+  /** Swaps Claude's near-copy for the recipe already in the collection. */
+  function useMine(key: string, id: string) {
+    if (!plan || !first) return;
+    const rest = plan.recipes.filter((r) => r.key !== key);
+    const { keepDrafts, keep } = keeping(rest);
+    run.mutate({ anchorId: first.id!, keepDrafts, keep: [...keep, id], avoid });
   }
 
   /** Same starting recipe, different company. */
@@ -173,6 +189,7 @@ export function PlanMealsPage() {
           error={run.error?.message ?? accept.error?.message ?? null}
           inventing={mode === 'invent'}
           onSwap={swap}
+          onUseMine={useMine}
           onAgain={again}
           onStartOver={() => {
             setPlan(null);
@@ -242,6 +259,7 @@ function PlanResult({
   error,
   inventing,
   onSwap,
+  onUseMine,
   onAgain,
   onStartOver,
   onAccept,
@@ -252,6 +270,7 @@ function PlanResult({
   error: string | null;
   inventing: boolean;
   onSwap: (key: string) => void;
+  onUseMine: (key: string, id: string) => void;
   onAgain: () => void;
   onStartOver: () => void;
   onAccept: (groceries: boolean) => void;
@@ -301,6 +320,22 @@ function PlanResult({
                   </button>
                 )}
               </div>
+              {r.draft && r.draft.similarTo.length > 0 && (
+                <div className="plan-similar">
+                  <span>
+                    You already have something like this:{' '}
+                    {r.draft.similarTo.map((m, j) => (
+                      <span key={m.id}>
+                        {j > 0 && ', '}
+                        <Link to={`/r/${m.id}`}>{m.title}</Link>
+                      </span>
+                    ))}
+                  </span>
+                  <button type="button" className="link-btn" disabled={busy} onClick={() => onUseMine(r.key, r.draft!.similarTo[0].id)}>
+                    Use mine instead
+                  </button>
+                </div>
+              )}
               {r.draft && open === r.key && <DraftDetail draft={r.draft} />}
             </li>
           );

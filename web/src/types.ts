@@ -392,6 +392,8 @@ export interface PlanDraft {
   ingredients: string[];
   steps: string[];
   items: { line: number; name: string; amount: number | null; unit: string | null; kind: 'staple' | 'keeps' | 'perishable' | 'meat' }[];
+  /** Saved recipes that are essentially this one. */
+  similarTo: { id: string; title: string }[];
 }
 
 /** Recipes planned together because they share ingredients (see server/src/weekPlanner.ts). */

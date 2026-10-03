@@ -4,10 +4,12 @@ import { zodOutputFormat } from '@anthropic-ai/sdk/helpers/zod';
 import { z } from 'zod';
 import { prisma } from './db.js';
 import { env } from './env.js';
-import { hashOf, ingredientLines, indexRecipes, KINDS, namesInUse, readIngredients, type IndexedItem } from './ingredients.js';
+import { ingredientLines, indexRecipes, KINDS, namesInUse, readIngredients, saveIndex, type IndexedItem } from './ingredients.js';
+import { findDuplicates } from './duplicates.js';
 import { addToPlan } from './plan.js';
 import { createRecipe } from './recipes.js';
 import { recipeInput } from './recipeInput.js';
+import { ingredientWeights, looksAlike, type Comparable } from './similarity.js';
 
 /**
  * Plans several recipes at once that share ingredients, so what's bought for
@@ -32,8 +34,6 @@ export const MAX_RECIPES = 7;
 const WEIGHT: Record<IndexedItem['kind'], number> = { meat: 2.5, perishable: 1, keeps: 0.35, staple: 0 };
 /** How much each new thing to buy counts against a recipe. */
 const NEW_PENALTY = 0.4;
-/** Share of a recipe's ingredients that, shared with one already chosen, makes it "the same recipe". */
-const TOO_SIMILAR = 0.7;
 /** Picks are drawn from the best few, so planning again gives something different. */
 const SHORTLIST = 5;
 
@@ -62,6 +62,8 @@ export const draftSchema = z.object({
       }),
     )
     .max(60),
+  /** Recipes already saved that are essentially this one (see duplicates.ts). */
+  similarTo: z.array(z.object({ id: z.string(), title: z.string() })).max(5).default([]),
 });
 
 export type Draft = z.infer<typeof draftSchema>;
@@ -80,6 +82,8 @@ interface Entry {
   weights: Map<string, number>;
   /** Dinner by itself, not a side or a sauce. Only these are suggested. */
   main: boolean;
+  /** For telling near-copies apart (see similarity.ts). */
+  alike: Comparable;
   draft?: Draft;
 }
 
@@ -121,6 +125,7 @@ async function loadLibrary(): Promise<Entry[]> {
         lines: ingredientLines(r.ingredients as { title: string | null; items: string[] }[]),
         weights: weigh(items),
         main: r.ingredientIndex.main,
+        alike: { title: r.title, weights: ingredientWeights(items) },
       },
     ];
   });
@@ -137,44 +142,12 @@ function draftEntry(d: Draft): Entry {
     lines: d.ingredients,
     weights: weigh(d.items),
     main: true,
+    alike: { title: d.title, weights: ingredientWeights(d.items) },
     draft: d,
   };
 }
 
 // ---------- Choosing ----------
-
-const TITLE_FILLER = new Set('the a an and with of in on best easy classic homemade my our simple quick perfect ultimate recipe style'.split(' '));
-
-/** The words that say what a dish is: "Garlic Yukon Gold Mashed Potatoes" -> garlic, yukon, gold, mashed, potato. */
-function titleWords(title: string): Set<string> {
-  return new Set(
-    title
-      .toLowerCase()
-      .replace(/\([^)]*\)/g, ' ')
-      .split(/[^a-z]+/)
-      .filter((w) => w.length > 2 && !TITLE_FILLER.has(w))
-      .map((w) => (w.length > 4 && w.endsWith('es') ? w.slice(0, -2) : w.length > 3 && w.endsWith('s') ? w.slice(0, -1) : w)),
-  );
-}
-
-/** The same dish by name: identical, or two words in common ("Russet Mashed Potatoes", "Garlic Mashed Potatoes"). */
-function sameDish(a: string, b: string): boolean {
-  const wa = titleWords(a);
-  const common = [...titleWords(b)].filter((w) => wa.has(w)).length;
-  return a.trim().toLowerCase() === b.trim().toLowerCase() || common >= 2;
-}
-
-function shared(a: Map<string, number>, b: Map<string, number>): number {
-  let sum = 0;
-  for (const [name, w] of a) if (b.has(name)) sum += Math.min(w, b.get(name)!);
-  return sum;
-}
-
-function tooSimilar(a: Entry, b: Entry): boolean {
-  if (sameDish(a.title, b.title)) return true;
-  const smaller = Math.min(total(a.weights), total(b.weights));
-  return smaller >= 1.5 && shared(a.weights, b.weights) / smaller >= TOO_SIMILAR;
-}
 
 function score(candidate: Entry, pool: Map<string, number>): number {
   let s = 0;
@@ -197,7 +170,7 @@ function choose(chosen: Entry[], library: Entry[], count: number, skip: Set<stri
     const pool = new Map<string, number>();
     for (const e of picked) for (const [n, w] of e.weights) pool.set(n, Math.max(pool.get(n) ?? 0, w));
     const ranked = library
-      .filter((e) => e.main && !skip.has(e.key) && !picked.some((p) => p.key === e.key || tooSimilar(p, e)) && e.weights.size > 0)
+      .filter((e) => e.main && !skip.has(e.key) && !picked.some((p) => p.key === e.key || looksAlike(p.alike, e.alike)) && e.weights.size > 0)
       .map((e) => ({ item: e, score: score(e, pool) }))
       .sort((a, b) => b.score - a.score);
     const next = drawFromBest(ranked);
@@ -283,6 +256,8 @@ export const inventInput = z.object({
   anchorId: z.string().optional(),
   /** Claude's recipes to keep when swapping one out. */
   keep: z.array(draftSchema).max(MAX_RECIPES).default([]),
+  /** Recipes from the collection to keep alongside them (one chosen over Claude's near-copy). */
+  keepIds: z.array(z.string()).max(MAX_RECIPES).default([]),
   /** Titles not to write again (ones swapped out). */
   avoid: z.array(z.string().max(200)).max(50).default([]),
 });
@@ -291,11 +266,16 @@ export const inventInput = z.object({
 export async function inventPlan(input: z.infer<typeof inventInput>) {
   const library = await ready();
   const anchor = anchorOf(library, input.anchorId, await plannedIds());
-  const kept = input.keep.map(draftEntry);
+  const byId = new Map(library.map((e) => [e.key, e]));
+  const kept = [
+    ...input.keepIds.filter((id) => id !== anchor.key).flatMap((id) => byId.get(id) ?? []),
+    ...input.keep.map(draftEntry),
+  ];
   const wanted = input.count - 1 - kept.length;
   if (wanted <= 0) return describe([anchor, ...kept]);
 
   const others = [...kept.map((k) => k.title), ...input.avoid];
+  const collection = library.filter((e) => e.main).map((e) => e.title);
   const response = await client!.beta.messages.parse({
     model: env.anthropicModel,
     max_tokens: 16000,
@@ -313,6 +293,7 @@ export async function inventPlan(input: z.infer<typeof inventInput>) {
           kept.length
             ? `\nThe other recipes planned use:\n${kept.map((k) => `${k.title}: ${k.lines.join('; ')}`).join('\n')}`
             : '',
+          `\nThey already have these recipes, so don't write any of them, or something that's essentially the same dish under another name: ${collection.join('; ')}.`,
         ].join('\n'),
       },
     ],
@@ -344,7 +325,11 @@ export async function inventPlan(input: z.infer<typeof inventInput>) {
     ingredients: r.ingredients.map((l) => l.trim()).filter(Boolean),
     steps: r.steps.map((l) => l.trim()).filter(Boolean),
     items: read[i].items,
+    similarTo: [],
   }));
+  // Claude was told what's in the collection, but check: flag any near-copy so it can be swapped for the original.
+  const dupes = await findDuplicates(drafts.map((d) => ({ key: d.key, title: d.title, lines: d.ingredients, items: d.items })));
+  for (const d of drafts) d.similarTo = dupes.get(d.key) ?? [];
   return describe([anchor, ...kept, ...drafts.map(draftEntry)]);
 }
 
@@ -506,9 +491,7 @@ export async function acceptPlan(input: z.infer<typeof acceptInput>, userId: str
       { userId },
     );
     // Already read when Claude wrote it.
-    const sections = [{ title: null, items: d.ingredients }];
-    const index = { hash: hashOf(sections), items: d.items };
-    await prisma.recipeIngredients.upsert({ where: { recipeId: recipe.id }, create: { recipeId: recipe.id, ...index }, update: index });
+    await saveIndex(recipe.id, [{ title: null, items: d.ingredients }], { main: true, items: d.items });
     ids.push(recipe.id);
   }
   for (const id of ids) await addToPlan(id, 1, userId);

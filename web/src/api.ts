@@ -112,7 +112,7 @@ export const api = {
   clearPlan: () => request<{ ok: true }>('/api/plan', { method: 'DELETE' }),
   suggestPlan: (input: { count: number; anchorId?: string; keep?: string[]; exclude?: string[] }) =>
     request<PlanSuggestion>('/api/plan/suggest', json('POST', input)),
-  inventPlan: (input: { count: number; anchorId?: string; keep?: PlanDraft[]; avoid?: string[] }) =>
+  inventPlan: (input: { count: number; anchorId?: string; keep?: PlanDraft[]; keepIds?: string[]; avoid?: string[] }) =>
     request<PlanSuggestion>('/api/plan/invent', json('POST', input)),
   acceptPlan: (recipeIds: string[], drafts: PlanDraft[]) =>
     request<{ added: number; recipeIds: string[] }>('/api/plan/accept', json('POST', { recipeIds, drafts })),
