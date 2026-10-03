@@ -44,6 +44,16 @@ export interface NoteValues {
   repeat: RepeatValues;
 }
 
+/** The kinds the form offers: a to-do is a reminder with no date. */
+export type FormKind = NoteKind | 'TODO';
+
+export function formKindOf(v: { kind: NoteKind; date: string }): FormKind {
+  return v.kind === 'REMINDER' && !v.date ? 'TODO' : v.kind;
+}
+
+/** A reminder with no date: done whenever. */
+export const isTodo = (n: Note) => n.kind === 'REMINDER' && !n.startsAt;
+
 export const NO_REPEAT: RepeatValues = {
   freq: '',
   interval: '1',

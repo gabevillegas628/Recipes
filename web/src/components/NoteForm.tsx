@@ -1,20 +1,26 @@
+import { useMutation } from '@tanstack/react-query';
 import { useState, type FormEvent } from 'react';
 import { WEEKDAYS, weekdayOf, type Freq, type Weekday } from '../../../server/src/recurrence';
-import { imageUrl } from '../api';
-import { monthlyPositions, type NoteValues, type RepeatValues } from '../notes';
-import type { NoteKind } from '../types';
+import { api, imageUrl } from '../api';
+import { formKindOf, monthlyPositions, NO_REPEAT, type FormKind, type NoteValues, type RepeatValues } from '../notes';
+import { shrinkPhoto } from '../photos';
+import { PhotoInput } from './PhotoInput';
 
-const KINDS: { kind: NoteKind; label: string }[] = [
+const KINDS: { kind: FormKind; label: string }[] = [
   { kind: 'APPOINTMENT', label: 'Appointment' },
   { kind: 'REMINDER', label: 'Reminder' },
+  { kind: 'TODO', label: 'To-do' },
   { kind: 'NOTE', label: 'Note' },
 ];
 
-/** Edits a note, reminder or appointment. The fields shown follow the kind. */
+/**
+ * Edits a note, to-do, reminder or appointment. The fields shown follow the kind.
+ * A to-do is a reminder with no date. The photo is only changed on saving:
+ * `onSubmit` gets the one to keep (null for none).
+ */
 export function NoteForm({
   initial,
-  image,
-  onRemoveImage,
+  image = null,
   saving,
   error,
   submitLabel = 'Save',
@@ -23,31 +29,42 @@ export function NoteForm({
 }: {
   initial: NoteValues;
   image?: string | null;
-  onRemoveImage?: () => void;
   saving: boolean;
   error?: Error | null;
   submitLabel?: string;
-  onSubmit: (values: NoteValues) => void;
+  onSubmit: (values: NoteValues, image: string | null) => void;
   onCancel?: () => void;
 }) {
   const [v, setV] = useState(initial);
+  const [formKind, setFormKind] = useState<FormKind>(() => formKindOf(initial));
+  const [kept, setKept] = useState(image);
+  const upload = useMutation({
+    mutationFn: async (file: File) => api.uploadImage(await shrinkPhoto(file)),
+    onSuccess: ({ image }) => setKept(image),
+  });
   const set = <K extends keyof NoteValues>(key: K, value: NoteValues[K]) => setV((prev) => ({ ...prev, [key]: value }));
   // A reminder's end follows its start, so moving the time keeps how long it is.
   const reminderLength = v.kind === 'REMINDER' ? lengthOf(v.time, v.endTime) : 0;
   const setTime = (time: string) =>
     setV((prev) => ({ ...prev, time, endTime: prev.kind === 'REMINDER' ? endAfter(time, reminderLength) : prev.endTime }));
-  const photo = imageUrl(image ?? null);
+  const photo = imageUrl(kept);
+
+  function pickKind(kind: FormKind) {
+    setFormKind(kind);
+    setV((prev) => ({ ...prev, kind: kind === 'TODO' ? 'REMINDER' : kind }));
+  }
 
   function submit(e: FormEvent) {
     e.preventDefault();
-    onSubmit(v);
+    // A to-do keeps no date, even one typed before switching to it.
+    onSubmit(formKind === 'TODO' ? { ...v, date: '', time: '', endDate: '', endTime: '', repeat: NO_REPEAT } : v, kept);
   }
 
   return (
     <form className="form" onSubmit={submit}>
       <div className="segmented">
         {KINDS.map((k) => (
-          <button key={k.kind} type="button" className={v.kind === k.kind ? 'on' : ''} onClick={() => set('kind', k.kind)}>
+          <button key={k.kind} type="button" className={formKind === k.kind ? 'on' : ''} onClick={() => pickKind(k.kind)}>
             {k.label}
           </button>
         ))}
@@ -58,7 +75,7 @@ export function NoteForm({
         <input value={v.title} onChange={(e) => set('title', e.target.value)} required />
       </label>
 
-      {v.kind !== 'NOTE' && (
+      {formKind !== 'NOTE' && formKind !== 'TODO' && (
         <>
           <div className="field-row field-row-2">
             <label className="field">
@@ -67,7 +84,7 @@ export function NoteForm({
                 type="date"
                 value={v.date}
                 onChange={(e) => set('date', e.target.value)}
-                required={v.kind === 'APPOINTMENT'}
+                required
               />
             </label>
             <label className="field">
@@ -119,7 +136,7 @@ export function NoteForm({
                 ? reminderLength
                   ? 'The time is blocked on your calendar, and Find a time works around it.'
                   : 'Just a nudge at that time: it doesn’t block your calendar.'
-                : 'Leave empty for no due date.'}
+                : 'Leave the time empty for any time that day. No date at all? Make it a to-do.'}
           </small>
           {v.date && <RepeatFields date={v.date} value={v.repeat} onChange={(repeat) => set('repeat', repeat)} />}
         </>
@@ -142,13 +159,27 @@ export function NoteForm({
           <a href={photo} target="_blank" rel="noreferrer">
             <img src={photo} alt="Attached photo" />
           </a>
-          {onRemoveImage && (
-            <button type="button" className="photo-remove" aria-label="Remove photo" onClick={onRemoveImage}>
-              ✕
-            </button>
-          )}
+          <button type="button" className="photo-remove" aria-label="Remove photo" onClick={() => setKept(null)}>
+            ✕
+          </button>
         </div>
       )}
+
+      <div className="photo-picker">
+        {upload.isPending ? (
+          <span className="muted">Uploading photo…</span>
+        ) : (
+          <>
+            <PhotoInput camera onPick={([file]) => upload.mutate(file)}>
+              📷 {photo ? 'Retake' : 'Take photo'}
+            </PhotoInput>
+            <PhotoInput multiple={false} onPick={([file]) => upload.mutate(file)}>
+              {photo ? 'Change photo' : 'Add photo'}
+            </PhotoInput>
+          </>
+        )}
+        {upload.error && <span className="error">{upload.error.message}</span>}
+      </div>
 
       {error && <p className="error">{error.message}</p>}
 
@@ -158,7 +189,7 @@ export function NoteForm({
             Cancel
           </button>
         )}
-        <button className="btn btn-primary" disabled={saving}>
+        <button className="btn btn-primary" disabled={saving || upload.isPending}>
           {saving ? 'Saving…' : submitLabel}
         </button>
       </div>

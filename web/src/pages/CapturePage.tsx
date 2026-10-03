@@ -6,7 +6,7 @@ import { FindTimeDay } from '../components/FindTimeDay';
 import { FindTimeForm } from '../components/FindTimeForm';
 import { FindTimeResults } from '../components/FindTimeResults';
 import { NoteForm } from '../components/NoteForm';
-import { dayLabel, inputFromValues, nowInWords, valuesFromDraft, type NoteValues } from '../notes';
+import { dayLabel, inputFromValues, localDate, nowInWords, valuesFromDraft, type FormKind, type NoteValues } from '../notes';
 import { shrinkPhoto } from '../photos';
 import type { FindTimeInput, FindTimeResult, NoteDraft, TaskSlot } from '../types';
 import { extractUrl, PhotoPicker } from './ImportPage';
@@ -32,6 +32,8 @@ export function CapturePage() {
   // Finding a time by hand (no AI), and the last search, to come back to from its results.
   const [manual, setManual] = useState(false);
   const [manualInput, setManualInput] = useState<FindTimeInput | null>(null);
+  // Typing one in by hand: what's being added, for the heading.
+  const [byHand, setByHand] = useState<string | null>(null);
 
   const config = useQuery({ queryKey: ['capture-config'], queryFn: api.captureConfig });
 
@@ -53,8 +55,8 @@ export function CapturePage() {
   const findByHand = useMutation({ mutationFn: api.findTime, onSuccess: setFound });
 
   const save = useMutation({
-    mutationFn: (values: NoteValues) =>
-      api.createNote({ ...inputFromValues(values), uploadedImage: draft?.uploadedImage }),
+    mutationFn: ({ values, image }: { values: NoteValues; image: string | null }) =>
+      api.createNote({ ...inputFromValues(values), uploadedImage: image }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['notes'] });
       navigate('/notes');
@@ -77,11 +79,29 @@ export function CapturePage() {
     setOtherTimes(null);
     setManual(false);
     setManualInput(null);
+    setByHand(null);
     pickAnother.reset();
     findByHand.reset();
     sort.reset();
     save.reset();
     addGroceries.reset();
+  }
+
+  /** A blank form of that kind. Reminders and appointments start on today; a to-do has no date. */
+  function addByHand(kind: FormKind, label: string) {
+    setByHand(label);
+    setDraft({
+      kind: kind === 'TODO' ? 'REMINDER' : kind,
+      title: '',
+      body: null,
+      date: kind === 'REMINDER' || kind === 'APPOINTMENT' ? localDate(new Date()) : null,
+      time: null,
+      endDate: null,
+      endTime: null,
+      location: null,
+      recurrence: null,
+      uploadedImage: null,
+    });
   }
 
   function submit(e: FormEvent) {
@@ -115,7 +135,7 @@ export function CapturePage() {
   if (draft) {
     return (
       <div className="page">
-        <h1 className="form-title">Check and save</h1>
+        <h1 className="form-title">{byHand ? `New ${byHand}` : 'Check and save'}</h1>
         {slot && draft.kind === 'REMINDER' && (
           <div className="slot-banner">
             {draft.time ? (
@@ -151,7 +171,7 @@ export function CapturePage() {
           image={draft.uploadedImage}
           saving={save.isPending}
           error={save.error}
-          onSubmit={(values) => save.mutate(values)}
+          onSubmit={(values, image) => save.mutate({ values, image })}
           // From a time search, go back to the options.
           onCancel={found ? () => setDraft(null) : reset}
         />
@@ -290,6 +310,24 @@ export function CapturePage() {
           </button>
         </div>
       </form>
+
+      <div className="import-more">
+        <p className="muted">Or type one in yourself:</p>
+        <div className="settings-actions">
+          <button type="button" className="btn" onClick={() => addByHand('APPOINTMENT', 'appointment')}>
+            Appointment
+          </button>
+          <button type="button" className="btn" onClick={() => addByHand('REMINDER', 'reminder')}>
+            Reminder
+          </button>
+          <button type="button" className="btn" onClick={() => addByHand('TODO', 'to-do')}>
+            To-do
+          </button>
+          <button type="button" className="btn" onClick={() => addByHand('NOTE', 'note')}>
+            Note
+          </button>
+        </div>
+      </div>
 
       <div className="import-more">
         <p className="muted">Looking for a time for something?</p>

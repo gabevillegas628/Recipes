@@ -15,16 +15,16 @@ export function NoteEditPage() {
   // Back to the view it was opened from, or to it if this page was opened directly.
   const back = () => (location.key === 'default' ? navigate(`/n/${id}`, { replace: true }) : navigate(-1));
   const save = useMutation({
-    mutationFn: (values: NoteValues) => api.updateNote(id, inputFromValues(values)),
+    mutationFn: ({ values, image }: { values: NoteValues; image: string | null }) =>
+      api.updateNote(id, {
+        ...inputFromValues(values),
+        ...(image === note.data?.image ? {} : image ? { uploadedImage: image } : { image: null }),
+      }),
     onSuccess: (updated) => {
       queryClient.setQueryData(['note', id], updated);
       queryClient.invalidateQueries({ queryKey: ['notes'] });
       back();
     },
-  });
-  const removePhoto = useMutation({
-    mutationFn: () => api.updateNote(id, { image: null }),
-    onSuccess: (updated) => queryClient.setQueryData(['note', id], updated),
   });
 
   if (note.isPending) return <div className="page" />;
@@ -37,10 +37,9 @@ export function NoteEditPage() {
       <NoteForm
         initial={valuesFromNote(n)}
         image={n.image}
-        onRemoveImage={() => confirm('Remove the photo?') && removePhoto.mutate()}
         saving={save.isPending}
         error={save.error}
-        onSubmit={(values) => save.mutate(values)}
+        onSubmit={(values, image) => save.mutate({ values, image })}
         onCancel={back}
       />
     </div>

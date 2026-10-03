@@ -1,21 +1,50 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { api, thumbUrl } from '../api';
 import { NotesSearch } from '../components/NotesSearch';
 import { comingUpOn, dayLabel, dayOf, firstLine, isOverdue, reminderDue, repeatLabel, timeLabel } from '../notes';
 import type { Note } from '../types';
 
+type Section = 'notes' | 'todos' | 'reminders' | 'appointments';
+
+const SECTIONS: { key: Section; label: string }[] = [
+  { key: 'notes', label: 'Notes' },
+  { key: 'todos', label: 'To-dos' },
+  { key: 'reminders', label: 'Reminders' },
+  { key: 'appointments', label: 'Appointments' },
+];
+
+const SHOWN_KEY = 'notes-shown';
+
 /**
- * Everything saved from the Add tab: appointments coming up (by day), open
- * reminders, then notes. Ticked-off reminders fold away; past appointments only
- * show up in search, which also looks through the family calendar's history.
+ * Everything saved from the Add tab: notes, to-dos (reminders with no date),
+ * reminders, then appointments coming up (by day), with chips to show just one
+ * kind. Ticked-off items fold away; past appointments only show up in search,
+ * which also looks through the family calendar's history.
  */
 export function NotesPage() {
   const queryClient = useQueryClient();
-  const [showDone, setShowDone] = useState(false);
   const [query, setQuery] = useState('');
   const search = useDebounced(query.trim(), 300);
+  const [params] = useSearchParams();
+  // Which section to show: asked for in the link (?show=todos), or remembered on this phone.
+  const [shown, setShown] = useState<Section | 'all'>(() => {
+    try {
+      const saved = params.get('show') ?? localStorage.getItem(SHOWN_KEY);
+      return SECTIONS.some((x) => x.key === saved) ? (saved as Section) : 'all';
+    } catch {
+      return 'all';
+    }
+  });
+  const pick = (section: Section | 'all') => {
+    setShown(section);
+    try {
+      localStorage.setItem(SHOWN_KEY, section);
+    } catch {
+      // Private browsing: it just isn't remembered.
+    }
+  };
 
   // Poll gently so a note added on the other phone shows up.
   const list = useQuery({ queryKey: ['notes'], queryFn: api.notes, refetchInterval: 30_000 });
@@ -49,26 +78,29 @@ export function NotesPage() {
   upcoming.sort(bySoonest);
 
   const open: Dated[] = [];
-  const undated: Note[] = [];
-  const done: Note[] = [];
+  const todos: Note[] = [];
+  const doneReminders: Note[] = [];
+  const doneTodos: Note[] = [];
   for (const n of notes) {
     if (n.kind !== 'REMINDER') continue;
     if (n.recurrence && n.startsAt) {
       const due = reminderDue(n);
       if (due) open.push({ note: n, day: due });
-      else done.push(n);
+      else doneReminders.push(n);
     } else if (n.doneAt) {
-      done.push(n);
+      (n.startsAt ? doneReminders : doneTodos).push(n);
     } else if (n.startsAt) {
       open.push({ note: n, day: dayOf(n.startsAt, n.allDay) });
     } else {
-      undated.push(n);
+      todos.push(n);
     }
   }
-  // Dated reminders first, soonest first; then undated, newest first.
+  // Reminders soonest first; to-dos newest first; done ones most recently done first.
   open.sort(bySoonest);
-  undated.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-  done.sort((a, b) => (b.doneAt ?? b.updatedAt).localeCompare(a.doneAt ?? a.updatedAt));
+  todos.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  const byDone = (a: Note, b: Note) => (b.doneAt ?? b.updatedAt).localeCompare(a.doneAt ?? a.updatedAt);
+  doneReminders.sort(byDone);
+  doneTodos.sort(byDone);
 
   const plain = notes.filter((n) => n.kind === 'NOTE');
 
@@ -76,6 +108,24 @@ export function NotesPage() {
   const days = new Map<string, Note[]>();
   for (const { note, day } of upcoming) days.set(day, [...(days.get(day) ?? []), note]);
   const shownOn = new Map(upcoming.map(({ note, day }) => [note.id, day]));
+
+  // Open items per section, for the chips; a section with only done items still shows.
+  const counts: Record<Section, number> = {
+    notes: plain.length,
+    todos: todos.length,
+    reminders: open.length,
+    appointments: upcoming.length,
+  };
+  const has: Record<Section, boolean> = {
+    notes: plain.length > 0,
+    todos: todos.length + doneTodos.length > 0,
+    reminders: open.length + doneReminders.length > 0,
+    appointments: upcoming.length > 0,
+  };
+  const present = SECTIONS.filter((x) => has[x.key]);
+  // A remembered section that has since emptied out shows everything instead.
+  const showing = shown !== 'all' && has[shown] ? shown : 'all';
+  const show = (section: Section) => has[section] && (showing === 'all' || showing === section);
 
   return (
     <div className="page">
@@ -97,15 +147,83 @@ export function NotesPage() {
         <div className="empty">
           <p>Nothing saved yet.</p>
           <p className="muted">
-            Use <Link to="/add">Add</Link> to save an appointment, a reminder or a note. Type it, say
-            it, or snap a photo of a flyer.
+            Use <Link to="/add">Add</Link> to save a note, a to-do, a reminder or an appointment. Type it,
+            say it, or snap a photo of a flyer.
           </p>
         </div>
       )}
 
-      {upcoming.length > 0 && (
+      {present.length > 1 && (
+        <div className="chips notes-filter" role="group" aria-label="Show">
+          {[{ key: 'all' as const, label: 'All' }, ...present].map((x) => (
+            <button
+              key={x.key}
+              type="button"
+              className={`chip ${showing === x.key ? 'chip-on' : ''}`}
+              aria-pressed={showing === x.key}
+              onClick={() => pick(x.key)}
+            >
+              {x.label}
+              {x.key !== 'all' && counts[x.key] > 0 && <span className="chip-count">{counts[x.key]}</span>}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {show('notes') && (
         <section className="notes-section">
-          <h2 className="notes-section-title">Coming up</h2>
+          <h2 className="notes-section-title">Notes</h2>
+          <ul className="note-list">
+            {plain.map((n) => (
+              <NoteRow key={n.id} note={n} meta={firstLine(n.body)} />
+            ))}
+          </ul>
+        </section>
+      )}
+
+      {show('todos') && (
+        <section className="notes-section">
+          <h2 className="notes-section-title">To-dos</h2>
+          {todos.length > 0 ? (
+            <ul className="note-list">
+              {todos.map((n) => (
+                <NoteRow key={n.id} note={n} meta="" onToggle={() => toggle.mutate(n)} />
+              ))}
+            </ul>
+          ) : (
+            <p className="muted small">All done.</p>
+          )}
+          <DoneFold items={doneTodos} onToggle={(n) => toggle.mutate(n)} />
+        </section>
+      )}
+
+      {show('reminders') && (
+        <section className="notes-section">
+          <h2 className="notes-section-title">Reminders</h2>
+          {open.length > 0 ? (
+            <ul className="note-list">
+              {open.map(({ note: n, day }) => (
+                <NoteRow
+                  key={n.id}
+                  note={n}
+                  meta={`Due ${timeLabel(n, true, day)}`}
+                  overdue={isOverdue(n)}
+                  // The current occurrence of a repeating reminder is never shown ticked.
+                  checked={n.recurrence ? false : undefined}
+                  onToggle={() => toggle.mutate(n)}
+                />
+              ))}
+            </ul>
+          ) : (
+            <p className="muted small">All done.</p>
+          )}
+          <DoneFold items={doneReminders} onToggle={(n) => toggle.mutate(n)} />
+        </section>
+      )}
+
+      {show('appointments') && (
+        <section className="notes-section">
+          <h2 className="notes-section-title">Appointments</h2>
           {[...days].map(([day, items]) => (
             <div key={day} className="aisle">
               <h2>{dayLabel(day)}</h2>
@@ -123,57 +241,30 @@ export function NotesPage() {
         </section>
       )}
 
-      {(open.length > 0 || undated.length > 0 || done.length > 0) && (
-        <section className="notes-section">
-          <h2 className="notes-section-title">Reminders</h2>
-          <ul className="note-list">
-            {open.map(({ note: n, day }) => (
-              <NoteRow
-                key={n.id}
-                note={n}
-                meta={`Due ${timeLabel(n, true, day)}`}
-                overdue={isOverdue(n)}
-                // The current occurrence of a repeating reminder is never shown ticked.
-                checked={n.recurrence ? false : undefined}
-                onToggle={() => toggle.mutate(n)}
-              />
-            ))}
-            {undated.map((n) => (
-              <NoteRow key={n.id} note={n} meta="" onToggle={() => toggle.mutate(n)} />
-            ))}
-          </ul>
-          {done.length > 0 && (
-            <>
-              <button type="button" className="link-btn notes-fold" onClick={() => setShowDone((v) => !v)}>
-                {showDone ? '▾' : '▸'} Done ({done.length})
-              </button>
-              {showDone && (
-                <ul className="note-list">
-                  {done.map((n) => (
-                    // A finished repeating series has nothing left to untick.
-                    <NoteRow key={n.id} note={n} meta="" onToggle={n.recurrence ? undefined : () => toggle.mutate(n)} />
-                  ))}
-                </ul>
-              )}
-            </>
-          )}
-        </section>
-      )}
-
-      {plain.length > 0 && (
-        <section className="notes-section">
-          <h2 className="notes-section-title">Notes</h2>
-          <ul className="note-list">
-            {plain.map((n) => (
-              <NoteRow key={n.id} note={n} meta={firstLine(n.body)} />
-            ))}
-          </ul>
-        </section>
-      )}
-
       </>
       )}
     </div>
+  );
+}
+
+/** Ticked-off reminders or to-dos, folded away under the open ones. */
+function DoneFold({ items, onToggle }: { items: Note[]; onToggle: (n: Note) => void }) {
+  const [open, setOpen] = useState(false);
+  if (items.length === 0) return null;
+  return (
+    <>
+      <button type="button" className="link-btn notes-fold" onClick={() => setOpen((v) => !v)}>
+        {open ? '▾' : '▸'} Done ({items.length})
+      </button>
+      {open && (
+        <ul className="note-list">
+          {items.map((n) => (
+            // A finished repeating series has nothing left to untick.
+            <NoteRow key={n.id} note={n} meta="" onToggle={n.recurrence ? undefined : () => onToggle(n)} />
+          ))}
+        </ul>
+      )}
+    </>
   );
 }
 

@@ -1,8 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { api } from '../api';
-import { dayLabel, dayOf, firstLine, isOverdue, localDate, movedToDay, reminderDue, repeatLabel } from '../notes';
+import { dayLabel, dayOf, firstLine, isOverdue, isTodo, localDate, movedToDay, reminderDue, repeatLabel } from '../notes';
 import type { Note, TodayCalendar, User, Weather } from '../types';
+import { NoteRow } from './NotesPage';
 
 type CalendarEvent = TodayCalendar['events'][number];
 
@@ -12,12 +14,14 @@ type Item =
   | { type: 'reminder'; note: Note; sort: string };
 
 const DAYS_AHEAD = 7;
+/** To-dos listed on Today; the rest are a tap away on Notes. */
+const TODOS_SHOWN = 5;
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 
 /**
  * Home: reminders that were missed, at the top so they get dealt with; the whole
  * family calendar for today and the week ahead, reminders that are due, and
- * at-a-glance cards for this week's meals and the grocery list.
+ * at-a-glance cards for this week's meals, the grocery list and to-dos.
  * Tapping the date looks at any other day instead (?date=YYYY-MM-DD).
  */
 export function TodayPage({ user }: { user: User }) {
@@ -38,12 +42,17 @@ export function TodayPage({ user }: { user: User }) {
   const groceries = useQuery({ queryKey: ['groceries'], queryFn: api.groceries });
   const weather = useQuery({ queryKey: ['weather'], queryFn: api.weather, refetchInterval: 30 * 60_000 });
 
+  // To-dos ticked off here stay listed (ticked) until the page is left, so a mis-tap can be undone.
+  const [ticked, setTicked] = useState<string[]>([]);
+
   // Same as the Notes tab: a repeating reminder ticks off one occurrence and moves on.
   const toggle = useMutation({
     mutationFn: (n: Note) => api.updateNote(n.id, { done: Boolean(n.recurrence) || !n.doneAt }),
     onMutate: (n) =>
       queryClient.setQueryData<Note[]>(['notes'], (prev) =>
-        prev?.map((x) => (x.id === n.id ? { ...x, doneAt: new Date().toISOString() } : x)),
+        prev?.map((x) =>
+          x.id === n.id ? { ...x, doneAt: n.doneAt && !n.recurrence ? null : new Date().toISOString() } : x,
+        ),
       ),
     onSettled: () => queryClient.invalidateQueries({ queryKey: ['notes'] }),
   });
@@ -88,6 +97,11 @@ export function TodayPage({ user }: { user: User }) {
   const upcoming = days.slice(1).filter((d) => byDay.get(d)!.length);
   const toCook = (plan.data ?? []).filter((p) => !p.cookedAt);
   const toBuy = (groceries.data ?? []).filter((g) => !g.checked).length;
+  // Open to-dos (and ones just ticked here), newest first, as on the Notes tab.
+  const todos = (notes.data ?? [])
+    .filter((n) => isTodo(n) && (!n.doneAt || ticked.includes(n.id)))
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  const openTodos = todos.filter((n) => !n.doneAt).length;
 
   return (
     <div className="page today">
@@ -166,6 +180,36 @@ export function TodayPage({ user }: { user: User }) {
 
       {!picked && (
       <>
+      <section className="today-card today-todos">
+        <Link to="/notes?show=todos" className="today-todos-head">
+          <span className="today-card-value">
+            {openTodos ? `${openTodos} ${openTodos === 1 ? 'Todo' : 'Todo’s'}` : 'Todo’s'}
+          </span>
+          <span className="today-card-label">See all ›</span>
+        </Link>
+        {notes.data && todos.length === 0 && <span className="today-card-detail">Nothing to do</span>}
+        {todos.length > 0 && (
+          <ul className="note-list">
+            {todos.slice(0, TODOS_SHOWN).map((n) => (
+              <NoteRow
+                key={n.id}
+                note={n}
+                meta=""
+                onToggle={() => {
+                  setTicked((prev) => (prev.includes(n.id) ? prev : [...prev, n.id]));
+                  toggle.mutate(n);
+                }}
+              />
+            ))}
+          </ul>
+        )}
+        {todos.length > TODOS_SHOWN && (
+          <Link to="/notes?show=todos" className="today-card-detail">
+            {todos.length - TODOS_SHOWN} more
+          </Link>
+        )}
+      </section>
+
       <div className="today-cards">
         <Link to="/week" className="today-card">
           <span className="today-card-label">This week’s meals</span>

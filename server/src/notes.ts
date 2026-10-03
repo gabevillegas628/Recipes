@@ -48,6 +48,8 @@ export const updateNoteBody = noteFields.partial().extend({
   done: z.boolean().optional(),
   /** null removes the photo. */
   image: z.null().optional(),
+  /** A photo just uploaded (POST /api/images) to replace the current one. */
+  uploadedImage: z.string().optional(),
 });
 
 type Fields = z.infer<typeof noteFields>;
@@ -124,7 +126,10 @@ export async function updateNote(id: string, input: z.infer<typeof updateNoteBod
   const current = await prisma.note.findUnique({ where: { id } });
   if (!current) return null;
 
-  const { done, image, ...changes } = input;
+  const { done, image, uploadedImage, ...changes } = input;
+  const replacement = uploadedImage ? await uploadExists(uploadedImage) : null;
+  if (uploadedImage && !replacement) throw new NoteError('That photo didn’t upload. Try adding it again.');
+  const newImage = replacement ?? (image === null ? null : undefined);
   const merged: Fields = {
     kind: changes.kind ?? current.kind,
     title: changes.title ?? current.title,
@@ -143,12 +148,12 @@ export async function updateNote(id: string, input: z.infer<typeof updateNoteBod
       ...(done !== undefined
         ? { doneAt: done ? (current.recurrence ? new Date() : (current.doneAt ?? new Date())) : null }
         : {}),
-      ...(image === null ? { image: null } : {}),
+      ...(newImage !== undefined ? { image: newImage } : {}),
       syncPending: true,
     },
     include,
   });
-  if (image === null) await deleteImage(current.image);
+  if (newImage !== undefined && current.image !== newImage) await deleteImage(current.image);
   kickCalendarSync();
   return note;
 }

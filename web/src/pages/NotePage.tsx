@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { api, imageUrl } from '../api';
 import { LinkedText, mapsUrl } from '../components/LinkedText';
-import { comingUpOn, dayLabel, dayOf, isOverdue, reminderDue, repeatLabel, timeLabel } from '../notes';
+import { comingUpOn, dayLabel, dayOf, isOverdue, isTodo, reminderDue, repeatLabel, timeLabel } from '../notes';
 import type { Note, NoteKind } from '../types';
 
 const KIND_LABELS: Record<NoteKind, string> = { APPOINTMENT: 'Appointment', REMINDER: 'Reminder', NOTE: 'Note' };
@@ -51,7 +51,7 @@ export function NotePage() {
 
   return (
     <article className="page note-view">
-      <p className="note-kind">{KIND_LABELS[n.kind]}</p>
+      <p className="note-kind">{isTodo(n) ? 'To-do' : KIND_LABELS[n.kind]}</p>
       <h1 className={`note-view-title ${done ? 'done' : ''}`}>{n.title}</h1>
 
       {(when || repeats || done) && (

@@ -176,7 +176,7 @@ export const api = {
   note: (id: string) => request<Note>(`/api/notes/${id}`),
   createNote: (input: NoteInput & { uploadedImage?: string | null }) =>
     request<Note>('/api/notes', json('POST', input)),
-  updateNote: (id: string, input: Partial<NoteInput> & { done?: boolean; image?: null }) =>
+  updateNote: (id: string, input: Partial<NoteInput> & { done?: boolean; image?: null; uploadedImage?: string }) =>
     request<Note>(`/api/notes/${id}`, json('PATCH', input)),
   deleteNote: (id: string) => request<void>(`/api/notes/${id}`, { method: 'DELETE' }),
   /** Removes past appointments from Mise; their Google Calendar events stay. */
