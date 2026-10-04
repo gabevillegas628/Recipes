@@ -29,6 +29,16 @@ Newest thinking first within each section.
   that Google can't (photos, longer notes, who it's for); and whether to pick up
   changes from Google (middle ground) or drop Mise's copies altogether.
 
+## Notes
+
+- **More than one photo per note.** `Note.image` becomes `images String[]` (as
+  `aliases` and `people` already are), with a migration copying existing photos
+  over. Capture already accepts up to 4 photos but only keeps the first; it would
+  keep them all. The rest: update/delete clean up removed files, the form gets a
+  row of thumbnails with remove buttons, the note page shows them all, the list
+  thumbnail gets a "+2" badge, and MCP's `hasPhoto` becomes a count. About half a
+  day. A separate table is only worth it for captions or per-photo details.
+
 ## App
 
 - **Backups.** There are none yet.

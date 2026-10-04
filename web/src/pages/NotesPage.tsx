@@ -16,6 +16,37 @@ const SECTIONS: { key: Section; label: string }[] = [
 ];
 
 const SHOWN_KEY = 'notes-shown';
+const SORT_KEY = 'notes-sort';
+const FOLDED_KEY = 'notes-folded-groups';
+
+type NoteSort = 'edited' | 'created';
+
+/** This phone's saved setting; private browsing just doesn't remember. */
+function stored(key: string): string | null {
+  try {
+    return localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+function store(key: string, value: string) {
+  try {
+    localStorage.setItem(key, value);
+  } catch {
+    // Not remembered.
+  }
+}
+
+/** The groups folded shut on this phone. */
+function foldedGroups(): string[] {
+  try {
+    const list: unknown = JSON.parse(stored(FOLDED_KEY) ?? '[]');
+    return Array.isArray(list) ? list.filter((x): x is string => typeof x === 'string') : [];
+  } catch {
+    return [];
+  }
+}
 
 /**
  * Everything saved from the Add tab: notes (by group), to-dos (reminders with no date),
@@ -102,8 +133,17 @@ export function NotesPage() {
   doneReminders.sort(byDone);
   doneTodos.sort(byDone);
 
-  const plain = notes.filter((n) => n.kind === 'NOTE');
-  // Notes under a heading per group, biggest group first; ungrouped ones last.
+  // Notes newest first, by when they were last edited or when they were made.
+  const [noteSort, setNoteSort] = useState<NoteSort>(() => (stored(SORT_KEY) === 'created' ? 'created' : 'edited'));
+  const sortBy = (s: NoteSort) => {
+    setNoteSort(s);
+    store(SORT_KEY, s);
+  };
+  const sortField = noteSort === 'created' ? 'createdAt' : 'updatedAt';
+  const plain = notes
+    .filter((n) => n.kind === 'NOTE')
+    .sort((a, b) => b[sortField].localeCompare(a[sortField]));
+  // Notes in a card per group, biggest group first; ungrouped ones last.
   const groups = new Map<string, Note[]>();
   for (const n of plain) if (n.group) groups.set(n.group, [...(groups.get(n.group) ?? []), n]);
   const grouped = [...groups].sort((a, b) => b[1].length - a[1].length || a[0].localeCompare(b[0]));
@@ -189,32 +229,36 @@ export function NotesPage() {
 
       {show('notes') && (
         <section className="notes-section">
-          <h2 className="notes-section-title">Notes</h2>
-          {rename.error && <p className="error">{rename.error.message}</p>}
-          {grouped.map(([group, items]) => (
-            <div key={group} className="aisle">
-              <div className="note-group-head">
-                <h2>{group}</h2>
-                <button type="button" className="link-btn" onClick={() => askRename(group)}>
-                  Rename
+          <div className="notes-section-head">
+            <h2 className="notes-section-title">Notes</h2>
+            <div className="chips notes-sort" role="group" aria-label="Sort notes by">
+              {(['edited', 'created'] as const).map((s) => (
+                <button
+                  key={s}
+                  type="button"
+                  className={`chip ${noteSort === s ? 'chip-on' : ''}`}
+                  aria-pressed={noteSort === s}
+                  onClick={() => sortBy(s)}
+                >
+                  {s === 'edited' ? 'Edited' : 'Created'}
                 </button>
-              </div>
-              <ul className="note-list">
-                {items.map((n) => (
-                  <NoteRow key={n.id} note={n} meta={firstLine(n.body)} />
-                ))}
-              </ul>
+              ))}
             </div>
-          ))}
-          {ungrouped.length > 0 && (
-            <div className="aisle">
-              {grouped.length > 0 && <h2>Other</h2>}
-              <ul className="note-list">
-                {ungrouped.map((n) => (
-                  <NoteRow key={n.id} note={n} meta={firstLine(n.body)} />
-                ))}
-              </ul>
-            </div>
+          </div>
+          {rename.error && <p className="error">{rename.error.message}</p>}
+          {grouped.length === 0 ? (
+            <ul className="note-list">
+              {ungrouped.map((n) => (
+                <NoteRow key={n.id} note={n} meta={firstLine(n.body)} />
+              ))}
+            </ul>
+          ) : (
+            <>
+              {grouped.map(([group, items]) => (
+                <NoteGroup key={group} name={group} items={items} onRename={() => askRename(group)} />
+              ))}
+              {ungrouped.length > 0 && <NoteGroup name="Other" items={ungrouped} />}
+            </>
           )}
         </section>
       )}
@@ -303,6 +347,42 @@ function DoneFold({ items, onToggle }: { items: Note[]; onToggle: (n: Note) => v
         </ul>
       )}
     </>
+  );
+}
+
+/** A group of notes as a card that folds shut; which ones are shut is remembered on this phone. */
+function NoteGroup({ name, items, onRename }: { name: string; items: Note[]; onRename?: () => void }) {
+  const [folded, setFolded] = useState(() => foldedGroups().includes(name));
+  const toggle = () => {
+    const next = !folded;
+    setFolded(next);
+    const rest = foldedGroups().filter((g) => g !== name);
+    store(FOLDED_KEY, JSON.stringify(next ? [...rest, name] : rest));
+  };
+  return (
+    <div className={`note-group ${folded ? 'folded' : ''}`}>
+      <div className="note-group-head">
+        <button type="button" className="note-group-toggle" aria-expanded={!folded} onClick={toggle}>
+          <span className="note-group-caret" aria-hidden>
+            {folded ? '▸' : '▾'}
+          </span>
+          <span className="note-group-name">{name}</span>
+          <span className="note-group-count">{items.length}</span>
+        </button>
+        {onRename && !folded && (
+          <button type="button" className="link-btn" onClick={onRename}>
+            Rename
+          </button>
+        )}
+      </div>
+      {!folded && (
+        <ul className="note-list">
+          {items.map((n) => (
+            <NoteRow key={n.id} note={n} meta={firstLine(n.body)} />
+          ))}
+        </ul>
+      )}
+    </div>
   );
 }
 

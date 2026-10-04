@@ -2882,13 +2882,81 @@ html.has-timers .cook {
   text-decoration: none;
 }
 
-.note-group-head {
+.notes-section-head {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   justify-content: space-between;
   gap: 12px;
+  margin-bottom: 8px;
+}
+
+.notes-sort .chip {
+  padding: 3px 10px;
+  font-size: 13px;
+}
+
+/* A group of notes: a card with a header that folds it shut. */
+.note-group {
+  margin-bottom: 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.note-group-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding-right: 12px;
+}
+
+.note-group-toggle {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.note-group-caret {
+  width: 1em;
+  color: var(--muted);
+}
+
+.note-group-name {
+  font-weight: 700;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.note-group-count {
+  flex: none;
+  min-width: 22px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--border);
+  color: var(--muted);
+  font-size: 12px;
+  text-align: center;
 }
 
 .note-group-head .link-btn {
   font-size: 13px;
+}
+
+.note-group .note-list {
+  padding: 0 12px;
+  border-top: 1px solid var(--border);
+}
+
+.note-group .note-row:last-child {
+  border-bottom: 0;
 }
