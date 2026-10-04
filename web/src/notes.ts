@@ -350,6 +350,13 @@ export function isOverdue(n: Note): boolean {
   return n.allDay ? dayOf(n.startsAt, true) < localDate(new Date()) : new Date(n.startsAt) < new Date();
 }
 
+/** Whether a repeating reminder's time today has passed without it being ticked off. All-day ones get the whole day. */
+export function missedToday(n: Note, now = new Date()): boolean {
+  if (!n.startsAt || !n.recurrence || n.allDay) return false;
+  const today = localDate(now);
+  return reminderDue(n) === today && new Date(`${today}T${localTime(new Date(n.startsAt))}`) < now;
+}
+
 /** The phone's current date and time in words, so the AI can resolve "next Tuesday". */
 export function nowInWords(): string {
   return new Date().toLocaleString('en-US', {

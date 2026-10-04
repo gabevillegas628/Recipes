@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { api } from '../api';
-import { dayLabel, dayOf, firstLine, isOverdue, isTodo, localDate, movedToDay, reminderDue, repeatLabel } from '../notes';
+import { dayLabel, dayOf, firstLine, isOverdue, isTodo, localDate, missedToday, movedToDay, reminderDue, repeatLabel } from '../notes';
 import type { Note, TodayCalendar, User, Weather } from '../types';
 import { NoteRow } from './NotesPage';
 
@@ -81,7 +81,7 @@ export function TodayPage({ user }: { user: User }) {
   const missed: Note[] = [];
   for (const n of picked ? [] : (notes.data ?? [])) {
     if (n.kind !== 'REMINDER' || !n.startsAt) continue;
-    if (isOverdue(n)) {
+    if (isOverdue(n) || missedToday(n, now)) {
       missed.push(n);
       continue;
     }
@@ -91,7 +91,10 @@ export function TodayPage({ user }: { user: User }) {
     add(due < today ? today : due, { type: 'reminder', note: n, sort });
   }
   for (const items of byDay.values()) items.sort((a, b) => a.sort.localeCompare(b.sort));
-  missed.sort((a, b) => a.startsAt!.localeCompare(b.startsAt!));
+  // A repeating reminder was missed at today's occurrence, not its first one.
+  const missedAt = (n: Note) =>
+    n.recurrence ? new Date(`${today}T${new Date(n.startsAt!).toTimeString().slice(0, 5)}`).getTime() : new Date(n.startsAt!).getTime();
+  missed.sort((a, b) => missedAt(a) - missedAt(b));
 
   const todayItems = byDay.get(base) ?? [];
   const upcoming = days.slice(1).filter((d) => byDay.get(d)!.length);
@@ -280,7 +283,9 @@ function MissedRow({ note: n, tomorrow, onToggle }: { note: Note; tomorrow: stri
     mutationFn: () => api.updateNote(n.id, movedToDay(n, tomorrow)),
     onSettled: () => queryClient.invalidateQueries({ queryKey: ['notes'] }),
   });
-  const day = dayOf(n.startsAt!, n.allDay);
+  // Repeating reminders are only missed today; moving one would move the whole series, so ticking it is the way on.
+  const day = n.recurrence ? localDate(new Date()) : dayOf(n.startsAt!, n.allDay);
+  const repeats = repeatLabel(n);
   return (
     <li className="agenda-row missed-row">
       <span className="agenda-time">{n.allDay ? 'Due' : clock(n.startsAt!)}</span>
@@ -289,16 +294,19 @@ function MissedRow({ note: n, tomorrow, onToggle }: { note: Note; tomorrow: stri
         <Link to={`/n/${n.id}`} className="agenda-title">
           {n.title}
         </Link>
-        <span className="agenda-meta overdue">{day === localDate(new Date()) ? 'Earlier today' : `Since ${dayLabel(day).replace('Yesterday', 'yesterday')}`}</span>
+        <span className="agenda-meta overdue">
+          {day === localDate(new Date()) ? 'Earlier today' : `Since ${dayLabel(day).replace('Yesterday', 'yesterday')}`}
+          {repeats ? ` · ↻ ${repeats}` : ''}
+        </span>
         {firstLine(n.body) && <span className="agenda-meta">{firstLine(n.body)}</span>}
-        <span className="missed-actions">
+        {!n.recurrence && <span className="missed-actions">
           <button type="button" className="btn btn-small" disabled={move.isPending} onClick={() => move.mutate()}>
             Tomorrow
           </button>
           <Link to={`/n/${n.id}/time`} className="btn btn-small">
             Another time
           </Link>
-        </span>
+        </span>}
         {move.error && <span className="error">{move.error.message}</span>}
       </div>
     </li>
