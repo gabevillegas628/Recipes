@@ -2445,12 +2445,54 @@ html.has-timers .cook {
   text-decoration: none;
 }
 
-.agenda {
-  margin-bottom: 16px;
+/* Today: each day (and Missed) is a card. */
+.day-card {
+  margin-bottom: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  overflow: hidden;
+}
+
+.day-card-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 0;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+}
+
+.day-card-date {
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.day-card-today {
+  border-color: var(--accent);
+  border-width: 1px 1px 1px 4px;
+}
+
+.day-card-today .day-card-head {
+  color: var(--accent);
+}
+
+.day-card .agenda-row:last-child {
+  border-bottom: 0;
+}
+
+.day-card .agenda-row {
+  padding-right: 12px;
 }
 
 .agenda-empty {
-  margin: 8px 0 16px;
+  margin: 0;
+  padding: 14px 12px;
 }
 
 .agenda-list {
@@ -2514,7 +2556,11 @@ html.has-timers .cook {
 
 /* Today: reminders whose time passed, with what to do about them. */
 .missed {
-  margin-bottom: 20px;
+  border-color: var(--danger);
+}
+
+.missed .day-card-head {
+  color: var(--danger);
 }
 
 .missed-row {

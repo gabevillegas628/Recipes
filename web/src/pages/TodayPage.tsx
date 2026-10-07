@@ -154,8 +154,8 @@ export function TodayPage({ user }: { user: User }) {
       {calendar.error && <p className="error">Couldn’t load the calendar: {calendar.error.message}</p>}
 
       {missed.length > 0 && (
-        <section className="missed">
-          <h2 className="notes-section-title">Missed</h2>
+        <section className="day-card missed">
+          <h2 className="day-card-head">Missed</h2>
           <ul className="agenda-list">
             {missed.map((n) => (
               <MissedRow
@@ -169,7 +169,9 @@ export function TodayPage({ user }: { user: User }) {
         </section>
       )}
 
-      <section className="agenda">
+      <section className={`day-card ${picked ? '' : 'day-card-today'}`}>
+        {/* A picked day's date is already the page heading. */}
+        {!picked && <h2 className="day-card-head">Today</h2>}
         {todayItems.length ? (
           <ul className="agenda-list">
             {todayItems.map((item, i) => (
@@ -243,8 +245,12 @@ export function TodayPage({ user }: { user: User }) {
         <section className="agenda-upcoming">
           <h2 className="notes-section-title">Coming up</h2>
           {upcoming.map((day) => (
-            <div key={day} className="aisle">
-              <h2>{dayLabel(day)}</h2>
+            <div key={day} className="day-card">
+              <h2 className="day-card-head">
+                {dayLabel(day)}
+                {/* Days further off are already labelled with their date. */}
+                {!/\d/.test(dayLabel(day)) && <span className="day-card-date">{shortDate(day)}</span>}
+              </h2>
               <ul className="agenda-list">
                 {byDay.get(day)!.map((item, i) => (
                   <AgendaRow key={i} item={item} now={now} onToggle={(n) => toggle.mutate(n)} />
@@ -273,6 +279,9 @@ function dateOf(day: string) {
   const [y, m, d] = day.split('-').map(Number);
   return new Date(y, m - 1, d);
 }
+
+/** "Oct 9", beside a day's name in its card. */
+const shortDate = (day: string) => dateOf(day).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 
 const clock = (iso: string) => new Date(iso).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
 
