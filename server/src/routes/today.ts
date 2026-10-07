@@ -2,7 +2,10 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { requireAuth } from '../auth.js';
 import { prisma } from '../db.js';
+import { tagKey, tagTitles } from '../eventTags.js';
+import { personFor } from '../findTimeService.js';
 import { calendarTimeZone, getConnection, GoogleApiError, GoogleAuthError, listEvents, type CalendarEvent } from '../google.js';
+import { getHousehold } from '../household.js';
 import { addDays } from '../recurrence.js';
 import { wallTime, zonedInstant } from '../zone.js';
 
@@ -37,6 +40,7 @@ async function forApp(events: CalendarEvent[], { skipReminders }: { skipReminder
       allDayDate: e.allDayDate,
       allDayEnd: e.allDayEnd,
       location: e.location,
+      free: e.free,
       noteId: e.noteId && notes.has(e.noteId) ? e.noteId : null,
     }));
 }
@@ -53,20 +57,29 @@ export async function todayRoutes(app: FastifyInstance) {
       .parse(request.query);
     const connection = await getConnection();
     if (!connection?.calendarId || connection.error) {
-      return { connected: false, error: connection?.error ?? null, calendarName: null, events: [] };
+      return { connected: false, error: connection?.error ?? null, calendarName: null, events: [], people: [], me: null };
     }
     try {
       const timeZone = (await calendarTimeZone(connection.calendarId, connection.timeZone)) ?? 'UTC';
       const first = date ?? wallTime(new Date(), timeZone).slice(0, 10);
       const from = zonedInstant(`${first}T00:00:00`, timeZone);
       const to = zonedInstant(`${addDays(first, days)}T00:00:00`, timeZone);
-      const events = await listEvents(connection.calendarId, from, to);
+      // Looking back at another day, the app's reminders show as they were on the calendar.
+      const events = await forApp(await listEvents(connection.calendarId, from, to), { skipReminders: !date });
+      // Whose each event is, as Find a time reads it (new titles are read once by AI), and which person is asking.
+      const household = await getHousehold();
+      const user = request.userId ? await prisma.user.findUnique({ where: { id: request.userId }, select: { name: true } }) : null;
+      const tags = household.people.length ? await tagTitles(events.map((e) => e.title), household) : null;
       return {
         connected: true,
         error: null,
         calendarName: connection.calendarName,
-        // Looking back at another day, the app's reminders show as they were on the calendar.
-        events: await forApp(events, { skipReminders: !date }),
+        events: events.map((e) => {
+          const tag = tags?.get(tagKey(e.title));
+          return { ...e, owner: tag ? { people: tag.people, everyone: tag.everyone, unsure: tag.unsure } : null };
+        }),
+        people: household.people.map(({ id, name, adult }) => ({ id, name, adult })),
+        me: personFor(household, user?.name)?.id ?? null,
       };
     } catch (err) {
       if (err instanceof GoogleAuthError || err instanceof GoogleApiError) return reply.code(502).send({ error: err.message });

@@ -2520,6 +2520,44 @@ html.has-timers .cook {
   opacity: 0.5;
 }
 
+/* Someone else's event: there, but in the background. */
+.agenda-row.theirs .agenda-title {
+  font-weight: 400;
+  color: var(--muted);
+}
+
+.owner-tag {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 0 7px;
+  border-radius: 999px;
+  background: var(--border);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 18px;
+  vertical-align: 1px;
+}
+
+.agenda-body-btn {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.agenda-row {
+  flex-wrap: wrap;
+}
+
+/* Whose an event is, edited in place under it. */
+.agenda-row .tag-edit {
+  flex-basis: 100%;
+  margin: 0 0 4px 80px;
+}
+
 .agenda-time {
   flex: none;
   width: 68px;

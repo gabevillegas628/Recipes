@@ -3,10 +3,12 @@ import { useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { api } from '../api';
 import { dayLabel, dayOf, firstLine, isOverdue, isTodo, localDate, missedToday, movedToDay, reminderDue, repeatLabel } from '../notes';
-import type { Note, TodayCalendar, User, Weather } from '../types';
+import type { EventOwner, Note, TodayCalendar, User, Weather } from '../types';
+import { OwnerEditor } from '../components/OwnerEditor';
 import { NoteRow } from './NotesPage';
 
 type CalendarEvent = TodayCalendar['events'][number];
+type Household = { people: NonNullable<TodayCalendar['people']>; me: string | null };
 
 /** One line on a day: a calendar event or a reminder from the app. */
 type Item =
@@ -96,6 +98,7 @@ export function TodayPage({ user }: { user: User }) {
     n.recurrence ? new Date(`${today}T${new Date(n.startsAt!).toTimeString().slice(0, 5)}`).getTime() : new Date(n.startsAt!).getTime();
   missed.sort((a, b) => missedAt(a) - missedAt(b));
 
+  const household: Household = { people: calendar.data?.people ?? [], me: calendar.data?.me ?? null };
   const todayItems = byDay.get(base) ?? [];
   const upcoming = days.slice(1).filter((d) => byDay.get(d)!.length);
   const toCook = (plan.data ?? []).filter((p) => !p.cookedAt);
@@ -175,7 +178,7 @@ export function TodayPage({ user }: { user: User }) {
         {todayItems.length ? (
           <ul className="agenda-list">
             {todayItems.map((item, i) => (
-              <AgendaRow key={i} item={item} now={now} isToday={!picked} onToggle={(n) => toggle.mutate(n)} />
+              <AgendaRow key={i} item={item} now={now} isToday={!picked} household={household} onToggle={(n) => toggle.mutate(n)} />
             ))}
           </ul>
         ) : (
@@ -253,7 +256,7 @@ export function TodayPage({ user }: { user: User }) {
               </h2>
               <ul className="agenda-list">
                 {byDay.get(day)!.map((item, i) => (
-                  <AgendaRow key={i} item={item} now={now} onToggle={(n) => toggle.mutate(n)} />
+                  <AgendaRow key={i} item={item} now={now} household={household} onToggle={(n) => toggle.mutate(n)} />
                 ))}
               </ul>
             </div>
@@ -326,13 +329,17 @@ function AgendaRow({
   item,
   now,
   isToday = false,
+  household,
   onToggle,
 }: {
   item: Item;
   now: Date;
   isToday?: boolean;
+  household: Household;
   onToggle: (n: Note) => void;
 }) {
+  const queryClient = useQueryClient();
+  const [editing, setEditing] = useState(false);
   if (item.type === 'reminder') {
     const n = item.note;
     const overdue = isOverdue(n);
@@ -360,24 +367,63 @@ function AgendaRow({
   const past = isToday && end !== null && end < now;
   const current = isToday && start !== null && end !== null && start <= now && now < end;
   const meta = [!item.allDay && end ? `until ${clock(e.end!)}` : null, e.location].filter(Boolean).join(' · ');
+  const { theirs, names } = ownership(e.owner, household);
   const body = (
     <>
-      <span className="agenda-title">{e.title}</span>
+      <span className="agenda-title">
+        {e.title}
+        {names.map((name) => (
+          <span key={name} className="owner-tag">
+            {name}
+          </span>
+        ))}
+      </span>
       {meta && <span className="agenda-meta">{meta}</span>}
     </>
   );
   return (
-    <li className={`agenda-row ${past ? 'past' : ''} ${current ? 'now' : ''}`}>
+    <li className={`agenda-row ${past ? 'past' : ''} ${current ? 'now' : ''} ${theirs ? 'theirs' : ''}`}>
       <span className="agenda-time">{item.allDay ? 'All day' : clock(e.start!)}</span>
       {e.noteId ? (
         <Link to={`/n/${e.noteId}`} className="agenda-body">
           {body}
         </Link>
+      ) : e.owner && household.people.length ? (
+        // Tap a calendar event to say whose it is.
+        <button type="button" className="agenda-body agenda-body-btn" aria-expanded={editing} onClick={() => setEditing((v) => !v)}>
+          {body}
+        </button>
       ) : (
         <span className="agenda-body">{body}</span>
       )}
+      {editing && e.owner && (
+        <OwnerEditor
+          title={e.title}
+          people={household.people}
+          owner={e.owner}
+          onSaved={() => {
+            setEditing(false);
+            queryClient.invalidateQueries({ queryKey: ['today'] });
+          }}
+          onCancel={() => setEditing(false)}
+        />
+      )}
     </li>
   );
+}
+
+/**
+ * How an event shows on Today for whoever's looking. Another adult's (or no one's)
+ * is muted; a child's isn't, since it usually needs a grown-up. Events that aren't
+ * yours are labelled with whose they are. Everyone's and unsure ones show as yours.
+ */
+function ownership(owner: EventOwner | null | undefined, { people, me }: Household): { theirs: boolean; names: string[] } {
+  if (!owner || owner.everyone || owner.unsure) return { theirs: false, names: [] };
+  if (owner.people.length === 0) return { theirs: true, names: [] };
+  if (me && owner.people.includes(me)) return { theirs: false, names: [] };
+  const named = owner.people.flatMap((id) => people.find((p) => p.id === id) ?? []);
+  // Not in the household by name: nothing is muted, but whose it is still shows.
+  return { theirs: Boolean(me) && named.every((p) => p.adult), names: named.map((p) => p.name) };
 }
 
 /** What to know when packing: an umbrella (or boots) if it's likely, and the high and low. */

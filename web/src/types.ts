@@ -241,9 +241,25 @@ export interface TodayCalendar {
     allDayDate: string | null;
     allDayEnd: string | null;
     location: string | null;
+    /** Marked "free" in Google Calendar: it doesn't take anyone's time. */
+    free: boolean;
     /** Set when it's an appointment saved in this app. */
     noteId: string | null;
+    /** Whose it is, read from its title (Today only; null before the household is set up). */
+    owner?: EventOwner | null;
   }[];
+  /** The household, for naming owners (Today only). */
+  people?: { id: string; name: string; adult: boolean }[];
+  /** The household person who's looking, or null if their name isn't in the household. */
+  me?: string | null;
+}
+
+/** Whose a calendar event is. No people and not everyone or unsure: it takes no one's time. */
+export interface EventOwner {
+  people: string[];
+  everyone: boolean;
+  /** Couldn't be told from the title; counts as everyone's. */
+  unsure: boolean;
 }
 
 /** Search across Mise and the family calendar's history. */

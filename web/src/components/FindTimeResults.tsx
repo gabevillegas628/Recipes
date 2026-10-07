@@ -4,6 +4,7 @@ import { addDays } from '../../../server/src/recurrence';
 import { api } from '../api';
 import { localDate } from '../notes';
 import { FindTimeDay } from './FindTimeDay';
+import { OwnerEditor } from './OwnerEditor';
 import type { EventTagInfo, FindTimeInput, FindTimeOption, FindTimeResult } from '../types';
 
 /**
@@ -152,15 +153,6 @@ function TagRow({
   onSaved: () => void;
 }) {
   const [editing, setEditing] = useState(false);
-  const [picked, setPicked] = useState<string[]>(event.people);
-  const [everyone, setEveryone] = useState(event.everyone);
-  const save = useMutation({
-    mutationFn: () => api.setEventTag(event.title, everyone ? [] : picked, everyone),
-    onSuccess: () => {
-      setEditing(false);
-      onSaved();
-    },
-  });
 
   const label = event.everyone
     ? 'Everyone'
@@ -182,44 +174,16 @@ function TagRow({
         )}
       </div>
       {editing && (
-        <div className="tag-edit">
-          <div className="chips">
-            {people.map((p) => (
-              <button
-                key={p.id}
-                type="button"
-                className={`chip ${!everyone && picked.includes(p.id) ? 'chip-on' : ''}`}
-                aria-pressed={!everyone && picked.includes(p.id)}
-                onClick={() => {
-                  setEveryone(false);
-                  setPicked((prev) => (prev.includes(p.id) ? prev.filter((id) => id !== p.id) : [...prev, p.id]));
-                }}
-              >
-                {p.name}
-              </button>
-            ))}
-            <button
-              type="button"
-              className={`chip ${everyone ? 'chip-on' : ''}`}
-              aria-pressed={everyone}
-              onClick={() => setEveryone((v) => !v)}
-            >
-              Everyone
-            </button>
-          </div>
-          <p className="muted small">
-            {!everyone && picked.length === 0 ? 'No one picked: it won’t block anyone’s time.' : 'Remembered for this title from now on.'}
-          </p>
-          {save.error && <p className="error">{save.error.message}</p>}
-          <div className="settings-actions">
-            <button type="button" className="btn btn-primary btn-small" disabled={save.isPending} onClick={() => save.mutate()}>
-              {save.isPending ? 'Saving…' : 'Save'}
-            </button>
-            <button type="button" className="btn btn-small" onClick={() => setEditing(false)}>
-              Cancel
-            </button>
-          </div>
-        </div>
+        <OwnerEditor
+          title={event.title}
+          people={people}
+          owner={event}
+          onSaved={() => {
+            setEditing(false);
+            onSaved();
+          }}
+          onCancel={() => setEditing(false)}
+        />
       )}
     </li>
   );
