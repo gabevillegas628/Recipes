@@ -1,19 +1,20 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { api } from '../api';
 import { dayLabel, dayOf, firstLine, isOverdue, isTodo, localDate, missedToday, movedToDay, reminderDue, repeatLabel } from '../notes';
-import type { EventOwner, Note, TodayCalendar, User, Weather } from '../types';
+import type { Note, TodayCalendar, User, Weather } from '../types';
 import { OwnerEditor } from '../components/OwnerEditor';
+import { busyOn, freeBetween, minutesOf, ownership, type Household, type Span } from '../freeTime';
 import { NoteRow } from './NotesPage';
 
 type CalendarEvent = TodayCalendar['events'][number];
-type Household = { people: NonNullable<TodayCalendar['people']>; me: string | null };
 
 /** One line on a day: a calendar event or a reminder from the app. */
 type Item =
   | { type: 'event'; event: CalendarEvent; allDay: boolean; sort: string }
-  | { type: 'reminder'; note: Note; sort: string };
+  | { type: 'reminder'; note: Note; sort: string }
+  | { type: 'free'; free: Span; sort: string };
 
 const DAYS_AHEAD = 7;
 /** To-dos listed on Today; the rest are a tap away on Notes. */
@@ -99,6 +100,16 @@ export function TodayPage({ user }: { user: User }) {
   missed.sort((a, b) => missedAt(a) - missedAt(b));
 
   const household: Household = { people: calendar.data?.people ?? [], me: calendar.data?.me ?? null };
+  // Free time left today, between your own busy times, within your day's hours.
+  const myDay = calendar.data?.day;
+  if (!picked && myDay && calendar.data?.connected && notes.data) {
+    const nowMinutes = Math.ceil((now.getHours() * 60 + now.getMinutes()) / 5) * 5;
+    const busy = busyOn(today, calendar.data.events, notes.data, household, user.name);
+    for (const free of freeBetween(busy, Math.max(minutesOf(myDay.start), nowMinutes), minutesOf(myDay.end))) {
+      add(today, { type: 'free', free, sort: hhmm(free.start) });
+    }
+    byDay.get(today)?.sort((a, b) => a.sort.localeCompare(b.sort));
+  }
   const todayItems = byDay.get(base) ?? [];
   const upcoming = days.slice(1).filter((d) => byDay.get(d)!.length);
   const toCook = (plan.data ?? []).filter((p) => !p.cookedAt);
@@ -340,6 +351,8 @@ function AgendaRow({
 }) {
   const queryClient = useQueryClient();
   const [editing, setEditing] = useState(false);
+  if (item.type === 'free') return <FreeRow free={item.free} now={now} />;
+
   if (item.type === 'reminder') {
     const n = item.note;
     const overdue = isOverdue(n);
@@ -412,18 +425,52 @@ function AgendaRow({
   );
 }
 
-/**
- * How an event shows on Today for whoever's looking. Another adult's (or no one's)
- * is muted; a child's isn't, since it usually needs a grown-up. Events that aren't
- * yours are labelled with whose they are. Everyone's and unsure ones show as yours.
- */
-function ownership(owner: EventOwner | null | undefined, { people, me }: Household): { theirs: boolean; names: string[] } {
-  if (!owner || owner.everyone || owner.unsure) return { theirs: false, names: [] };
-  if (owner.people.length === 0) return { theirs: true, names: [] };
-  if (me && owner.people.includes(me)) return { theirs: false, names: [] };
-  const named = owner.people.flatMap((id) => people.find((p) => p.id === id) ?? []);
-  // Not in the household by name: nothing is muted, but whose it is still shows.
-  return { theirs: Boolean(me) && named.every((p) => p.adult), names: named.map((p) => p.name) };
+/** "13:30" for minutes since midnight. */
+const hhmm = (minutes: number) => `${String(Math.floor(minutes / 60)).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}`;
+
+/** "1:30 PM" for minutes since midnight. */
+const clockAt = (minutes: number) =>
+  new Date(2000, 0, 1, Math.floor(minutes / 60), minutes % 60).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+
+/** "1 h 30 min", "45 min". */
+function howLong(minutes: number) {
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  return [h ? `${h} h` : '', m ? `${m} min` : ''].filter(Boolean).join(' ');
+}
+
+/** Appointments made from free time start out this long, or shorter if the gap is. */
+const APPOINTMENT_MINUTES = 60;
+
+/** Free time between your busy times today: tap it to add a reminder or appointment then. */
+function FreeRow({ free, now }: { free: Span; now: Date }) {
+  const navigate = useNavigate();
+  const [open, setOpen] = useState(false);
+  const nowMinutes = now.getHours() * 60 + now.getMinutes();
+  const add = (kind: 'reminder' | 'appointment') => {
+    const end = kind === 'appointment' ? Math.min(free.end, free.start + APPOINTMENT_MINUTES) : null;
+    const params = new URLSearchParams({ add: kind, date: localDate(now), time: hhmm(free.start), ...(end ? { end: hhmm(end) } : {}) });
+    navigate(`/add?${params}`);
+  };
+  return (
+    <li className="agenda-row free-row">
+      <span className="agenda-time">{free.start <= nowMinutes + 5 ? 'Now' : clockAt(free.start)}</span>
+      <button type="button" className="agenda-body agenda-body-btn" aria-expanded={open} onClick={() => setOpen((v) => !v)}>
+        <span className="agenda-title">Free until {clockAt(free.end)}</span>
+        <span className="agenda-meta">{howLong(free.end - free.start)}</span>
+      </button>
+      {open && (
+        <div className="free-actions">
+          <button type="button" className="btn btn-small" onClick={() => add('reminder')}>
+            + Reminder
+          </button>
+          <button type="button" className="btn btn-small" onClick={() => add('appointment')}>
+            + Appointment
+          </button>
+        </div>
+      )}
+    </li>
+  );
 }
 
 /** What to know when packing: an umbrella (or boots) if it's likely, and the high and low. */

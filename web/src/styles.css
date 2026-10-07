@@ -2552,6 +2552,29 @@ html.has-timers .cook {
   flex-wrap: wrap;
 }
 
+/* Free time between your busy times today. */
+.free-row {
+  min-height: 40px;
+  border-left-style: dashed;
+  border-left-color: var(--accent);
+}
+
+.free-row .agenda-time,
+.free-row .agenda-title {
+  color: var(--accent);
+}
+
+.free-row .agenda-title {
+  font-weight: 500;
+}
+
+.free-actions {
+  flex-basis: 100%;
+  display: flex;
+  gap: 8px;
+  margin: 0 0 4px 80px;
+}
+
 /* Whose an event is, edited in place under it. */
 .agenda-row .tag-edit {
   flex-basis: 100%;

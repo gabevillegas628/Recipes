@@ -252,6 +252,8 @@ export interface TodayCalendar {
   people?: { id: string; name: string; adult: boolean }[];
   /** The household person who's looking, or null if their name isn't in the household. */
   me?: string | null;
+  /** The hours Today counts free time in, "07:00" to "21:00" (Today only). */
+  day?: { start: string; end: string } | null;
 }
 
 /** Whose a calendar event is. No people and not everyone or unsure: it takes no one's time. */
@@ -287,6 +289,9 @@ export interface Household {
   travelMinutes: number;
   hoursStart: string;
   hoursEnd: string;
+  /** The hours of the day Today counts free time in. */
+  dayStart: string;
+  dayEnd: string;
 }
 
 /** A "find a time" request as Capture read it; sent back as-is to search again. */

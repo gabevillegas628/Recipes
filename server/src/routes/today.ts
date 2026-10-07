@@ -57,7 +57,7 @@ export async function todayRoutes(app: FastifyInstance) {
       .parse(request.query);
     const connection = await getConnection();
     if (!connection?.calendarId || connection.error) {
-      return { connected: false, error: connection?.error ?? null, calendarName: null, events: [], people: [], me: null };
+      return { connected: false, error: connection?.error ?? null, calendarName: null, events: [], people: [], me: null, day: null };
     }
     try {
       const timeZone = (await calendarTimeZone(connection.calendarId, connection.timeZone)) ?? 'UTC';
@@ -80,6 +80,8 @@ export async function todayRoutes(app: FastifyInstance) {
         }),
         people: household.people.map(({ id, name, adult }) => ({ id, name, adult })),
         me: personFor(household, user?.name)?.id ?? null,
+        // The hours Today counts free time in.
+        day: { start: household.dayStart, end: household.dayEnd },
       };
     } catch (err) {
       if (err instanceof GoogleAuthError || err instanceof GoogleApiError) return reply.code(502).send({ error: err.message });

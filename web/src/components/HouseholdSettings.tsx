@@ -125,6 +125,15 @@ export function HouseholdSection() {
           <small>A request can change these (“Saturday is fine”, “after 6”).</small>
         </div>
 
+        <div className="field">
+          <span>My day</span>
+          <div className="field-row field-row-2">
+            <input type="time" aria-label="Day starts" value={draft.dayStart} onChange={(e) => set('dayStart', e.target.value)} required />
+            <input type="time" aria-label="Day ends" value={draft.dayEnd} onChange={(e) => set('dayEnd', e.target.value)} required />
+          </div>
+          <small>Today shows free time between these, every day.</small>
+        </div>
+
         <label className="field">
           <span>Travel time each way (minutes)</span>
           <input

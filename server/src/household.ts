@@ -3,7 +3,8 @@ import { prisma } from './db.js';
 
 /**
  * The family, for finding times: who's in it (and how calendar titles name
- * them), the kids' school hours, travel time and usual appointment hours.
+ * them), the kids' school hours, travel time and usual appointment hours, and
+ * the hours of the day Today counts free time in.
  */
 
 const HHMM = /^([01]\d|2[0-3]):[0-5]\d$/;
@@ -26,8 +27,11 @@ export const householdBody = z
     travelMinutes: z.number().int().min(0).max(240),
     hoursStart: hhmm,
     hoursEnd: hhmm,
+    dayStart: hhmm,
+    dayEnd: hhmm,
   })
   .refine((h) => h.hoursStart < h.hoursEnd, 'Appointment hours must end after they start')
+  .refine((h) => h.dayStart < h.dayEnd, 'Your day must end after it starts')
   .refine((h) => !h.schoolStart === !h.schoolEnd && (!h.schoolStart || h.schoolStart < h.schoolEnd!), 'School hours must end after they start');
 
 export async function getHousehold() {

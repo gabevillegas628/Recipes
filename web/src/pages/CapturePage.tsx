@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useState, type FormEvent } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useEffect, useState, type FormEvent } from 'react';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { api } from '../api';
 import { FindTimeDay } from '../components/FindTimeDay';
 import { FindTimeForm } from '../components/FindTimeForm';
@@ -36,6 +36,19 @@ export function CapturePage() {
   const [byHand, setByHand] = useState<string | null>(null);
 
   const config = useQuery({ queryKey: ['capture-config'], queryFn: api.captureConfig });
+
+  // From free time on Today (?add=reminder&date=…&time=…&end=…): straight to that form, with the time filled in.
+  const [params, setParams] = useSearchParams();
+  useEffect(() => {
+    const kind = params.get('add');
+    if (kind !== 'reminder' && kind !== 'appointment') return;
+    addByHand(kind === 'reminder' ? 'REMINDER' : 'APPOINTMENT', kind, {
+      date: params.get('date'),
+      time: params.get('time'),
+      endTime: params.get('end'),
+    });
+    setParams({}, { replace: true });
+  }, [params]);
 
   const sort = useMutation({
     mutationFn: async () =>
@@ -88,17 +101,17 @@ export function CapturePage() {
     addGroceries.reset();
   }
 
-  /** A blank form of that kind. Reminders and appointments start on today; a to-do has no date. */
-  function addByHand(kind: FormKind, label: string) {
+  /** A blank form of that kind. Reminders and appointments start on today (or `at`); a to-do has no date. */
+  function addByHand(kind: FormKind, label: string, at?: { date: string | null; time: string | null; endTime: string | null }) {
     setByHand(label);
     setDraft({
       kind: kind === 'TODO' ? 'REMINDER' : kind,
       title: '',
       body: null,
-      date: kind === 'REMINDER' || kind === 'APPOINTMENT' ? localDate(new Date()) : null,
-      time: null,
+      date: kind === 'REMINDER' || kind === 'APPOINTMENT' ? (at?.date ?? localDate(new Date())) : null,
+      time: at?.time ?? null,
       endDate: null,
-      endTime: null,
+      endTime: at?.endTime ?? null,
       location: null,
       recurrence: null,
       group: null,

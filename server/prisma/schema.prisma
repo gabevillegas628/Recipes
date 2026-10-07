@@ -312,6 +312,9 @@ model Household {
   /// Usual hours for appointments, on weekdays.
   hoursStart    String   @default("08:00")
   hoursEnd      String   @default("17:00")
+  /// When the day's free time is counted on Today, every day: "07:00" to "21:00".
+  dayStart      String   @default("07:00")
+  dayEnd        String   @default("21:00")
   /// Where Today's weather is for: the place as shown ("Austin, Texas") and its coordinates.
   weatherPlace  String?
   weatherLat    Float?
