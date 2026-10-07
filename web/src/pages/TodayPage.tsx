@@ -5,7 +5,8 @@ import { api } from '../api';
 import { dayLabel, dayOf, firstLine, isOverdue, isTodo, localDate, missedToday, movedToDay, reminderDue, repeatLabel } from '../notes';
 import type { Note, TodayCalendar, User, Weather } from '../types';
 import { OwnerEditor } from '../components/OwnerEditor';
-import { busyOn, freeBetween, minutesOf, ownership, type Household, type Span } from '../freeTime';
+import { SortOutDay, type DayClashes } from '../components/SortOutDay';
+import { busyOn, clashingReminders, freeBetween, hhmm, minutesOf, overlaps, ownership, remindersOn, type Household, type Span } from '../freeTime';
 import { NoteRow } from './NotesPage';
 
 type CalendarEvent = TodayCalendar['events'][number];
@@ -14,7 +15,7 @@ type CalendarEvent = TodayCalendar['events'][number];
 type Item =
   | { type: 'event'; event: CalendarEvent; allDay: boolean; sort: string }
   | { type: 'reminder'; note: Note; sort: string }
-  | { type: 'free'; free: Span; sort: string };
+  | { type: 'free'; free: Span; day: string; sort: string };
 
 const DAYS_AHEAD = 7;
 /** To-dos listed on Today; the rest are a tap away on Notes. */
@@ -47,6 +48,8 @@ export function TodayPage({ user }: { user: User }) {
 
   // To-dos ticked off here stay listed (ticked) until the page is left, so a mis-tap can be undone.
   const [ticked, setTicked] = useState<string[]>([]);
+  // The day whose clashes are being sorted out, under its heading.
+  const [sorting, setSorting] = useState<string | null>(null);
 
   // Same as the Notes tab: a repeating reminder ticks off one occurrence and moves on.
   const toggle = useMutation({
@@ -100,18 +103,50 @@ export function TodayPage({ user }: { user: User }) {
   missed.sort((a, b) => missedAt(a) - missedAt(b));
 
   const household: Household = { people: calendar.data?.people ?? [], me: calendar.data?.me ?? null };
-  // Free time left today, between your own busy times, within your day's hours.
   const myDay = calendar.data?.day;
+  // Clashes per day, for today (from now on) and the days coming up.
+  const clashes = new Map<string, DayClashes>();
   if (!picked && myDay && calendar.data?.connected && notes.data) {
-    const nowMinutes = Math.ceil((now.getHours() * 60 + now.getMinutes()) / 5) * 5;
-    const busy = busyOn(today, calendar.data.events, notes.data, household, user.name);
-    for (const free of freeBetween(busy, Math.max(minutesOf(myDay.start), nowMinutes), minutesOf(myDay.end))) {
-      add(today, { type: 'free', free, sort: hhmm(free.start) });
+    const { events: calendarEvents } = calendar.data;
+    const allNotes = notes.data;
+    const minuteNow = now.getHours() * 60 + now.getMinutes();
+    const dayHours = { from: minutesOf(myDay.start), to: minutesOf(myDay.end) };
+    const busyFor = (day: string) => busyOn(day, calendarEvents, allNotes, household, user.name);
+
+    // Free time each day between your own busy times, within your day's hours (today, from now on).
+    const todayWindow = { from: Math.max(dayHours.from, Math.ceil(minuteNow / 5) * 5), to: dayHours.to };
+    for (const day of days) {
+      const { from, to } = day === today ? todayWindow : dayHours;
+      for (const free of freeBetween(busyFor(day), from, to)) add(day, { type: 'free', free, day, sort: hhmm(free.start) });
+      byDay.get(day)?.sort((a, b) => a.sort.localeCompare(b.sort));
     }
-    byDay.get(today)?.sort((a, b) => a.sort.localeCompare(b.sort));
+
+    days.forEach((day, i) => {
+      // Your reminders still to come that run into an event or each other.
+      const reminders = remindersOn(day, allNotes, user.name).filter((r) => day !== today || r.start >= minuteNow);
+      const events = busyFor(day).filter((b) => !b.noteId);
+      const clashing = new Map<string, string>();
+      for (const id of clashingReminders(reminders, events)) {
+        const r = reminders.find((x) => x.note.id === id)!;
+        clashing.set(id, events.find((e) => overlaps(r, e))?.title ?? reminders.find((o) => o !== r && overlaps(r, o))!.note.title);
+      }
+      // Repeating reminders can't be moved one day at a time, so they alone leave nothing to sort out.
+      if (!reminders.some((r) => clashing.has(r.note.id) && !r.note.recurrence)) return;
+      // What doesn't fit can go to the next day, if the calendar's been read that far.
+      const next = days[i + 1];
+      clashes.set(day, {
+        day,
+        reminders,
+        events,
+        window: day === today ? todayWindow : dayHours,
+        next: next ? { day: next, busy: busyFor(next), ...dayHours } : null,
+        clashing,
+      });
+    });
   }
   const todayItems = byDay.get(base) ?? [];
-  const upcoming = days.slice(1).filter((d) => byDay.get(d)!.length);
+  // Days with something on; a day that's all free time isn't worth a card.
+  const upcoming = days.slice(1).filter((d) => byDay.get(d)!.some((item) => item.type !== 'free'));
   const toCook = (plan.data ?? []).filter((p) => !p.cookedAt);
   const toBuy = (groceries.data ?? []).filter((g) => !g.checked).length;
   // Open to-dos (and ones just ticked here), newest first, as on the Notes tab.
@@ -185,11 +220,29 @@ export function TodayPage({ user }: { user: User }) {
 
       <section className={`day-card ${picked ? '' : 'day-card-today'}`}>
         {/* A picked day's date is already the page heading. */}
-        {!picked && <h2 className="day-card-head">Today</h2>}
+        {!picked && (
+          <h2 className="day-card-head">
+            Today
+            {clashes.has(today) && sorting !== today && (
+              <button type="button" className="link-btn day-card-action" onClick={() => setSorting(today)}>
+                ⚠ Sort out my day
+              </button>
+            )}
+          </h2>
+        )}
+        {sorting === today && clashes.has(today) && <SortOutDay clashes={clashes.get(today)!} onClose={() => setSorting(null)} />}
         {todayItems.length ? (
           <ul className="agenda-list">
             {todayItems.map((item, i) => (
-              <AgendaRow key={i} item={item} now={now} isToday={!picked} household={household} onToggle={(n) => toggle.mutate(n)} />
+              <AgendaRow
+                key={i}
+                item={item}
+                now={now}
+                isToday={!picked}
+                household={household}
+                clashWith={item.type === 'reminder' ? clashes.get(today)?.clashing.get(item.note.id) : undefined}
+                onToggle={(n) => toggle.mutate(n)}
+              />
             ))}
           </ul>
         ) : (
@@ -264,10 +317,23 @@ export function TodayPage({ user }: { user: User }) {
                 {dayLabel(day)}
                 {/* Days further off are already labelled with their date. */}
                 {!/\d/.test(dayLabel(day)) && <span className="day-card-date">{shortDate(day)}</span>}
+                {clashes.has(day) && sorting !== day && (
+                  <button type="button" className="link-btn day-card-action" onClick={() => setSorting(day)}>
+                    ⚠ Sort out this day
+                  </button>
+                )}
               </h2>
+              {sorting === day && clashes.has(day) && <SortOutDay clashes={clashes.get(day)!} onClose={() => setSorting(null)} />}
               <ul className="agenda-list">
                 {byDay.get(day)!.map((item, i) => (
-                  <AgendaRow key={i} item={item} now={now} household={household} onToggle={(n) => toggle.mutate(n)} />
+                  <AgendaRow
+                    key={i}
+                    item={item}
+                    now={now}
+                    household={household}
+                    clashWith={item.type === 'reminder' ? clashes.get(day)?.clashing.get(item.note.id) : undefined}
+                    onToggle={(n) => toggle.mutate(n)}
+                  />
                 ))}
               </ul>
             </div>
@@ -341,17 +407,20 @@ function AgendaRow({
   now,
   isToday = false,
   household,
+  clashWith,
   onToggle,
 }: {
   item: Item;
   now: Date;
   isToday?: boolean;
   household: Household;
+  /** What a reminder runs into, when it clashes. */
+  clashWith?: string;
   onToggle: (n: Note) => void;
 }) {
   const queryClient = useQueryClient();
   const [editing, setEditing] = useState(false);
-  if (item.type === 'free') return <FreeRow free={item.free} now={now} />;
+  if (item.type === 'free') return <FreeRow free={item.free} day={item.day} now={now} />;
 
   if (item.type === 'reminder') {
     const n = item.note;
@@ -368,6 +437,7 @@ function AgendaRow({
             {overdue ? `Overdue since ${dayLabel(dayOf(n.startsAt!, n.allDay))}` : n.endsAt ? `Reminder · until ${clock(n.endsAt)}` : 'Reminder'}
             {repeats ? ` · ↻ ${repeats}` : ''}
           </span>
+          {clashWith && <span className="agenda-meta clash">⚠ Runs into {clashWith}</span>}
           {detail && <span className="agenda-meta">{detail}</span>}
         </Link>
       </li>
@@ -425,9 +495,6 @@ function AgendaRow({
   );
 }
 
-/** "13:30" for minutes since midnight. */
-const hhmm = (minutes: number) => `${String(Math.floor(minutes / 60)).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}`;
-
 /** "1:30 PM" for minutes since midnight. */
 const clockAt = (minutes: number) =>
   new Date(2000, 0, 1, Math.floor(minutes / 60), minutes % 60).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
@@ -442,19 +509,19 @@ function howLong(minutes: number) {
 /** Appointments made from free time start out this long, or shorter if the gap is. */
 const APPOINTMENT_MINUTES = 60;
 
-/** Free time between your busy times today: tap it to add a reminder or appointment then. */
-function FreeRow({ free, now }: { free: Span; now: Date }) {
+/** Free time between your busy times on a day: tap it to add a reminder or appointment then. */
+function FreeRow({ free, day, now }: { free: Span; day: string; now: Date }) {
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const nowMinutes = now.getHours() * 60 + now.getMinutes();
   const add = (kind: 'reminder' | 'appointment') => {
     const end = kind === 'appointment' ? Math.min(free.end, free.start + APPOINTMENT_MINUTES) : null;
-    const params = new URLSearchParams({ add: kind, date: localDate(now), time: hhmm(free.start), ...(end ? { end: hhmm(end) } : {}) });
+    const params = new URLSearchParams({ add: kind, date: day, time: hhmm(free.start), ...(end ? { end: hhmm(end) } : {}) });
     navigate(`/add?${params}`);
   };
   return (
     <li className="agenda-row free-row">
-      <span className="agenda-time">{free.start <= nowMinutes + 5 ? 'Now' : clockAt(free.start)}</span>
+      <span className="agenda-time">{day === localDate(now) && free.start <= nowMinutes + 5 ? 'Now' : clockAt(free.start)}</span>
       <button type="button" className="agenda-body agenda-body-btn" aria-expanded={open} onClick={() => setOpen((v) => !v)}>
         <span className="agenda-title">Free until {clockAt(free.end)}</span>
         <span className="agenda-meta">{howLong(free.end - free.start)}</span>

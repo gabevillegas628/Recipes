@@ -1,8 +1,9 @@
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { WEEKDAYS, weekdayOf, type Freq, type Weekday } from '../../../server/src/recurrence';
 import { api, imageUrl } from '../api';
-import { formKindOf, monthlyPositions, NO_REPEAT, type FormKind, type NoteValues, type RepeatValues } from '../notes';
+import { busyOn, hhmm, minutesOf, nearestFree, overlaps, type Busy, type Span } from '../freeTime';
+import { formKindOf, localDate, monthlyPositions, NO_REPEAT, type FormKind, type NoteValues, type RepeatValues } from '../notes';
 import { shrinkPhoto } from '../photos';
 import { PhotoInput } from './PhotoInput';
 
@@ -16,7 +17,8 @@ const KINDS: { kind: FormKind; label: string }[] = [
 /**
  * Edits a note, to-do, reminder or appointment. The fields shown follow the kind.
  * A to-do is a reminder with no date. The photo is only changed on saving:
- * `onSubmit` gets the one to keep (null for none).
+ * `onSubmit` gets the one to keep (null for none). A one-off reminder that runs into
+ * something of yours gets a warning first, with the nearest free time to move it to.
  */
 export function NoteForm({
   initial,
@@ -24,6 +26,7 @@ export function NoteForm({
   saving,
   error,
   submitLabel = 'Save',
+  noteId,
   onSubmit,
   onCancel,
 }: {
@@ -32,6 +35,8 @@ export function NoteForm({
   saving: boolean;
   error?: Error | null;
   submitLabel?: string;
+  /** The reminder being edited, so it doesn't clash with itself. */
+  noteId?: string;
   onSubmit: (values: NoteValues, image: string | null) => void;
   onCancel?: () => void;
 }) {
@@ -51,6 +56,30 @@ export function NoteForm({
     setV((prev) => ({ ...prev, time, endTime: prev.kind === 'REMINDER' ? endAfter(time, reminderLength) : prev.endTime }));
   const photo = imageUrl(kept);
 
+  // What a one-off reminder would run into that day, checked on saving.
+  const checks = formKind === 'REMINDER' && Boolean(v.date && v.time) && !v.repeat.freq;
+  const me = useQuery({ queryKey: ['me'], queryFn: api.me, enabled: checks });
+  const notes = useQuery({ queryKey: ['notes'], queryFn: api.notes, enabled: checks });
+  const calendar = useQuery({ queryKey: ['today', v.date], queryFn: () => api.today(v.date, 1), enabled: checks });
+  const [clash, setClash] = useState<{ with: Busy; moveTo: Span | null } | null>(null);
+  // A changed time is checked afresh.
+  useEffect(() => setClash(null), [v.date, v.time, v.endTime, formKind]);
+
+  /** The first thing of yours the reminder runs into, and the nearest free time instead. Null when it's clear (or can't be told). */
+  function findClash(): { with: Busy; moveTo: Span | null } | null {
+    if (!checks || !calendar.data?.connected || !notes.data || !me.data) return null;
+    const household = { people: calendar.data.people ?? [], me: calendar.data.me ?? null };
+    const busy = busyOn(v.date, calendar.data.events, notes.data, household, me.data.name, noteId);
+    const start = minutesOf(v.time);
+    const span = { start, end: v.endTime > v.time ? minutesOf(v.endTime) : start };
+    const hit = busy.find((b) => overlaps(span, b));
+    if (!hit) return null;
+    const day = calendar.data.day ?? { start: '07:00', end: '21:00' };
+    const now = new Date();
+    const earliest = v.date === localDate(now) ? now.getHours() * 60 + now.getMinutes() : 0;
+    return { with: hit, moveTo: nearestFree(busy, span, Math.max(minutesOf(day.start), earliest), minutesOf(day.end)) };
+  }
+
   function pickKind(kind: FormKind) {
     setFormKind(kind);
     setV((prev) => ({ ...prev, kind: kind === 'TODO' ? 'REMINDER' : kind }));
@@ -58,8 +87,19 @@ export function NoteForm({
 
   function submit(e: FormEvent) {
     e.preventDefault();
+    // Warned once; saving again means save anyway.
+    if (!clash) {
+      const found = findClash();
+      if (found) return setClash(found);
+    }
     // A to-do keeps no date, even one typed before switching to it.
     onSubmit(formKind === 'TODO' ? { ...v, date: '', time: '', endDate: '', endTime: '', repeat: NO_REPEAT } : v, kept);
+  }
+
+  function moveAndSave(to: Span) {
+    const moved = { ...v, time: hhmm(to.start), endTime: to.end > to.start ? hhmm(to.end) : '' };
+    setV(moved);
+    onSubmit(moved, kept);
   }
 
   return (
@@ -204,6 +244,20 @@ export function NoteForm({
 
       {error && <p className="error">{error.message}</p>}
 
+      {clash && (
+        <div className="clash-warning" role="alert">
+          <p>
+            <strong>Overlaps {clash.with.title}</strong> ({clockAt(clash.with.start)}–{clockAt(clash.with.end)}).
+            {!clash.moveTo && ' No free time left that day for it.'}
+          </p>
+          {clash.moveTo && (
+            <button type="button" className="btn btn-small btn-primary" disabled={saving} onClick={() => moveAndSave(clash.moveTo!)}>
+              Move to {clockAt(clash.moveTo.start)} and save
+            </button>
+          )}
+        </div>
+      )}
+
       <div className="form-actions">
         {onCancel && (
           <button type="button" className="btn" onClick={onCancel}>
@@ -211,17 +265,19 @@ export function NoteForm({
           </button>
         )}
         <button className="btn btn-primary" disabled={saving || upload.isPending}>
-          {saving ? 'Saving…' : submitLabel}
+          {saving ? 'Saving…' : clash ? 'Save anyway' : submitLabel}
         </button>
       </div>
     </form>
   );
 }
 
+/** "2:30 PM" for minutes since midnight. */
+const clockAt = (minutes: number) =>
+  new Date(2000, 0, 1, Math.floor(minutes / 60), minutes % 60).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+
 /** Reminder lengths to pick from, in minutes; 0 is just a reminder, with no end. */
 const LENGTHS = [0, 15, 30, 45, 60, 90];
-
-const minutesOf = (hhmm: string) => Number(hhmm.slice(0, 2)) * 60 + Number(hhmm.slice(3, 5));
 
 /** Minutes from a start to an end time the same day; 0 without both. */
 function lengthOf(time: string, endTime: string) {

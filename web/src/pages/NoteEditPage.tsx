@@ -38,6 +38,7 @@ export function NoteEditPage() {
       <NoteForm
         initial={valuesFromNote(n)}
         image={n.image}
+        noteId={n.id}
         saving={save.isPending}
         error={save.error}
         onSubmit={(values, image) => save.mutate({ values, image })}

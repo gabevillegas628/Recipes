@@ -2575,6 +2575,106 @@ html.has-timers .cook {
   margin: 0 0 4px 80px;
 }
 
+/* Clashes: a reminder that runs into something, and sorting the day out. */
+.agenda-meta.clash {
+  color: var(--danger);
+}
+
+.day-card-action {
+  margin-left: auto;
+  padding: 0;
+  font-size: 13px;
+  font-weight: 600;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--danger);
+}
+
+.sort-day {
+  padding: 10px 12px 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg);
+}
+
+.sort-day > .muted {
+  margin: 0 0 6px;
+}
+
+.sort-day-list {
+  list-style: none;
+  margin: 0 0 10px;
+  padding: 0;
+}
+
+.sort-day-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.sort-day-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.sort-day-move {
+  margin-top: 2px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--accent);
+}
+
+.lock-btn {
+  flex: none;
+  min-width: 92px;
+  min-height: 32px;
+  padding: 0 12px;
+  border: 1px solid var(--accent);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--accent);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.lock-btn.on {
+  border-color: var(--text);
+  background: var(--text);
+  color: var(--surface);
+}
+
+.lock-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* A locked reminder keeps its time: its outcome reads quietly. */
+.sort-day-row.locked .sort-day-move {
+  font-weight: 400;
+  color: var(--muted);
+}
+
+.clash-warning {
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--danger);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.clash-warning p {
+  margin: 0 0 8px;
+}
+
+.clash-warning p:last-child {
+  margin-bottom: 0;
+}
+
 /* Whose an event is, edited in place under it. */
 .agenda-row .tag-edit {
   flex-basis: 100%;
