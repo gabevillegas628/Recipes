@@ -1,12 +1,15 @@
+import { closestCenter, DndContext, MouseSensor, TouchSensor, useSensor, useSensors, type DragEndEvent, type DragOverEvent, type DragStartEvent } from '@dnd-kit/core';
+import { arrayMove, SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useState } from 'react';
+import { useEffect, useRef, useState, type CSSProperties, type HTMLAttributes, type Ref } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { api } from '../api';
-import { dayLabel, dayOf, firstLine, isOverdue, isTodo, localDate, missedToday, movedToDay, reminderDue, repeatLabel } from '../notes';
-import type { Note, TodayCalendar, User, Weather } from '../types';
+import { blockOn, dayLabel, dayOf, firstLine, isOverdue, isTodo, localDate, missedToday, movedToDay, reminderDue, repeatLabel } from '../notes';
+import type { Note, NoteInput, TodayCalendar, User, Weather } from '../types';
 import { OwnerEditor } from '../components/OwnerEditor';
 import { SortOutDay, type DayClashes } from '../components/SortOutDay';
-import { busyOn, clashingReminders, freeBetween, hhmm, minutesOf, overlaps, ownership, remindersOn, type Household, type Span } from '../freeTime';
+import { busyOn, clashingReminders, dropStart, freeBetween, hhmm, minutesInto, minutesOf, overlaps, ownership, remindersOn, type Household, type Span } from '../freeTime';
 import { NoteRow } from './NotesPage';
 
 type CalendarEvent = TodayCalendar['events'][number];
@@ -50,6 +53,37 @@ export function TodayPage({ user }: { user: User }) {
   const [ticked, setTicked] = useState<string[]>([]);
   // The day whose clashes are being sorted out, under its heading.
   const [sorting, setSorting] = useState<string | null>(null);
+
+  // A reminder dragged to a new time: moved at once, with a moment to undo it.
+  const [moved, setMoved] = useState<{ note: Note; start: number } | null>(null);
+  const move = useMutation({
+    mutationFn: ({ note, at }: { note: Note; at: Pick<NoteInput, 'startsAt' | 'endsAt'> }) => api.updateNote(note.id, at),
+    onMutate: ({ note, at }) =>
+      queryClient.setQueryData<Note[]>(['notes'], (prev) =>
+        prev?.map((x) => (x.id === note.id ? { ...x, startsAt: at.startsAt ?? null, endsAt: at.endsAt ?? null } : x)),
+      ),
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['notes'] });
+      queryClient.invalidateQueries({ queryKey: ['today'] });
+    },
+  });
+  useEffect(() => {
+    if (!moved) return;
+    const t = setTimeout(() => setMoved(null), UNDO_MS);
+    return () => clearTimeout(t);
+  }, [moved]);
+  /** Moves a one-off reminder to `start` minutes into `day`, keeping its length. */
+  function moveTo(note: Note, day: string, start: number) {
+    const length = lengthOf(note);
+    const at = blockOn(day, start, start + length);
+    move.mutate({ note, at: { startsAt: at.startsAt, endsAt: length ? at.endsAt : null } });
+    setMoved({ note, start });
+  }
+  function undoMove() {
+    if (!moved) return;
+    move.mutate({ note: moved.note, at: { startsAt: moved.note.startsAt, endsAt: moved.note.endsAt } });
+    setMoved(null);
+  }
 
   // Same as the Notes tab: a repeating reminder ticks off one occurrence and moves on.
   const toggle = useMutation({
@@ -232,19 +266,17 @@ export function TodayPage({ user }: { user: User }) {
         )}
         {sorting === today && clashes.has(today) && <SortOutDay clashes={clashes.get(today)!} onClose={() => setSorting(null)} />}
         {todayItems.length ? (
-          <ul className="agenda-list">
-            {todayItems.map((item, i) => (
-              <AgendaRow
-                key={i}
-                item={item}
-                now={now}
-                isToday={!picked}
-                household={household}
-                clashWith={item.type === 'reminder' ? clashes.get(today)?.clashing.get(item.note.id) : undefined}
-                onToggle={(n) => toggle.mutate(n)}
-              />
-            ))}
-          </ul>
+          <DayList
+            day={base}
+            items={todayItems}
+            canDrag={!picked}
+            now={now}
+            isToday={!picked}
+            household={household}
+            clashing={clashes.get(base)?.clashing}
+            onToggle={(n) => toggle.mutate(n)}
+            onMove={moveTo}
+          />
         ) : (
           calendar.data && <p className="muted agenda-empty">Nothing on the calendar {picked ? 'that day' : 'today'}.</p>
         )}
@@ -324,26 +356,189 @@ export function TodayPage({ user }: { user: User }) {
                 )}
               </h2>
               {sorting === day && clashes.has(day) && <SortOutDay clashes={clashes.get(day)!} onClose={() => setSorting(null)} />}
-              <ul className="agenda-list">
-                {byDay.get(day)!.map((item, i) => (
-                  <AgendaRow
-                    key={i}
-                    item={item}
-                    now={now}
-                    household={household}
-                    clashWith={item.type === 'reminder' ? clashes.get(day)?.clashing.get(item.note.id) : undefined}
-                    onToggle={(n) => toggle.mutate(n)}
-                  />
-                ))}
-              </ul>
+              <DayList
+                day={day}
+                items={byDay.get(day)!}
+                canDrag
+                now={now}
+                household={household}
+                clashing={clashes.get(day)?.clashing}
+                onToggle={(n) => toggle.mutate(n)}
+                onMove={moveTo}
+              />
             </div>
           ))}
         </section>
       )}
       </>
       )}
+
+      {(moved || move.error) && (
+        <div className="toast" role="status">
+          <span>{move.error ? `Couldn’t move it: ${move.error.message}` : `Moved ${moved!.note.title} to ${clockAt(moved!.start)}`}</span>
+          {moved && !move.error && (
+            <button type="button" className="link-btn" onClick={undoMove}>
+              Undo
+            </button>
+          )}
+        </div>
+      )}
     </div>
   );
+}
+
+/** How long Undo stays offered after a drag. */
+const UNDO_MS = 6000;
+
+/** A reminder's length in minutes; 0 for a plain one. */
+const lengthOf = (n: Note) => (n.endsAt ? Math.round((new Date(n.endsAt).getTime() - new Date(n.startsAt!).getTime()) / 60_000) : 0);
+
+/** Reminders that can be dragged to another time: one-offs at a time of day. Repeating ones would move the whole series. */
+const movable = (item: Item) =>
+  item.type === 'reminder' && !item.note.recurrence && !item.note.allDay && Boolean(item.note.startsAt) && !item.note.doneAt;
+
+/** A stable id per row while dragging. */
+function rowId(item: Item, i: number) {
+  if (item.type === 'reminder') return `r:${item.note.id}`;
+  if (item.type === 'free') return `f:${item.free.start}`;
+  return `e:${i}:${item.event.title}`;
+}
+
+/** A row's span of your time on `day`, for working out where a dropped reminder goes; null if it takes none. */
+function rowSpan(item: Item, day: string, household: Household): Span | null {
+  if (item.type === 'free') return { start: item.free.start, end: item.free.start };
+  if (item.type === 'reminder') {
+    if (item.note.allDay || !item.note.startsAt) return null;
+    const start = minutesInto(day, new Date(item.note.startsAt));
+    return { start, end: start + lengthOf(item.note) };
+  }
+  const e = item.event;
+  if (item.allDay || !e.start || !e.end || ownership(e.owner, household).theirs) return null;
+  return { start: minutesInto(day, new Date(e.start)), end: minutesInto(day, new Date(e.end)) };
+}
+
+/** What a row in a DayList gets from it: where it is, how it moves, and the time it would drop at. */
+interface Drag {
+  ref: Ref<HTMLLIElement>;
+  style: CSSProperties;
+  props: HTMLAttributes<HTMLLIElement>;
+  dragging: boolean;
+  /** Minutes since midnight it would start at if dropped now. */
+  preview: number | null;
+}
+
+/** A row's <li> attributes, drag wiring included. */
+type RowElement = HTMLAttributes<HTMLLIElement> & { ref?: Ref<HTMLLIElement> };
+
+type RowProps = Omit<Parameters<typeof AgendaRow>[0], 'item' | 'drag' | 'clashWith'>;
+
+/**
+ * A day's rows. Press and hold a one-off reminder to drag it among them; it
+ * starts when the row above it ends (see dropStart), keeping its length.
+ */
+function DayList({
+  day,
+  items,
+  canDrag,
+  clashing,
+  onMove,
+  ...row
+}: RowProps & {
+  day: string;
+  items: Item[];
+  canDrag: boolean;
+  clashing?: Map<string, string>;
+  onMove: (note: Note, day: string, start: number) => void;
+}) {
+  // Held, not just touched, so scrolling the page still works.
+  const sensors = useSensors(
+    useSensor(MouseSensor, { activationConstraint: { delay: 250, tolerance: 5 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 300, tolerance: 8 } }),
+  );
+  const ids = items.map(rowId);
+  const [preview, setPreview] = useState<{ id: string; start: number } | null>(null);
+  // A drop can end with a click on whatever's under the pointer; that click isn't meant.
+  const droppedAt = useRef(0);
+
+  const startOf = (item: Item) => rowSpan(item, day, row.household)?.start ?? 0;
+  /** Where the dragged reminder would start if dropped over `overId`. */
+  function startFor(activeId: string, overId: string): number {
+    const from = ids.indexOf(activeId);
+    const to = ids.indexOf(overId);
+    const dragged = items[from];
+    if (from < 0 || to < 0 || from === to || dragged.type !== 'reminder') return startOf(dragged);
+    const arranged = arrayMove(items, from, to).map((item) => rowSpan(item, day, row.household));
+    return dropStart(arranged.slice(0, to), arranged.slice(to + 1), lengthOf(dragged.note)) ?? startOf(dragged);
+  }
+
+  const onDragStart = ({ active }: DragStartEvent) =>
+    setPreview({ id: String(active.id), start: startOf(items[ids.indexOf(String(active.id))]) });
+  const onDragOver = ({ active, over }: DragOverEvent) => {
+    if (over) setPreview({ id: String(active.id), start: startFor(String(active.id), String(over.id)) });
+  };
+  function onDragEnd({ active, over }: DragEndEvent) {
+    setPreview(null);
+    droppedAt.current = Date.now();
+    const item = items[ids.indexOf(String(active.id))];
+    if (!over || !item || item.type !== 'reminder') return;
+    const start = startFor(String(active.id), String(over.id));
+    if (start !== startOf(item)) onMove(item.note, day, start);
+  }
+
+  return (
+    <DndContext
+      sensors={sensors}
+      collisionDetection={closestCenter}
+      onDragStart={onDragStart}
+      onDragOver={onDragOver}
+      onDragEnd={onDragEnd}
+      onDragCancel={() => setPreview(null)}
+    >
+      <SortableContext items={ids} strategy={verticalListSortingStrategy}>
+        <ul
+          className="agenda-list"
+          onClickCapture={(e) => {
+            if (Date.now() - droppedAt.current < 400) {
+              e.preventDefault();
+              e.stopPropagation();
+            }
+          }}
+        >
+          {items.map((item, i) => (
+            <SortableRow
+              key={ids[i]}
+              id={ids[i]}
+              item={item}
+              canDrag={canDrag && movable(item)}
+              preview={preview?.id === ids[i] ? preview.start : null}
+              clashWith={item.type === 'reminder' ? clashing?.get(item.note.id) : undefined}
+              {...row}
+            />
+          ))}
+        </ul>
+      </SortableContext>
+    </DndContext>
+  );
+}
+
+/** A row in a DayList: every row makes way for a dragged one; only movable reminders can be picked up. */
+function SortableRow({
+  id,
+  canDrag,
+  preview,
+  ...rest
+}: RowProps & { id: string; item: Item; canDrag: boolean; preview: number | null; clashWith?: string }) {
+  const { setNodeRef, transform, transition, isDragging, listeners } = useSortable({ id, disabled: { draggable: !canDrag, droppable: false } });
+  const drag: Drag = {
+    ref: setNodeRef,
+    // Up and down only.
+    style: { transform: CSS.Transform.toString(transform && { ...transform, x: 0, scaleX: 1, scaleY: 1 }), transition },
+    // Holding a link would otherwise open the phone's link menu.
+    props: canDrag ? { ...listeners, onContextMenu: (e) => e.preventDefault(), className: 'draggable' } : {},
+    dragging: isDragging,
+    preview,
+  };
+  return <AgendaRow {...rest} drag={drag} />;
 }
 
 /** "Today", "Yesterday", "Friday" for days nearby; further off, which way you're looking. */
@@ -409,6 +604,7 @@ function AgendaRow({
   household,
   clashWith,
   onToggle,
+  drag,
 }: {
   item: Item;
   now: Date;
@@ -417,10 +613,20 @@ function AgendaRow({
   /** What a reminder runs into, when it clashes. */
   clashWith?: string;
   onToggle: (n: Note) => void;
+  /** Set in a DayList. */
+  drag?: Drag;
 }) {
   const queryClient = useQueryClient();
   const [editing, setEditing] = useState(false);
-  if (item.type === 'free') return <FreeRow free={item.free} day={item.day} now={now} />;
+  // The list's drag wiring goes on the row itself, with how it looks while dragged.
+  const { className: dragClass = '', ...dragProps } = drag?.props ?? {};
+  const li = (className: string): RowElement => ({
+    ref: drag?.ref,
+    style: drag?.style,
+    ...dragProps,
+    className: `${className} ${dragClass} ${drag?.dragging ? 'dragging' : ''}`,
+  });
+  if (item.type === 'free') return <FreeRow free={item.free} day={item.day} now={now} li={li('agenda-row free-row')} />;
 
   if (item.type === 'reminder') {
     const n = item.note;
@@ -428,10 +634,14 @@ function AgendaRow({
     const repeats = repeatLabel(n);
     const detail = firstLine(n.body);
     return (
-      <li className="agenda-row">
-        <span className="agenda-time">{n.allDay ? 'Due' : clock(n.startsAt!)}</span>
+      <li {...li('agenda-row')}>
+        {drag?.preview != null ? (
+          <span className="agenda-time drag-time">→ {clockAt(drag.preview)}</span>
+        ) : (
+          <span className="agenda-time">{n.allDay ? 'Due' : clock(n.startsAt!)}</span>
+        )}
         <button type="button" className="check-circle" aria-label="Mark done" onClick={() => onToggle(n)} />
-        <Link to={`/n/${n.id}`} className="agenda-body">
+        <Link to={`/n/${n.id}`} className="agenda-body" draggable={false}>
           <span className="agenda-title">{n.title}</span>
           <span className={`agenda-meta ${overdue ? 'overdue' : ''}`}>
             {overdue ? `Overdue since ${dayLabel(dayOf(n.startsAt!, n.allDay))}` : n.endsAt ? `Reminder · until ${clock(n.endsAt)}` : 'Reminder'}
@@ -465,7 +675,7 @@ function AgendaRow({
     </>
   );
   return (
-    <li className={`agenda-row ${past ? 'past' : ''} ${current ? 'now' : ''} ${theirs ? 'theirs' : ''}`}>
+    <li {...li(`agenda-row ${past ? 'past' : ''} ${current ? 'now' : ''} ${theirs ? 'theirs' : ''}`)}>
       <span className="agenda-time">{item.allDay ? 'All day' : clock(e.start!)}</span>
       {e.noteId ? (
         <Link to={`/n/${e.noteId}`} className="agenda-body">
@@ -510,7 +720,7 @@ function howLong(minutes: number) {
 const APPOINTMENT_MINUTES = 60;
 
 /** Free time between your busy times on a day: tap it to add a reminder or appointment then. */
-function FreeRow({ free, day, now }: { free: Span; day: string; now: Date }) {
+function FreeRow({ free, day, now, li }: { free: Span; day: string; now: Date; li: RowElement }) {
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const nowMinutes = now.getHours() * 60 + now.getMinutes();
@@ -520,7 +730,7 @@ function FreeRow({ free, day, now }: { free: Span; day: string; now: Date }) {
     navigate(`/add?${params}`);
   };
   return (
-    <li className="agenda-row free-row">
+    <li {...li}>
       <span className="agenda-time">{day === localDate(now) && free.start <= nowMinutes + 5 ? 'Now' : clockAt(free.start)}</span>
       <button type="button" className="agenda-body agenda-body-btn" aria-expanded={open} onClick={() => setOpen((v) => !v)}>
         <span className="agenda-title">Free until {clockAt(free.end)}</span>

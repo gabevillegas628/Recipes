@@ -55,7 +55,7 @@ export const minutesOf = (hhmm: string) => Number(hhmm.slice(0, 2)) * 60 + Numbe
 export const hhmm = (minutes: number) => `${String(Math.floor(minutes / 60)).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}`;
 
 /** Minutes since `day`'s local midnight; before it is 0 and after it is the whole day. */
-function minutesInto(day: string, at: Date) {
+export function minutesInto(day: string, at: Date) {
   const [y, m, d] = day.split('-').map(Number);
   const minutes = (at.getTime() - new Date(y, m - 1, d).getTime()) / 60_000;
   return Math.min(24 * 60, Math.max(0, Math.round(minutes)));
@@ -207,4 +207,18 @@ export function planMoves(
     moves.push({ note: r.note, from: span, to: there, day: there && next ? next.day : day });
   }
   return moves;
+}
+
+/**
+ * Where a reminder `length` minutes long starts when dropped among a day's rows:
+ * as the nearest row above it ends, or, with nothing above, so it ends as the
+ * first row below starts. Rows are spans of your time, or null for ones that
+ * don't take it (all-day events, someone else's); a free row counts as its start.
+ * Null when no row has a time.
+ */
+export function dropStart(above: (Span | null)[], below: (Span | null)[], length: number): number | null {
+  const before = above.filter((s): s is Span => s !== null).at(-1);
+  const after = below.find((s): s is Span => s !== null);
+  const start = before ? before.end : after ? after.start - length : null;
+  return start === null ? null : Math.min(24 * 60 - length, Math.max(0, start));
 }

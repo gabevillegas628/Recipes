@@ -2575,6 +2575,62 @@ html.has-timers .cook {
   margin: 0 0 4px 80px;
 }
 
+/* Dragging a reminder to a new time: hold, then move. */
+.agenda-row.draggable {
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+  touch-action: manipulation;
+}
+
+.agenda-row.dragging {
+  position: relative;
+  z-index: 2;
+  background: var(--surface);
+  border-left-color: var(--accent);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.25);
+  cursor: grabbing;
+}
+
+.drag-time {
+  font-weight: 700;
+  color: var(--accent);
+}
+
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: calc(var(--tabbar-h) + var(--safe-bottom) + 12px);
+  z-index: 20;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  width: max-content;
+  max-width: calc(100vw - 32px);
+  padding: 10px 16px;
+  border-radius: var(--radius);
+  background: var(--text);
+  color: var(--surface);
+  font-size: 14px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.25);
+}
+
+.toast span {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* Inherits the toast's colour: the accent is too faint on it in dark mode. */
+.toast .link-btn {
+  flex: none;
+  font-weight: 700;
+  color: inherit;
+  text-decoration: underline;
+}
+
 /* Clashes: a reminder that runs into something, and sorting the day out. */
 .agenda-meta.clash {
   color: var(--danger);
