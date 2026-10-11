@@ -3223,3 +3223,16 @@ html.has-timers .cook {
 .note-group .note-row:last-child {
   border-bottom: 0;
 }
+
+/* Floats above the tab bar so it's in reach mid-list. */
+.tidy-up {
+  position: fixed;
+  right: 16px;
+  bottom: calc(var(--tabbar-h) + var(--safe-bottom) + 12px);
+  z-index: 20;
+  box-shadow: 0 2px 8px rgb(0 0 0 / 0.2);
+}
+
+.page.has-tidy {
+  padding-bottom: 72px;
+}
