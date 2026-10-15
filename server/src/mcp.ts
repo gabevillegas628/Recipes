@@ -9,6 +9,7 @@ import { findDuplicates } from './duplicates.js';
 import { draftToInput, findExistingRecipe } from './import/worker.js';
 import { ingredientLines, namesInUse, readIngredients, saveIndex } from './ingredients.js';
 import { addMealToPlan, createMeal, getMeal, listMeals } from './meals.js';
+import { registerMoneyTools } from './money/mcpTools.js';
 import { allDayInstant, createNote, deleteNote, listNotes, NOTE_KINDS, NoteError, updateNote } from './notes.js';
 import { describeRule, nextOccurrence, parseRule } from './recurrence.js';
 import { addGroceries, addToPlan, getGroceries, getPlan } from './plan.js';
@@ -616,6 +617,8 @@ export function buildMcpServer(baseUrl: string) {
       return text({ deleted: true, id, ...note });
     },
   );
+
+  registerMoneyTools(server, baseUrl);
 
   return server;
 }

@@ -58,6 +58,7 @@ const median = (xs: number[]) => {
   return s.length % 2 ? s[mid] : (s[mid - 1] + s[mid]) / 2;
 };
 const round = (n: number) => Math.round(n * 100) / 100;
+const usdShort = (n: number) => `$${n.toFixed(2)}`;
 
 /** Recent transactions of a kind, with the merchant's name and the local date. */
 async function recent(kind: 'SPENDING' | 'INCOME', since: Date, timeZone: string) {
@@ -144,4 +145,100 @@ export async function findRecurring(): Promise<{ month: string; bills: Bill[]; i
   income.sort((a, b) => b.monthly - a.monthly);
 
   return { month, bills, income };
+}
+
+export interface Charge {
+  name: string;
+  categoryId: string | null;
+  /** The latest charge. */
+  amount: number;
+  /** The one before it, when the price changed. */
+  was: number | null;
+  /** About what it costs a month. */
+  monthly: number;
+  lastDate: string;
+  /** Months (of the last six) it was charged in. */
+  months: number;
+  /** First charged in the last 45 days. */
+  isNew: boolean;
+}
+
+/**
+ * Charges that repeat, in any category: subscriptions, memberships, storage,
+ * bills. A merchant charged at most twice a month, in at least two of the last
+ * three months, by roughly the same amount each time (so a grocery store or a
+ * restaurant never counts). Price rises show as `was`. Also flags subscriptions
+ * that started in the last 45 days, before they've had time to repeat.
+ */
+export async function findCharges(): Promise<Charge[]> {
+  const timeZone = await homeTimeZone();
+  const month = wallTime(new Date(), timeZone).slice(0, 7);
+  const recentMonths = [-2, -1, 0].map((by) => shift(month, by));
+  const charges = (await recent('SPENDING', new Date(Date.now() - 190 * DAY), timeZone)).filter((t) => t.amount < 0);
+  const subscriptions = await prisma.financeCategory.findFirst({ where: { name: 'Subscriptions' }, select: { id: true } });
+  const firstSeen = new Map(
+    (
+      await prisma.$queryRaw<{ name: string; first: Date }[]>`
+        SELECT coalesce(m.name, t."merchantKey") AS name, min(t."transactedAt") AS first
+        FROM "FinanceTransaction" t LEFT JOIN "FinanceMerchant" m ON m.key = t."merchantKey"
+        WHERE t.kind = 'SPENDING' AND t.amount < 0 GROUP BY 1`
+    ).map((r) => [r.name, r.first]),
+  );
+
+  const byName = new Map<string, typeof charges>();
+  for (const t of charges) byName.set(t.name, [...(byName.get(t.name) ?? []), t]);
+  // One merchant can bill several subscriptions (Apple: $2.99 and $21.31 every month).
+  // When it charges more than twice a month, look at each amount on its own.
+  const groups: [string, typeof charges][] = [];
+  for (const [name, rows] of byName) {
+    const months = new Set(rows.map((r) => r.date.slice(0, 7))).size;
+    if (rows.length / months <= 2) {
+      groups.push([name, rows]);
+      continue;
+    }
+    const byAmount = new Map<string, typeof charges>();
+    for (const r of rows) byAmount.set(r.amount.toFixed(2), [...(byAmount.get(r.amount.toFixed(2)) ?? []), r]);
+    for (const [amount, same] of byAmount) if (same.length >= 2) groups.push([`${name} (${usdShort(-Number(amount))})`, same]);
+  }
+  const out: Charge[] = [];
+  for (const [name, rows] of groups) {
+    rows.sort((a, b) => a.date.localeCompare(b.date));
+    const months = new Set(rows.map((r) => r.date.slice(0, 7)));
+    const perMonth = rows.length / months.size;
+    const amounts = rows.map((r) => -r.amount);
+    const latest = amounts[amounts.length - 1];
+    const lastDate = rows[rows.length - 1].date;
+    const recentCount = recentMonths.filter((m) => months.has(m)).length;
+    const current = lastDate >= `${shift(month, -1)}-01`;
+    const first = firstSeen.get(name);
+    const isNew = Boolean(first && Date.now() - first.getTime() < 45 * DAY);
+    const fixed = rows[rows.length - 1].fixed;
+    // Bills (fixed categories) vary: power, water. Anything else has to look like a
+    // subscription: the same amount (or one price change) about a month apart, so a
+    // regular stop at the same gas station or pizza place doesn't count.
+    const same = (a: number, b: number) => Math.abs(a - b) <= Math.max(0.01, b * 0.02);
+    const n = amounts.length;
+    const steady = fixed
+      ? n >= 2 && Math.max(amounts[n - 1], amounts[n - 2]) <= Math.min(amounts[n - 1], amounts[n - 2]) * 1.6
+      : n >= 2 && (same(amounts[n - 1], amounts[n - 2]) || (n >= 3 && same(amounts[n - 2], amounts[n - 3])));
+    const gaps = rows.slice(1).map((r, i) => (Date.parse(r.date) - Date.parse(rows[i].date)) / DAY);
+    const monthlyGap = fixed || (gaps.length > 0 && median(gaps) >= 24 && median(gaps) <= 36);
+
+    const repeats = perMonth <= 2 && recentCount >= 2 && steady && monthlyGap && current;
+    const newSubscription = isNew && rows.length === 1 && rows[0].categoryId === subscriptions?.id;
+    if (!repeats && !newSubscription) continue;
+    const before = amounts.length > 1 ? amounts[amounts.length - 2] : null;
+    const rose = before !== null && latest - before >= 1 && latest >= before * 1.03;
+    out.push({
+      name,
+      categoryId: rows[rows.length - 1].categoryId,
+      amount: round(latest),
+      was: rose ? round(before!) : null,
+      monthly: round((latest * Math.min(perMonth, 2)) || latest),
+      lastDate,
+      months: months.size,
+      isNew,
+    });
+  }
+  return out.sort((a, b) => b.monthly - a.monthly);
 }

@@ -505,3 +505,13 @@ model FinanceBill {
   updatedAt  DateTime @updatedAt
 }
 
+
+/// Claude's look back at a finished month (src/money/recap.ts).
+model FinanceRecap {
+  /// "2026-09"
+  month     String   @id
+  headline  String
+  points    String[]
+  model     String
+  createdAt DateTime @default(now())
+}

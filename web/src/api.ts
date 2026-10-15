@@ -20,6 +20,8 @@ import type {
   MoneyOverview,
   MoneyStatus,
   MoneyToday,
+  MoneyRecap,
+  RecurringCharge,
   ReviewGroup,
   Note,
   NoteInput,
@@ -234,6 +236,8 @@ export const api = {
     request<BudgetPlan>('/api/money/bills', json('POST', input)),
   removeBill: (name: string) => request<BudgetPlan>(`/api/money/bills/${encodeURIComponent(name)}`, { method: 'DELETE' }),
   moneyToday: () => request<MoneyToday | null>('/api/money/today'),
+  writeRecap: (month: string) => request<MoneyRecap>(`/api/money/recap/${month}`, { method: 'POST' }),
+  moneyRecurring: () => request<{ charges: RecurringCharge[]; ignored: RecurringCharge[] }>('/api/money/recurring'),
   moneyReview: () => request<ReviewGroup[]>('/api/money/review'),
   /** How every store with this merchant's name is sorted, past and future. */
   setMerchant: (keys: string[], kind: MoneyKind, categoryId: string | null) =>

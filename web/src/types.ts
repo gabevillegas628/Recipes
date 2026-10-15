@@ -487,6 +487,28 @@ export interface MoneyOverview {
   completeFrom: string | null;
   /** This month's budget; null for past months. */
   budget: BudgetPlan | null;
+  /** Claude's recap: this month's, for a past month; early in a month, last month's. */
+  recap: MoneyRecap | null;
+}
+
+export interface MoneyRecap {
+  month: string;
+  headline: string;
+  points: string[];
+  createdAt: string;
+}
+
+/** A charge that repeats about monthly: a bill, subscription or membership. */
+export interface RecurringCharge {
+  name: string;
+  categoryId: string | null;
+  amount: number;
+  /** The amount before the latest price rise. */
+  was: number | null;
+  monthly: number;
+  lastDate: string;
+  months: number;
+  isNew: boolean;
 }
 
 export interface IncomeSource {

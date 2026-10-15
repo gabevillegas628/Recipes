@@ -8,6 +8,8 @@ import { connect, disconnect, homeTimeZone } from '../money/connection.js';
 import { importHistory } from '../money/importHistory.js';
 import { budgetPlan } from '../money/budget.js';
 import { overview } from '../money/overview.js';
+import { writeRecap } from '../money/recap.js';
+import { findCharges } from '../money/recurring.js';
 import { SimpleFinAuthError } from '../money/simplefin.js';
 import { kickMoneySync, moneySyncRunning } from '../money/sync.js';
 import { wallTime, zonedInstant } from '../zone.js';
@@ -29,6 +31,10 @@ function monthRange(month: string, timeZone: string) {
 
 const money = (d: Prisma.Decimal | null | undefined) => d?.toNumber() ?? 0;
 const round2 = (n: number) => Math.round(n * 100) / 100;
+const previousMonth = (month: string) => {
+  const [y, m] = month.split('-').map(Number);
+  return m === 1 ? `${y - 1}-12` : `${y}-${String(m - 1).padStart(2, '0')}`;
+};
 
 async function status() {
   const [connection, accounts, counts] = await Promise.all([
@@ -152,8 +158,35 @@ export async function moneyRoutes(app: FastifyInstance) {
       .safeParse(request.query);
     if (!parsed.success) return reply.code(400).send({ error: 'Bad month' });
     const ov = await overview(parsed.data.month);
+    // A past month shows its own recap; early in a month, last month's is still news.
+    const recapMonth = ov.current ? (ov.day <= 10 ? previousMonth(ov.month) : null) : ov.month;
+    const recap = recapMonth ? await prisma.financeRecap.findUnique({ where: { month: recapMonth } }) : null;
     // Budgets are for the month under way; past months compare with their usual.
-    return { ...ov, budget: ov.current ? await budgetPlan(ov) : null };
+    return { ...ov, budget: ov.current ? await budgetPlan(ov) : null, recap };
+  });
+
+  /** Writes (or rewrites) a finished month's recap. */
+  app.post('/api/money/recap/:month', async (request, reply) => {
+    const parsed = z.object({ month: z.string().regex(/^\d{4}-\d{2}$/) }).safeParse(request.params);
+    if (!parsed.success) return reply.code(400).send({ error: 'Bad month' });
+    try {
+      return await writeRecap(parsed.data.month);
+    } catch (err) {
+      return reply.code(409).send({ error: (err as Error).message });
+    }
+  });
+
+  /** Subscriptions and other charges that repeat, minus the ones set aside as not monthly. */
+  app.get('/api/money/recurring', async () => {
+    const [charges, ignored] = await Promise.all([
+      findCharges(),
+      prisma.financeBill.findMany({ where: { state: 'ignore' }, select: { name: true } }),
+    ]);
+    const skip = new Set(ignored.map((i) => i.name));
+    return {
+      charges: charges.filter((c) => !skip.has(c.name)),
+      ignored: charges.filter((c) => skip.has(c.name)),
+    };
   });
 
   // ---------- Budget ----------

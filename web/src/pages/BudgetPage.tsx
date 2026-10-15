@@ -116,6 +116,7 @@ export function BudgetPage() {
       <Saving plan={b} onPlan={onPlan} />
       <Bills plan={b} onPlan={onPlan} fixedCategories={fixedCategories} />
       <Everyday plan={b} onPlan={onPlan} />
+      <Recurring plan={b} onPlan={onPlan} />
     </div>
   );
 }
@@ -430,6 +431,86 @@ function AddBill({
     </form>
   );
 }
+
+// ---------- Subscriptions and recurring charges ----------
+
+function Recurring({ plan: b, onPlan }: { plan: BudgetPlan; onPlan: (p: BudgetPlan) => void }) {
+  const queryClient = useQueryClient();
+  const list = useQuery({ queryKey: ['money-recurring'], queryFn: api.moneyRecurring });
+  const set = useMutation({
+    mutationFn: ({ name, state }: { name: string; state: 'ignore' | null }) => api.setBill(name, state),
+    onSuccess: (p) => {
+      onPlan(p);
+      queryClient.invalidateQueries({ queryKey: ['money-recurring'] });
+    },
+  });
+  const categoryName = new Map(b.categories.map((c) => [c.id, c.name]));
+  if (!list.data) return null;
+  const { charges, ignored } = list.data;
+  const total = charges.reduce((n, c) => n + c.monthly, 0);
+
+  return (
+    <section className="budget-section">
+      <h2>
+        Subscriptions &amp; recurring <span>{usd(total)} a month</span>
+      </h2>
+      <p className="muted small">
+        Everything charged about once a month, bills included, in any category. Price rises and new ones are marked. ✕ sets
+        aside one that isn’t really recurring.
+      </p>
+      <ul className="budget-list">
+        {charges.map((c) => (
+          <li key={c.name}>
+            <span>
+              <span>
+                {c.name}
+                {c.isNew && <span className="budget-flag">new</span>}
+                {c.was !== null && <span className="budget-flag">was {usd(c.was, true)}</span>}
+              </span>
+              <span className="muted small">
+                {c.categoryId ? categoryName.get(c.categoryId) : 'No category'} · last {shortDay(c.lastDate)}
+              </span>
+            </span>
+            <span className="budget-bill-end">
+              {usd(c.amount, c.amount < 100 && c.amount % 1 !== 0)}
+              <button
+                type="button"
+                className="btn btn-small"
+                onClick={() => set.mutate({ name: c.name, state: 'ignore' })}
+                aria-label={`${c.name} isn't recurring`}
+                title="Not recurring"
+              >
+                ✕
+              </button>
+            </span>
+          </li>
+        ))}
+      </ul>
+      {ignored.length > 0 && (
+        <details className="budget-ignored">
+          <summary>Set aside ({ignored.length})</summary>
+          <ul className="budget-list">
+            {ignored.map((c) => (
+              <li key={c.name}>
+                <span>{c.name}</span>
+                <span className="budget-bill-end">
+                  {usd(c.amount, c.amount < 100 && c.amount % 1 !== 0)}
+                  <button type="button" className="btn btn-small" onClick={() => set.mutate({ name: c.name, state: null })}>
+                    Put back
+                  </button>
+                </span>
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
+      {set.error && <p className="error">{set.error.message}</p>}
+    </section>
+  );
+}
+
+const shortDay = (date: string) =>
+  new Date(`${date}T12:00:00`).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 
 // ---------- Everyday ----------
 

@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { api } from '../api';
 import { InOutChart, monthLabel, PaceChart, type PaceReference } from '../components/MoneyCharts';
-import type { FinanceCategory, MoneyKind, MoneyTransaction, ReviewGroup } from '../types';
+import type { FinanceCategory, MoneyKind, MoneyRecap, MoneyTransaction, ReviewGroup } from '../types';
 
 /**
  * The Money tab: a month of transactions with in / spent / saved totals, and
@@ -197,8 +197,11 @@ function Overview({
     { title: 'Everyday spending', rows: d.categories.filter((c) => !c.fixed) },
   ];
 
+  const partial = d.history.find((h) => h.month === d.month)?.partial ?? true;
+
   return (
     <div className="money-overview">
+      {(d.recap || (!d.current && !partial)) && <RecapCard month={d.month} recap={d.recap} />}
       <section className="money-hero">
         <span className="muted small">{d.current ? 'Spent so far' : 'Spent'}</span>
         <div className="money-hero-value">{usd(d.totals.spending, false)}</div>
@@ -299,6 +302,45 @@ function Overview({
 function pace(diff: number, planned: number, day: string) {
   if (Math.abs(diff) < Math.max(50, planned * 0.05)) return `On pace for ${day}.`;
   return `${usd(diff, false)} ${diff > 0 ? 'more' : 'less'} than the budget plans for by ${day}.`;
+}
+
+/** Claude's look back at a finished month, or a button to write one. */
+function RecapCard({ month, recap }: { month: string; recap: MoneyRecap | null }) {
+  const queryClient = useQueryClient();
+  const write = useMutation({
+    mutationFn: () => api.writeRecap(recap?.month ?? month),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['money-overview'] }),
+  });
+  const about = monthLabel(recap?.month ?? month, 'long').replace(/ \d{4}$/, '');
+
+  if (!recap) {
+    return (
+      <section className="money-recap money-recap-empty">
+        <button type="button" className="btn btn-small" disabled={write.isPending} onClick={() => write.mutate()}>
+          {write.isPending ? 'Writing…' : `Write a recap of ${about}`}
+        </button>
+        {write.error && <p className="error">{write.error.message}</p>}
+      </section>
+    );
+  }
+  return (
+    <section className="money-recap">
+      <span className="money-recap-eyebrow">{about} in short</span>
+      <p className="money-recap-headline">{recap.headline}</p>
+      <ul>
+        {recap.points.map((p) => (
+          <li key={p}>{p}</li>
+        ))}
+      </ul>
+      <div className="money-recap-foot">
+        <span className="muted small">Written by Claude from your numbers</span>
+        <button type="button" className="btn btn-small" disabled={write.isPending} onClick={() => write.mutate()}>
+          {write.isPending ? 'Rewriting…' : 'Rewrite'}
+        </button>
+      </div>
+      {write.error && <p className="error">{write.error.message}</p>}
+    </section>
+  );
 }
 
 function verdict(diff: number, usual: number, when: string) {

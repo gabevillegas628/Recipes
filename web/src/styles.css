@@ -4064,3 +4064,57 @@ html.has-timers .cook {
   margin-top: 12px;
 }
 
+/* ---------- Recap and recurring ---------- */
+
+.money-recap {
+  margin: 4px 0 16px;
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.money-recap-empty {
+  padding: 10px 12px;
+}
+
+.money-recap-eyebrow {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.money-recap-headline {
+  margin: 4px 0 8px;
+  font-size: 17px;
+  font-weight: 600;
+}
+
+.money-recap ul {
+  margin: 0 0 10px;
+  padding-left: 20px;
+}
+
+.money-recap li {
+  margin: 4px 0;
+}
+
+.money-recap-foot {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.budget-flag {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 600;
+  vertical-align: 1px;
+}
+
