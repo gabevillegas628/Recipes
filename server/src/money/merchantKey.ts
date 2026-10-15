@@ -5,13 +5,17 @@
  * "SQ *BLUE BOTTLE 0977 04/02" share "BLUE BOTTLE". Different stores of a chain
  * can still differ (a city left in); the AI gives them the same name, and
  * corrections apply by name.
+ *
+ * Only the bank's description is used, not SimpleFIN's cleaned-up payee: the
+ * payee is too coarse ("Capital One" for both card payments and the auto loan,
+ * "Costco" for Costco Travel). The AI sees the payee as a hint instead.
  */
 
 const NOISE =
   /\b(POS|DEBIT|CREDIT|CARD|PURCHASE|PURCHASES|CHECKCARD|RECURRING|AUTHORIZED|ON|ACH|WEB|PPD|CCD|ID|DBT|POINT OF SALE|TRANSACTION|PENDING|REF)\b/g;
 
-export function merchantKey(description: string, payee?: string | null): string {
-  const raw = (payee?.trim() || description).toUpperCase();
+export function merchantKey(description: string): string {
+  const raw = description.toUpperCase();
   let s = raw
     // Card processors' prefixes: "SQ *", "TST* ", "SP ", "PAYPAL *".
     .replace(/^(SQ|TST|SP|DD|PY|IN)\s?\*\s?/, '')

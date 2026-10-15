@@ -69,11 +69,11 @@ async function run() {
 async function assignKeys() {
   const unkeyed = await prisma.financeTransaction.findMany({
     where: { merchantKey: null },
-    select: { id: true, description: true, payee: true },
+    select: { id: true, description: true },
   });
   if (!unkeyed.length) return;
   const ids = unkeyed.map((t) => t.id);
-  const keys = unkeyed.map((t) => merchantKey(t.description, t.payee));
+  const keys = unkeyed.map((t) => merchantKey(t.description));
   await prisma.$executeRaw`
     UPDATE "FinanceTransaction" AS t SET "merchantKey" = v.key
     FROM unnest(${ids}::text[], ${keys}::text[]) AS v(id, key)
@@ -116,14 +116,17 @@ Spending categories:
 ${categories.map((c) => `- ${c.name}${c.fixed ? ' (fixed cost)' : ''}`).join('\n')}
 
 For each merchant give:
-- name: the merchant as people say it, the chain name without store numbers or city ("KROGER MASON" is "Kroger", "AMZN MKTP" and "AMAZON.COM" are both "Amazon"). One name per merchant, every time: if it's one of the names already in use (listed below), use that name exactly. For payments between people (Zelle, Venmo, Cash App, PayPal to a person), keep the person: "Zelle from Maria Lopez", "Venmo to J Smith".
+- name: the merchant as people say it, the chain name without store numbers or city ("KROGER MASON" is "Kroger", "AMZN MKTP" and "AMAZON.COM" are both "Amazon"). One name per merchant, every time: if it's one of the names already in use (listed below), use that name exactly. Corrections apply to everything sharing a name, so things that are sorted differently must never share one:
+  - Never a bare bank name. Say what it is: "Capital One Card Payment", "Capital One Auto Loan", "PNC Transfer", "Citi Card Payment".
+  - A store's separate businesses get their own names: "Costco Travel" and "Costco Gas" are not "Costco"; "Amazon Prime" is not "Amazon".
+  - The "bank calls it" hint is often too general ("Capital One" for both a card payment and a loan); go by the description. For payments between people (Zelle, Venmo, Cash App, PayPal to a person), keep the person: "Zelle from Maria Lopez", "Venmo to J Smith".
 - kind:
   - spending: purchases and bills. Refunds and credits from a store are spending too (same category as its purchases).
   - income: paychecks and direct deposits from employers, interest, dividends paid to checking, tax refunds, government benefits.
   - transfer: paying one of the credit cards above, moving money between their own accounts, card-side "payment, thank you" credits.
   - saving: putting money into savings, a brokerage or retirement account (Fidelity, Vanguard and the like).
   - A payment on an auto loan or mortgage is spending (car payments, or housing), not a transfer. Only call it a loan payment when the description says loan, auto or mortgage: at a bank where they also have cards, a plain "MOBILE PMT" or "AUTOPAY" is a card payment (transfer).
-- category (spending only, exactly as listed): warehouse clubs (Costco, Sam's Club, BJ's) are groceries, but their gas stations are gas. Amazon in any form goes in "Amazon" if listed. Streaming, software and memberships billed monthly go in "Subscriptions" if listed. Phone, internet, power, water and gas service are utilities.
+- category (spending only, exactly as listed): warehouse clubs (Costco, Sam's Club, BJ's) are groceries, but their gas stations are gas and their travel agencies (Costco Travel) are travel. Amazon in any form goes in "Amazon" if listed. Streaming, software and memberships billed monthly go in "Subscriptions" if listed. Phone, internet, power, water and gas service are utilities. Student loans and personal loans go in "Loans" if listed. Use "Other" only when nothing else fits.
 - unsure: true for payments between people (Zelle, Venmo, Cash App), ATM and cash withdrawals, checks, and anything you can't identify. Still give your best kind and category.
 ${names.length ? `\nMerchant names already in use:\n${names.join('\n')}` : ''}`;
 }
@@ -133,24 +136,32 @@ async function readMerchants() {
   const known = new Set((await prisma.financeMerchant.findMany({ select: { key: true } })).map((m) => m.key));
   const txns = await prisma.financeTransaction.findMany({
     where: { merchantKey: { not: null } },
-    select: { merchantKey: true, description: true, amount: true, account: { select: { kind: true, name: true } } },
+    select: {
+      merchantKey: true,
+      description: true,
+      payee: true,
+      amount: true,
+      account: { select: { kind: true, name: true } },
+    },
     orderBy: { transactedAt: 'desc' },
   });
-  const missing = new Map<string, { example: string; ways: Set<string> }>();
+  const missing = new Map<string, { example: string; payee: string | null; ways: Set<string> }>();
   for (const t of txns) {
     const key = t.merchantKey!;
     if (known.has(key)) continue;
-    const entry = missing.get(key) ?? { example: t.description, ways: new Set<string>() };
+    const entry = missing.get(key) ?? { example: t.description, payee: t.payee, ways: new Set<string>() };
     entry.ways.add(direction(t.account.kind, t.amount.isNegative(), t.account.name));
     missing.set(key, entry);
   }
   if (!missing.size || !client) return;
+  const keysInUse = new Set(txns.map((t) => t.merchantKey!));
 
   const [accounts, categories, byHand, named] = await Promise.all([
     prisma.financeAccount.findMany({ select: { institution: true, name: true, kind: true } }),
     prisma.financeCategory.findMany({ orderBy: { position: 'asc' } }),
     prisma.financeMerchant.findMany({ where: { byHand: true } }),
-    prisma.financeMerchant.findMany({ distinct: ['name'], select: { name: true } }),
+    // Only merchants still in use, so a name that was retired can't pull new ones toward it.
+    prisma.financeMerchant.findMany({ where: { key: { in: [...keysInUse] } }, distinct: ['name'], select: { name: true } }),
   ]);
   const categoryId = new Map(categories.map((c) => [c.name.toLowerCase(), c.id]));
   const handByName = new Map(byHand.map((m) => [m.name.toLowerCase(), m]));
@@ -161,7 +172,9 @@ async function readMerchants() {
     const batch = entries.slice(i, i + BATCH);
     // Names from earlier batches too, so one merchant keeps one name.
     const system = merchantSystem(accounts, categories, [...names].sort());
-    const read = await readBatch(system, batch.map(([key, e]) => `${key} | e.g. "${e.example}" | ${[...e.ways].join('; ')}`));
+    const read = await readBatch(system, batch.map(
+        ([key, e]) => `${key} | e.g. "${e.example}"${e.payee ? ` | bank calls it "${e.payee}"` : ''} | ${[...e.ways].join('; ')}`,
+      ));
     const rows = batch.flatMap(([key], j) => {
       const r = read.get(j);
       if (!r) return [];
