@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { api } from '../api';
+import { InOutChart, monthLabel, PaceChart } from '../components/MoneyCharts';
 import type { FinanceCategory, MoneyKind, MoneyTransaction, ReviewGroup } from '../types';
 
 /**
@@ -47,13 +48,30 @@ const monthName = (month: string) =>
 const dayName = (date: string) =>
   new Date(`${date}T12:00:00`).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
 
+type View = 'overview' | 'list' | 'review';
+
 export function MoneyPage() {
   const [params, setParams] = useSearchParams();
-  const view = params.get('view') === 'review' ? 'review' : 'list';
+  const raw = params.get('view');
+  const view: View = raw === 'review' || raw === 'list' ? raw : 'overview';
+  const month = /^\d{4}-\d{2}$/.test(params.get('month') ?? '') ? params.get('month')! : thisMonth();
   const status = useQuery({ queryKey: ['money'], queryFn: api.moneyStatus });
   const categories = useQuery({ queryKey: ['money-categories'], queryFn: api.moneyCategories });
   const review = useQuery({ queryKey: ['money-review'], queryFn: api.moneyReview });
   const lookCount = review.data?.reduce((n, g) => n + g.count, 0) ?? 0;
+
+  /** Keeps view, month and category in the URL, so Back and reloads land where you were. */
+  const go = (next: { view?: View; month?: string; category?: string | null }) => {
+    const v = next.view ?? view;
+    const m = next.month ?? month;
+    const out: Record<string, string> = {};
+    if (v !== 'overview') out.view = v;
+    if (m !== thisMonth()) out.month = m;
+    const category = next.category === undefined ? params.get('category') : next.category;
+    if (v === 'list' && category) out.category = category;
+    // Opening a category from the overview is a step you can go Back from.
+    setParams(out, { replace: !next.category });
+  };
 
   if (status.data && !status.data.connected && !status.data.accounts.length) {
     return (
@@ -76,22 +94,168 @@ export function MoneyPage() {
         </Link>
       </div>
       <div className="segmented">
-        <button type="button" className={view === 'list' ? 'on' : ''} onClick={() => setParams({}, { replace: true })}>
+        <button type="button" className={view === 'overview' ? 'on' : ''} onClick={() => go({ view: 'overview', category: null })}>
+          Overview
+        </button>
+        <button type="button" className={view === 'list' ? 'on' : ''} onClick={() => go({ view: 'list', category: null })}>
           Transactions
         </button>
-        <button
-          type="button"
-          className={view === 'review' ? 'on' : ''}
-          onClick={() => setParams({ view: 'review' }, { replace: true })}
-        >
-          Needs a look{lookCount ? ` (${lookCount})` : ''}
+        <button type="button" className={view === 'review' ? 'on' : ''} onClick={() => go({ view: 'review', category: null })}>
+          Review{lookCount ? ` (${lookCount})` : ''}
         </button>
       </div>
-      {view === 'list' ? (
-        <Transactions categories={categories.data ?? []} />
-      ) : (
-        <Review groups={review.data} categories={categories.data ?? []} />
+      {view !== 'review' && (
+        <div className="money-month">
+          <button type="button" className="btn btn-small" onClick={() => go({ month: shiftMonth(month, -1) })} aria-label="Previous month">
+            ‹
+          </button>
+          <strong>{monthName(month)}</strong>
+          <button
+            type="button"
+            className="btn btn-small"
+            disabled={month >= thisMonth()}
+            onClick={() => go({ month: shiftMonth(month, 1) })}
+            aria-label="Next month"
+          >
+            ›
+          </button>
+        </div>
       )}
+      {view === 'overview' && (
+        <Overview month={month} onMonth={(m) => go({ month: m })} onCategory={(id) => go({ view: 'list', category: id })} />
+      )}
+      {view === 'list' && (
+        <Transactions
+          key={params.get('category') ?? ''}
+          month={month}
+          initialCategory={params.get('category') ?? ''}
+          categories={categories.data ?? []}
+        />
+      )}
+      {view === 'review' && <Review groups={review.data} categories={categories.data ?? []} />}
+    </div>
+  );
+}
+
+// ---------- Overview ----------
+
+function Overview({
+  month,
+  onMonth,
+  onCategory,
+}: {
+  month: string;
+  onMonth: (month: string) => void;
+  onCategory: (id: string) => void;
+}) {
+  const q = useQuery({
+    queryKey: ['money-overview', month],
+    queryFn: () => api.moneyOverview(month),
+    placeholderData: (prev) => prev,
+  });
+  const d = q.data;
+  if (q.error) return <p className="error">{q.error.message}</p>;
+  if (!d) return null;
+
+  const spentNow = d.pace.actual[d.pace.actual.length - 1] ?? 0;
+  const usualNow = d.pace.typical?.[d.day - 1] ?? null;
+  const dayWord = new Date(`${d.month}-${String(d.day).padStart(2, '0')}T12:00:00`).toLocaleDateString(undefined, {
+    month: 'short',
+    day: 'numeric',
+  });
+  const leftOver = d.totals.income - d.totals.spending;
+  const typicalLeftOver = d.typical ? d.typical.income - d.typical.spending : null;
+  const scale = Math.max(1, ...d.categories.map((c) => Math.max(c.spent, c.typical ?? 0)));
+  const span = d.typical ? `${monthLabel(d.typical.months[0], 'short')}–${monthLabel(d.typical.months.at(-1)!, 'short')}` : '';
+  const groups = [
+    { title: 'Fixed costs', rows: d.categories.filter((c) => c.fixed) },
+    { title: 'Everyday spending', rows: d.categories.filter((c) => !c.fixed) },
+  ];
+
+  return (
+    <div className="money-overview">
+      <section className="money-hero">
+        <span className="muted small">{d.current ? 'Spent so far' : 'Spent'}</span>
+        <div className="money-hero-value">{usd(d.totals.spending, false)}</div>
+        <p className="money-verdict">
+          {usualNow === null
+            ? 'Comparisons start once a full month of every account is in.'
+            : verdict(spentNow - usualNow, usualNow, d.current ? `by ${dayWord}` : 'for a whole month')}
+        </p>
+      </section>
+      {d.pace.actual.length > 0 && <PaceChart data={d} />}
+
+      <div className="money-totals">
+        <Tile label="In" value={d.totals.income} usual={d.typical?.income} />
+        <Tile label="Saved" value={d.totals.saving} usual={d.typical?.saving} signed />
+        <Tile label={d.current ? 'Left so far' : 'Left over'} value={leftOver} usual={typicalLeftOver ?? undefined} signed />
+      </div>
+
+      <h2 className="money-section-title">Where it went</h2>
+      {d.typical && (
+        <p className="muted small">
+          <i className="key key-tick" /> marks a usual month ({span}). Tap a category to see its charges.
+        </p>
+      )}
+      {groups.map(({ title, rows }) =>
+        rows.length ? (
+          <section key={title} className="money-cats">
+            <h3>
+              {title}
+              <span>{usd(rows.reduce((n, c) => n + c.spent, 0), false)}</span>
+            </h3>
+            <ul>
+              {rows.map((c) => (
+                <li key={c.id}>
+                  <button type="button" className="money-cat" onClick={() => onCategory(c.id)}>
+                    <span className="money-cat-head">
+                      <span>{c.name}</span>
+                      <span>{c.spent < 0 ? `+${usd(c.spent, false)}` : usd(c.spent, false)}</span>
+                    </span>
+                    <span className="money-cat-track">
+                      <span className="money-cat-fill" style={{ width: `${(Math.max(0, c.spent) / scale) * 100}%` }} />
+                      {c.typical !== null && c.typical > 0 && (
+                        <span className="money-cat-usual" style={{ left: `${(c.typical / scale) * 100}%` }} />
+                      )}
+                    </span>
+                    {c.typical !== null && <span className="muted small">usual {usd(c.typical, false)}</span>}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </section>
+        ) : null,
+      )}
+
+      <h2 className="money-section-title">Month by month</h2>
+      {d.typical && typicalLeftOver !== null && (
+        <p className="money-verdict">
+          {span}: {usd(d.typical.income, false)} a month in, {usd(d.typical.spending, false)} spent.{' '}
+          {Math.abs(typicalLeftOver) < 50
+            ? 'About even.'
+            : typicalLeftOver > 0
+              ? `${usd(typicalLeftOver, false)} a month left over.`
+              : `${usd(typicalLeftOver, false)} a month more went out than came in.`}
+        </p>
+      )}
+      <p className="muted small">Tap a month to look at it.</p>
+      <InOutChart data={d} onPick={onMonth} />
+    </div>
+  );
+}
+
+function verdict(diff: number, usual: number, when: string) {
+  if (Math.abs(diff) < Math.max(50, usual * 0.05)) return `About usual ${when}.`;
+  return `${usd(diff, false)} ${diff > 0 ? 'more' : 'less'} than usual ${when}.`;
+}
+
+function Tile({ label, value, usual, signed }: { label: string; value: number; usual?: number; signed?: boolean }) {
+  const show = (n: number) => `${signed && n < 0 ? '−' : ''}${usd(n, false)}`;
+  return (
+    <div>
+      <span className="muted small">{label}</span>
+      <strong>{show(value)}</strong>
+      {usual !== undefined && <span className="muted small">usual {show(usual)}</span>}
     </div>
   );
 }
@@ -100,11 +264,18 @@ export function MoneyPage() {
 
 type KindFilter = MoneyKind | '';
 
-function Transactions({ categories }: { categories: FinanceCategory[] }) {
-  const [month, setMonth] = useState(thisMonth);
+function Transactions({
+  month,
+  initialCategory,
+  categories,
+}: {
+  month: string;
+  initialCategory: string;
+  categories: FinanceCategory[];
+}) {
   const [q, setQ] = useState('');
   const [kind, setKind] = useState<KindFilter>('');
-  const [categoryId, setCategoryId] = useState('');
+  const [categoryId, setCategoryId] = useState(initialCategory);
   const [open, setOpen] = useState<string | null>(null);
   const search = q.trim().length >= 2 ? q.trim() : '';
 
@@ -120,43 +291,24 @@ function Transactions({ categories }: { categories: FinanceCategory[] }) {
 
   return (
     <>
-      {!search && (
-        <>
-          <div className="money-month">
-            <button type="button" className="btn btn-small" onClick={() => setMonth((m) => shiftMonth(m, -1))} aria-label="Previous month">
-              ‹
-            </button>
-            <strong>{monthName(month)}</strong>
-            <button
-              type="button"
-              className="btn btn-small"
-              disabled={month >= thisMonth()}
-              onClick={() => setMonth((m) => shiftMonth(m, 1))}
-              aria-label="Next month"
-            >
-              ›
-            </button>
+      {!search && d && (
+        <div className="money-totals">
+          <div>
+            <span className="muted small">In</span>
+            <strong>{usd(d.totals.income, false)}</strong>
           </div>
-          {d && (
-            <div className="money-totals">
-              <div>
-                <span className="muted small">In</span>
-                <strong>{usd(d.totals.income, false)}</strong>
-              </div>
-              <div>
-                <span className="muted small">Spent</span>
-                <strong>{usd(d.totals.spending, false)}</strong>
-              </div>
-              <div>
-                <span className="muted small">Saved</span>
-                <strong>
-                  {d.totals.saving < 0 && '−'}
-                  {usd(d.totals.saving, false)}
-                </strong>
-              </div>
-            </div>
-          )}
-        </>
+          <div>
+            <span className="muted small">Spent</span>
+            <strong>{usd(d.totals.spending, false)}</strong>
+          </div>
+          <div>
+            <span className="muted small">Saved</span>
+            <strong>
+              {d.totals.saving < 0 && '−'}
+              {usd(d.totals.saving, false)}
+            </strong>
+          </div>
+        </div>
       )}
 
       <div className="money-filters">
@@ -216,7 +368,9 @@ function Transactions({ categories }: { categories: FinanceCategory[] }) {
 function useRefresh() {
   const queryClient = useQueryClient();
   return () => {
-    for (const key of ['money-txns', 'money-review', 'money-categories']) queryClient.invalidateQueries({ queryKey: [key] });
+    for (const key of ['money-txns', 'money-review', 'money-categories', 'money-overview']) {
+      queryClient.invalidateQueries({ queryKey: [key] });
+    }
   };
 }
 

@@ -6,6 +6,7 @@ import { Prisma } from '../generated/prisma/client.js';
 import { classify, setMerchant, setTransaction } from '../money/classify.js';
 import { connect, disconnect, homeTimeZone } from '../money/connection.js';
 import { importHistory } from '../money/importHistory.js';
+import { overview } from '../money/overview.js';
 import { SimpleFinAuthError } from '../money/simplefin.js';
 import { kickMoneySync, moneySyncRunning } from '../money/sync.js';
 import { wallTime, zonedInstant } from '../zone.js';
@@ -134,6 +135,21 @@ export async function moneyRoutes(app: FastifyInstance) {
     const summary = await importHistory(id, rows, { flip, dryRun });
     if (!dryRun) void classify();
     return summary;
+  });
+
+  // ---------- Overview ----------
+
+  app.get('/api/money/overview', async (request, reply) => {
+    const parsed = z
+      .object({
+        month: z
+          .string()
+          .regex(/^\d{4}-\d{2}$/)
+          .optional(),
+      })
+      .safeParse(request.query);
+    if (!parsed.success) return reply.code(400).send({ error: 'Bad month' });
+    return overview(parsed.data.month);
   });
 
   // ---------- Transactions ----------

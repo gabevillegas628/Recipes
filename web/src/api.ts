@@ -16,6 +16,7 @@ import type {
   MealSummary,
   MoneyKind,
   MoneyMonth,
+  MoneyOverview,
   MoneyStatus,
   ReviewGroup,
   Note,
@@ -217,6 +218,7 @@ export const api = {
     const params = new URLSearchParams(Object.entries(filter).filter((e): e is [string, string] => Boolean(e[1])));
     return request<MoneyMonth>(`/api/money/transactions?${params}`);
   },
+  moneyOverview: (month?: string) => request<MoneyOverview>(`/api/money/overview${month ? `?month=${month}` : ''}`),
   moneyReview: () => request<ReviewGroup[]>('/api/money/review'),
   /** How every store with this merchant's name is sorted, past and future. */
   setMerchant: (keys: string[], kind: MoneyKind, categoryId: string | null) =>

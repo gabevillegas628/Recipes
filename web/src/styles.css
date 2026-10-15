@@ -13,6 +13,9 @@
   --busy: #d8cdbf;
   /* Money coming in on the Money tab. */
   --money-in: #2f7d32;
+  /* Chart series on the Money overview (validated for color vision deficiency on --bg). */
+  --series-in: #2a78d6;
+  --series-out: #c2562e;
   --radius: 12px;
   --tabbar-h: 64px;
   --safe-bottom: env(safe-area-inset-bottom, 0px);
@@ -32,6 +35,8 @@
     --danger: #f2877f;
     --busy: #4d463f;
     --money-in: #7cc47f;
+    --series-in: #3987e5;
+    --series-out: #d95926;
     color-scheme: dark;
   }
 }
@@ -3593,5 +3598,285 @@ html.has-timers .cook {
   border-radius: 8px;
   background: var(--surface);
   color: var(--text);
+}
+
+/* ---------- Money overview ---------- */
+
+.money-hero {
+  margin: 4px 0 8px;
+}
+
+.money-hero-value {
+  font-size: 48px;
+  font-weight: 700;
+  line-height: 1.1;
+  letter-spacing: -0.01em;
+}
+
+.money-verdict {
+  margin: 4px 0 8px;
+  font-size: 16px;
+}
+
+.money-section-title {
+  margin: 28px 0 4px;
+  font-size: 20px;
+}
+
+.money-totals > div .muted.small {
+  font-size: 12px;
+}
+
+.money-overview .money-totals {
+  margin-top: 16px;
+}
+
+.money-cats h3 {
+  display: flex;
+  justify-content: space-between;
+  margin: 18px 0 4px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.money-cats ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.money-cat {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+  padding: 8px 0;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  background: none;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.money-cat-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.money-cat-head span:last-child {
+  font-variant-numeric: tabular-nums;
+}
+
+.money-cat-track {
+  position: relative;
+  display: block;
+  height: 8px;
+  border-radius: 4px;
+  background: var(--border);
+}
+
+.money-cat-fill {
+  display: block;
+  height: 100%;
+  border-radius: 4px;
+  background: var(--series-out);
+}
+
+.money-cat-usual {
+  position: absolute;
+  top: -3px;
+  width: 2px;
+  height: 14px;
+  margin-left: -1px;
+  border-radius: 1px;
+  background: var(--text);
+}
+
+/* ---------- Charts ---------- */
+
+.chart {
+  margin: 8px 0 4px;
+}
+
+.chart-readout {
+  min-height: 22px;
+  margin: 0 0 4px;
+  font-size: 14px;
+  color: var(--muted);
+}
+
+.chart-readout strong {
+  color: var(--text);
+}
+
+.chart-frame {
+  width: 100%;
+}
+
+.chart-frame svg {
+  display: block;
+  overflow: visible;
+}
+
+.chart-grid {
+  stroke: var(--border);
+  stroke-width: 1;
+}
+
+.chart-tick {
+  fill: var(--muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.chart-tick-on {
+  fill: var(--text);
+  font-weight: 600;
+}
+
+.chart-end {
+  fill: var(--muted);
+  font-size: 12px;
+}
+
+.chart-line {
+  fill: none;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.chart-line-out {
+  stroke: var(--series-out);
+}
+
+.chart-line-typical {
+  stroke: var(--muted);
+}
+
+.chart-crosshair {
+  stroke: var(--muted);
+  stroke-width: 1;
+}
+
+.chart-dot {
+  stroke: var(--bg);
+  stroke-width: 2;
+}
+
+.chart-dot-out {
+  fill: var(--series-out);
+}
+
+.chart-dot-typical {
+  fill: var(--muted);
+}
+
+.chart-bar-in {
+  fill: var(--series-in);
+}
+
+.chart-bar-out {
+  fill: var(--series-out);
+}
+
+.chart-month.partial .chart-bar {
+  opacity: 0.35;
+}
+
+.chart-selected {
+  fill: var(--accent-soft);
+}
+
+.chart-hit {
+  fill: transparent;
+  cursor: pointer;
+  touch-action: pan-y;
+}
+
+.chart-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  margin-top: 6px;
+  font-size: 13px;
+}
+
+.chart-legend > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.key {
+  display: inline-block;
+  flex: none;
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+}
+
+.key-line {
+  width: 14px;
+  height: 2px;
+  border-radius: 1px;
+}
+
+.key-in {
+  background: var(--series-in);
+}
+
+.key-out {
+  background: var(--series-out);
+}
+
+.key-typical {
+  background: var(--muted);
+}
+
+.key-tick {
+  width: 2px;
+  height: 12px;
+  margin: 0 2px -1px;
+  border-radius: 1px;
+  background: var(--text);
+}
+
+.chart-table {
+  margin-top: 12px;
+  font-size: 14px;
+}
+
+.chart-table summary {
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.chart-table table {
+  width: 100%;
+  margin-top: 8px;
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+}
+
+.chart-table th,
+.chart-table td {
+  padding: 4px 0;
+  border-bottom: 1px solid var(--border);
+  text-align: right;
+}
+
+.chart-table th:first-child,
+.chart-table td:first-child {
+  text-align: left;
+}
+
+.chart-table th {
+  font-weight: 600;
+  color: var(--muted);
 }
 
