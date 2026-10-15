@@ -385,6 +385,51 @@ export interface GoogleStatus {
   failed: number;
 }
 
+export type FinanceAccountKind = 'CHECKING' | 'SAVINGS' | 'CREDIT_CARD' | 'LOAN' | 'INVESTMENT' | 'OTHER';
+
+export interface FinanceAccount {
+  id: string;
+  institution: string;
+  name: string;
+  kind: FinanceAccountKind;
+  /** As the bank reports it: negative for what's owed on cards and loans. */
+  balance: number;
+  availableBalance: number | null;
+  balanceDate: string;
+  /** Investment positions SimpleFIN reports. */
+  holdings: number;
+  transactions: number;
+  /** Of those, how many came from a CSV download. */
+  imported: number;
+  firstDate: string | null;
+  lastDate: string | null;
+}
+
+/** Settings → Money: the SimpleFIN connection and what it brought in. */
+export interface MoneyStatus {
+  connected: boolean;
+  /** SimpleFIN stopped accepting Mise's access; needs a new setup token. */
+  error: string | null;
+  /** What SimpleFIN said was wrong on the last sync, like a bank needing its sign-in redone. */
+  warnings: string[];
+  lastSyncAt: string | null;
+  backfilledAt: string | null;
+  connectedBy: string | null;
+  syncing: boolean;
+  accounts: FinanceAccount[];
+}
+
+/** What importing a CSV did, or would do on a dry run. */
+export interface ImportSummary {
+  rows: number;
+  covered: number;
+  added: number;
+  duplicates: number;
+  signs: 'same' | 'opposite' | 'unknown';
+  firstDate: string | null;
+  lastDate: string | null;
+}
+
 export interface GoogleCalendarChoice {
   id: string;
   name: string;

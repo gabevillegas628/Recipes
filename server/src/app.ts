@@ -12,6 +12,7 @@ import { imageRoutes } from './routes/images.js';
 import { importRoutes } from './routes/import.js';
 import { mcpRoutes } from './routes/mcp.js';
 import { mealRoutes } from './routes/meals.js';
+import { moneyRoutes } from './routes/money.js';
 import { noteRoutes } from './routes/notes.js';
 import { planRoutes } from './routes/plan.js';
 import { recipeRoutes } from './routes/recipes.js';
@@ -56,6 +57,7 @@ export async function buildApp() {
   await app.register(householdRoutes);
   await app.register(todayRoutes);
   await app.register(weatherRoutes);
+  await app.register(moneyRoutes);
   app.addHook('onReady', resumeImportJobs);
 
   // Recipe images from the upload dir (a Railway volume in production).

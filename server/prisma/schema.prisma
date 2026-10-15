@@ -24,6 +24,7 @@ model User {
   meals             Meal[]
   notes             Note[]
   googleConnections GoogleConnection[]
+  financeConnections FinanceConnection[]
 }
 
 enum RecipeSource {
@@ -334,4 +335,90 @@ model EventTag {
   unsure    Boolean  @default(false)
   byHand    Boolean  @default(false)
   updatedAt DateTime @updatedAt
+}
+
+// ---------- Money (see src/money/) ----------
+
+/// The SimpleFIN Bridge connection bank, card and Fidelity data comes from. At most one row (id "default").
+model FinanceConnection {
+  id            String    @id @default("default")
+  /// SimpleFIN's access URL, credentials included, encrypted with a key derived from SESSION_SECRET.
+  accessUrl     String
+  /// Set when SimpleFIN stops accepting the access URL; needs a new setup token.
+  error         String?
+  /// What SimpleFIN said was wrong on the last sync (a bank wanting its sign-in redone). Syncing still works.
+  warnings      String[]
+  lastSyncAt    DateTime?
+  /// When the first sync finished reaching back for older history. Null until then.
+  backfilledAt  DateTime?
+  connectedBy   User?     @relation(fields: [connectedById], references: [id], onDelete: SetNull)
+  connectedById String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+enum FinanceAccountKind {
+  CHECKING
+  SAVINGS
+  CREDIT_CARD
+  LOAN
+  INVESTMENT
+  OTHER
+}
+
+/// A bank account, card, loan or investment account, as SimpleFIN reports it.
+model FinanceAccount {
+  id               String               @id @default(cuid())
+  /// SimpleFIN's account id.
+  externalId       String               @unique
+  institution      String
+  name             String
+  /// Guessed from the name on first sync; changed by hand in Settings → Money.
+  kind             FinanceAccountKind
+  kindByHand       Boolean              @default(false)
+  /// As the bank reports it: negative for what's owed on cards and loans.
+  balance          Decimal              @db.Decimal(14, 2)
+  availableBalance Decimal?             @db.Decimal(14, 2)
+  balanceDate      DateTime
+  /// Investment positions as SimpleFIN sends them, replaced on each sync.
+  holdings         Json?
+  createdAt        DateTime             @default(now())
+  updatedAt        DateTime             @updatedAt
+  transactions     FinanceTransaction[]
+  balances         FinanceBalance[]
+}
+
+/// One charge, payment, deposit or transfer on an account.
+model FinanceTransaction {
+  id           String         @id @default(cuid())
+  account      FinanceAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  accountId    String
+  /// SimpleFIN's transaction id, or "csv:" and a hash of the row for imported history.
+  externalId   String
+  /// When the purchase was made (posted date if the bank doesn't say). Months count by this.
+  transactedAt DateTime
+  postedAt     DateTime?
+  /// Negative is money out of this account (a purchase on a card, a bill paid from checking).
+  amount       Decimal        @db.Decimal(14, 2)
+  description  String
+  payee        String?
+  memo         String?
+  pending      Boolean        @default(false)
+  /// "simplefin" or "csv".
+  source       String         @default("simplefin")
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+
+  @@unique([accountId, externalId])
+  @@index([transactedAt])
+}
+
+/// An account's balance at the end of a day, for net worth over time.
+model FinanceBalance {
+  account   FinanceAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  accountId String
+  date      DateTime       @db.Date
+  balance   Decimal        @db.Decimal(14, 2)
+
+  @@id([accountId, date])
 }

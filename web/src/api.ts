@@ -8,9 +8,12 @@ import type {
   GoogleCalendarChoice,
   GoogleStatus,
   GroceryGroup,
+  FinanceAccountKind,
+  ImportSummary,
   Meal,
   MealInput,
   MealSummary,
+  MoneyStatus,
   Note,
   NoteInput,
   PlanDraft,
@@ -193,6 +196,18 @@ export const api = {
   setGoogleReminders: (calendarId: string | null, color: string | null) =>
     request<GoogleStatus>('/api/google/reminders', json('PUT', { calendarId, color })),
   disconnectGoogle: () => request<GoogleStatus>('/api/google', { method: 'DELETE' }),
+
+  moneyStatus: () => request<MoneyStatus>('/api/money'),
+  connectMoney: (setupToken: string) => request<MoneyStatus>('/api/money/connect', json('POST', { setupToken })),
+  syncMoney: () => request<MoneyStatus>('/api/money/sync', { method: 'POST' }),
+  disconnectMoney: () => request<MoneyStatus>('/api/money', { method: 'DELETE' }),
+  setAccountKind: (id: string, kind: FinanceAccountKind) =>
+    request<MoneyStatus>(`/api/money/accounts/${id}`, json('PUT', { kind })),
+  importHistory: (
+    id: string,
+    rows: { date: string; amount: number; description: string }[],
+    options: { flip: boolean; dryRun: boolean },
+  ) => request<ImportSummary>(`/api/money/accounts/${id}/import`, json('POST', { rows, ...options })),
 
   changePassword: (currentPassword: string, newPassword: string) =>
     request<{ ok: true }>('/api/auth/password', json('POST', { currentPassword, newPassword })),

@@ -3,6 +3,7 @@ import { kickCalendarSync } from './calendarSync.js';
 import { env } from './env.js';
 import { scheduleSort } from './groceries.js';
 import { scheduleIndex } from './ingredients.js';
+import { kickMoneySync, SYNC_EVERY } from './money/sync.js';
 
 const app = await buildApp();
 await app.listen({ port: env.port, host: '0.0.0.0' });
@@ -13,3 +14,6 @@ scheduleIndex(30_000);
 // Send anything saved while Google was unreachable, now and every few minutes.
 kickCalendarSync();
 setInterval(kickCalendarSync, 5 * 60 * 1000);
+// Bank and card data from SimpleFIN. Restarts (deploys) don't re-sync if the last one was recent.
+kickMoneySync(SYNC_EVERY);
+setInterval(() => kickMoneySync(SYNC_EVERY), 15 * 60 * 1000);

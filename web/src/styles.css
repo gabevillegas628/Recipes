@@ -3236,3 +3236,100 @@ html.has-timers .cook {
 .page.has-tidy {
   padding-bottom: 72px;
 }
+
+/* ---------- Settings → Money ---------- */
+
+.money-warnings {
+  margin: 6px 0;
+  padding-left: 20px;
+}
+
+.money-institution h4 {
+  margin: 16px 0 6px;
+  font-size: 15px;
+  color: var(--muted);
+}
+
+.money-accounts {
+  margin: 0 0 8px;
+  padding: 0;
+  list-style: none;
+}
+
+.money-account {
+  padding: 10px 0;
+  border-top: 1px solid var(--border);
+}
+
+.money-account-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.money-account-name {
+  min-width: 0;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.money-account-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+  margin: 6px 0;
+}
+
+.money-account-meta select {
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 14px;
+}
+
+.money-import-btn {
+  margin-top: 2px;
+}
+
+.money-import {
+  margin-top: 8px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.money-import input[type='file'] {
+  max-width: 100%;
+  margin-bottom: 12px;
+}
+
+.money-import-preview p {
+  margin: 0 0 8px;
+}
+
+.money-samples {
+  margin: 0 0 12px;
+  padding: 0;
+  list-style: none;
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}
+
+.money-samples li {
+  display: flex;
+  gap: 10px;
+  padding: 3px 0;
+}
+
+.money-sample-desc {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

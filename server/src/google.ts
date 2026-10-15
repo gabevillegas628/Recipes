@@ -1,6 +1,6 @@
-import { createCipheriv, createDecipheriv, createHash, randomBytes } from 'node:crypto';
 import { prisma } from './db.js';
 import { env } from './env.js';
+import { sealer } from './secrets.js';
 
 /**
  * The app's one Google connection: someone connects a Google account on the
@@ -34,21 +34,7 @@ export class GoogleApiError extends Error {
 
 // ---------- Refresh token at rest ----------
 
-const key = createHash('sha256').update(`${env.sessionSecret}:google-refresh-token`).digest();
-
-function encrypt(plain: string): string {
-  const iv = randomBytes(12);
-  const cipher = createCipheriv('aes-256-gcm', key, iv);
-  const data = Buffer.concat([cipher.update(plain, 'utf8'), cipher.final()]);
-  return [iv, cipher.getAuthTag(), data].map((b) => b.toString('base64url')).join('.');
-}
-
-function decrypt(stored: string): string {
-  const [iv, tag, data] = stored.split('.').map((s) => Buffer.from(s, 'base64url'));
-  const decipher = createDecipheriv('aes-256-gcm', key, iv);
-  decipher.setAuthTag(tag);
-  return Buffer.concat([decipher.update(data), decipher.final()]).toString('utf8');
-}
+const { encrypt, decrypt } = sealer('google-refresh-token');
 
 // ---------- OAuth ----------
 
