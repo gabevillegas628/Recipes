@@ -446,6 +446,7 @@ model FinanceCategory {
   position     Int                  @default(0)
   merchants    FinanceMerchant[]
   transactions FinanceTransaction[]
+  budget       FinanceBudget?
 }
 
 /// How a merchant's transactions are sorted: read by AI once, or set by hand. Like EventTag.
@@ -474,3 +475,33 @@ model FinanceBalance {
 
   @@id([accountId, date])
 }
+
+/// The budget's settings. One row (id "default"). See src/money/budget.ts.
+model FinanceBudgetSettings {
+  id        String   @id @default("default")
+  /// Expected income a month, typed in. Null to use the paychecks found.
+  income    Decimal? @db.Decimal(14, 2)
+  /// Planned saving a month.
+  saving    Decimal  @default(0) @db.Decimal(14, 2)
+  updatedAt DateTime @updatedAt
+}
+
+/// A category's monthly budget typed in. Without one, a category's budget is its bills (fixed) or its usual month (everyday).
+model FinanceBudget {
+  category   FinanceCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  categoryId String          @id
+  amount     Decimal         @db.Decimal(14, 2)
+  updatedAt  DateTime        @updatedAt
+}
+
+/// A bill as decided by hand, by merchant name: a new one confirmed as monthly ("keep"), one that isn't monthly ("ignore"), or one added before it's been charged ("added").
+model FinanceBill {
+  name       String   @id
+  state      String
+  /// For added bills.
+  categoryId String?
+  amount     Decimal? @db.Decimal(14, 2)
+  day        Int?
+  updatedAt  DateTime @updatedAt
+}
+

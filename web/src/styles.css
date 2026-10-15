@@ -3880,3 +3880,187 @@ html.has-timers .cook {
   color: var(--muted);
 }
 
+.today-card-wide {
+  grid-column: 1 / -1;
+}
+
+/* ---------- Budget ---------- */
+
+.money-header-links {
+  display: flex;
+  gap: 8px;
+}
+
+.money-plan-warning {
+  margin: 12px 0 0;
+  padding: 10px 12px;
+  border-radius: var(--radius);
+  background: var(--accent-soft);
+  font-size: 15px;
+}
+
+.budget-ledger {
+  margin: 16px 0 8px;
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.budget-line {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 4px 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.budget-subtotal {
+  margin: 4px 0;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+  font-weight: 600;
+}
+
+.budget-verdict {
+  display: flex;
+  gap: 8px;
+  margin: 10px 0 8px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+  font-weight: 600;
+}
+
+.budget-over span {
+  color: var(--danger);
+}
+
+.budget-ok span {
+  color: var(--money-in);
+}
+
+.budget-section {
+  padding: 18px 0 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+.budget-section h2 {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  margin: 0 0 6px;
+  font-size: 19px;
+}
+
+.budget-section h2 span,
+.budget-group h3 span {
+  font-size: 15px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.budget-group h3,
+.budget-suggested h3 {
+  display: flex;
+  justify-content: space-between;
+  margin: 14px 0 2px;
+  font-size: 14px;
+  color: var(--muted);
+}
+
+.budget-suggested {
+  margin: 10px 0;
+  padding: 4px 12px 8px;
+  border-radius: var(--radius);
+  background: var(--accent-soft);
+}
+
+.budget-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.budget-list li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.budget-list li:last-child {
+  border-bottom: 0;
+}
+
+.budget-list li > span:first-child {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.budget-list li > span:last-child {
+  flex: none;
+  font-variant-numeric: tabular-nums;
+}
+
+.budget-bill-end {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.budget-ignored {
+  margin: 8px 0 12px;
+  font-size: 15px;
+}
+
+.budget-ignored summary {
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.budget-amount-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 8px 0;
+}
+
+.budget-amount-form input {
+  flex: 1 1 140px;
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 16px;
+}
+
+.budget-input {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  color: var(--muted);
+}
+
+.budget-input input {
+  width: 84px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 16px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.budget-add {
+  margin-top: 12px;
+}
+

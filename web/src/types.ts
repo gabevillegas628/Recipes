@@ -485,6 +485,60 @@ export interface MoneyOverview {
   /** Up to 12 months ending with this one. Partial months are missing some accounts. */
   history: (MoneyTotals & { month: string; partial: boolean; current: boolean })[];
   completeFrom: string | null;
+  /** This month's budget; null for past months. */
+  budget: BudgetPlan | null;
+}
+
+export interface IncomeSource {
+  name: string;
+  /** Usual deposit. */
+  amount: number;
+  perMonth: number;
+  monthly: number;
+  /** Deposits well above the usual one (bonuses) in recent months. */
+  extra: number;
+  lastDate: string;
+}
+
+export interface BudgetBill {
+  name: string;
+  categoryId: string;
+  /** A month, as of the latest month it was charged. */
+  amount: number;
+  /** This month so far. */
+  paid: number;
+  /** Day of the month it usually comes. */
+  day: number;
+  isNew: boolean;
+  /** counted: in the budget. suggested: new, waiting to be confirmed. ignored: not monthly. added: typed in. */
+  state: 'counted' | 'suggested' | 'ignored' | 'added';
+}
+
+/** This month's budget: a plan that has to add up against income. */
+export interface BudgetPlan {
+  month: string;
+  income: { expected: number; found: number; byHand: boolean; sources: IncomeSource[] };
+  saving: number;
+  bills: BudgetBill[];
+  categories: {
+    id: string;
+    name: string;
+    fixed: boolean;
+    budget: number;
+    from: 'bills' | 'usual' | 'hand';
+    usual: number | null;
+    spent: number;
+  }[];
+  totals: { fixed: number; everyday: number; forEveryday: number; unplanned: number; budget: number };
+}
+
+export interface MoneyToday {
+  spent: number;
+  budget: number;
+  left: number;
+  day: number;
+  daysInMonth: number;
+  tightest: { name: string; left: number } | null;
 }
 
 /** One merchant's unsettled transactions in the needs-a-look list. */

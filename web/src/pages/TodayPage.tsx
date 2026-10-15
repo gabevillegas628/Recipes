@@ -48,6 +48,7 @@ export function TodayPage({ user }: { user: User }) {
   const plan = useQuery({ queryKey: ['plan'], queryFn: api.plan });
   const groceries = useQuery({ queryKey: ['groceries'], queryFn: api.groceries });
   const weather = useQuery({ queryKey: ['weather'], queryFn: api.weather, refetchInterval: 30 * 60_000 });
+  const money = useQuery({ queryKey: ['money-today'], queryFn: api.moneyToday, staleTime: 5 * 60_000 });
 
   // To-dos ticked off here stay listed (ticked) until the page is left, so a mis-tap can be undone.
   const [ticked, setTicked] = useState<string[]>([]);
@@ -338,6 +339,24 @@ export function TodayPage({ user }: { user: User }) {
               <span className="today-card-detail">List is empty</span>
             ))}
         </Link>
+        {money.data && money.data.budget > 0 && (
+          <Link to="/money" className="today-card today-card-wide">
+            <span className="today-card-label">Money this month</span>
+            <span className="today-card-value">
+              {money.data.left >= 0
+                ? `${wholeDollars(money.data.left)} left`
+                : `${wholeDollars(-money.data.left)} over budget`}
+            </span>
+            {money.data.tightest && (
+              <span className="today-card-detail">
+                {money.data.tightest.name}:{' '}
+                {money.data.tightest.left >= 0
+                  ? `${wholeDollars(money.data.tightest.left)} left`
+                  : `${wholeDollars(-money.data.tightest.left)} over`}
+              </span>
+            )}
+          </Link>
+        )}
       </div>
 
       {upcoming.length > 0 && (
@@ -767,3 +786,6 @@ function WeatherLine({ weather }: { weather: Weather }) {
     </p>
   );
 }
+
+const wholeDollars = (n: number) =>
+  n.toLocaleString(undefined, { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });

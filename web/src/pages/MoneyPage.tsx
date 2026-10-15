@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { api } from '../api';
-import { InOutChart, monthLabel, PaceChart } from '../components/MoneyCharts';
+import { InOutChart, monthLabel, PaceChart, type PaceReference } from '../components/MoneyCharts';
 import type { FinanceCategory, MoneyKind, MoneyTransaction, ReviewGroup } from '../types';
 
 /**
@@ -89,9 +89,14 @@ export function MoneyPage() {
     <div className="page money">
       <div className="money-header">
         <h1 className="form-title">Money</h1>
-        <Link to="/settings/money" className="btn btn-small">
-          Accounts
-        </Link>
+        <span className="money-header-links">
+          <Link to="/money/budget" className="btn btn-small">
+            Budget
+          </Link>
+          <Link to="/settings/money" className="btn btn-small">
+            Accounts
+          </Link>
+        </span>
       </div>
       <div className="segmented">
         <button type="button" className={view === 'overview' ? 'on' : ''} onClick={() => go({ view: 'overview', category: null })}>
@@ -158,14 +163,34 @@ function Overview({
   if (!d) return null;
 
   const spentNow = d.pace.actual[d.pace.actual.length - 1] ?? 0;
-  const usualNow = d.pace.typical?.[d.day - 1] ?? null;
+  const b = d.budget;
+  // This month's budget, spread over the month the way a usual month goes (rent early, groceries all along).
+  const budgetPace =
+    b && b.totals.budget > 0
+      ? d.pace.typical && d.pace.typical[d.pace.typical.length - 1] > 0
+        ? d.pace.typical.map((v) => (v / d.pace.typical![d.pace.typical!.length - 1]) * b.totals.budget)
+        : Array.from({ length: d.daysInMonth }, (_, i) => ((i + 1) / d.daysInMonth) * b.totals.budget)
+      : null;
+  const reference: PaceReference | null = budgetPace
+    ? { values: budgetPace, label: 'Budget', legend: 'This month’s budget' }
+    : d.pace.typical
+      ? {
+          values: d.pace.typical,
+          label: 'Usual',
+          legend: `Usual (${d.typical!.months.map((m) => monthLabel(m, 'short')).join(', ')})`,
+        }
+      : null;
+  const usualNow = reference?.values[d.day - 1] ?? null;
+  const budgetOf = new Map(b?.categories.map((c) => [c.id, c.budget]) ?? []);
+  /** What a category is measured against: its budget this month, its usual otherwise. */
+  const markOf = (c: { id: string; typical: number | null }) => (b ? (budgetOf.get(c.id) ?? 0) : c.typical);
   const dayWord = new Date(`${d.month}-${String(d.day).padStart(2, '0')}T12:00:00`).toLocaleDateString(undefined, {
     month: 'short',
     day: 'numeric',
   });
   const leftOver = d.totals.income - d.totals.spending;
   const typicalLeftOver = d.typical ? d.typical.income - d.typical.spending : null;
-  const scale = Math.max(1, ...d.categories.map((c) => Math.max(c.spent, c.typical ?? 0)));
+  const scale = Math.max(1, ...d.categories.map((c) => Math.max(c.spent, markOf(c) ?? 0)));
   const span = d.typical ? `${monthLabel(d.typical.months[0], 'short')}–${monthLabel(d.typical.months.at(-1)!, 'short')}` : '';
   const groups = [
     { title: 'Fixed costs', rows: d.categories.filter((c) => c.fixed) },
@@ -177,24 +202,41 @@ function Overview({
       <section className="money-hero">
         <span className="muted small">{d.current ? 'Spent so far' : 'Spent'}</span>
         <div className="money-hero-value">{usd(d.totals.spending, false)}</div>
-        <p className="money-verdict">
+        {b && b.totals.budget > 0 && (
+          <p className="money-verdict">
+            {d.totals.spending <= b.totals.budget
+              ? `${usd(b.totals.budget - d.totals.spending, false)} left of this month’s ${usd(b.totals.budget, false)} budget.`
+              : `${usd(d.totals.spending - b.totals.budget, false)} over this month’s ${usd(b.totals.budget, false)} budget.`}
+          </p>
+        )}
+        <p className={b ? 'muted' : 'money-verdict'}>
           {usualNow === null
             ? 'Comparisons start once a full month of every account is in.'
-            : verdict(spentNow - usualNow, usualNow, d.current ? `by ${dayWord}` : 'for a whole month')}
+            : b
+              ? pace(spentNow - usualNow, usualNow, dayWord)
+              : verdict(spentNow - usualNow, usualNow, d.current ? `by ${dayWord}` : 'for a whole month')}
         </p>
       </section>
-      {d.pace.actual.length > 0 && <PaceChart data={d} />}
+      {d.pace.actual.length > 0 && <PaceChart data={d} reference={reference} />}
 
       <div className="money-totals">
-        <Tile label="In" value={d.totals.income} usual={d.typical?.income} />
-        <Tile label="Saved" value={d.totals.saving} usual={d.typical?.saving} signed />
-        <Tile label={d.current ? 'Left so far' : 'Left over'} value={leftOver} usual={typicalLeftOver ?? undefined} signed />
+        <Tile label="In" value={d.totals.income} usual={b ? b.income.expected : d.typical?.income} word={b ? 'expected' : 'usual'} />
+        <Tile label="Saved" value={d.totals.saving} usual={b ? b.saving : d.typical?.saving} word={b ? 'goal' : 'usual'} signed />
+        <Tile label={d.current ? 'Left so far' : 'Left over'} value={leftOver} usual={b ? undefined : (typicalLeftOver ?? undefined)} signed />
       </div>
+      {b && b.totals.unplanned < 0 && (
+        <p className="money-plan-warning">
+          <span aria-hidden>▲ </span>
+          This month’s plan spends {usd(-b.totals.unplanned, false)} more than comes in.{' '}
+          <Link to="/money/budget">Look at the budget</Link>
+        </p>
+      )}
 
       <h2 className="money-section-title">Where it went</h2>
-      {d.typical && (
+      {(b || d.typical) && (
         <p className="muted small">
-          <i className="key key-tick" /> marks a usual month ({span}). Tap a category to see its charges.
+          <i className="key key-tick" /> marks {b ? 'this month’s budget' : `a usual month (${span})`}. Tap a category to see its
+          charges.
         </p>
       )}
       {groups.map(({ title, rows }) =>
@@ -214,11 +256,21 @@ function Overview({
                     </span>
                     <span className="money-cat-track">
                       <span className="money-cat-fill" style={{ width: `${(Math.max(0, c.spent) / scale) * 100}%` }} />
-                      {c.typical !== null && c.typical > 0 && (
-                        <span className="money-cat-usual" style={{ left: `${(c.typical / scale) * 100}%` }} />
+                      {(markOf(c) ?? 0) > 0 && (
+                        <span className="money-cat-usual" style={{ left: `${((markOf(c) ?? 0) / scale) * 100}%` }} />
                       )}
                     </span>
-                    {c.typical !== null && <span className="muted small">usual {usd(c.typical, false)}</span>}
+                    {b ? (
+                      <span className="muted small">
+                        {(budgetOf.get(c.id) ?? 0) > 0
+                          ? c.spent <= (budgetOf.get(c.id) ?? 0)
+                            ? `${usd((budgetOf.get(c.id) ?? 0) - c.spent, false)} left of ${usd(budgetOf.get(c.id) ?? 0, false)}`
+                            : `${usd(c.spent - (budgetOf.get(c.id) ?? 0), false)} over its ${usd(budgetOf.get(c.id) ?? 0, false)} budget`
+                          : 'no budget'}
+                      </span>
+                    ) : (
+                      c.typical !== null && <span className="muted small">usual {usd(c.typical, false)}</span>
+                    )}
                   </button>
                 </li>
               ))}
@@ -244,18 +296,39 @@ function Overview({
   );
 }
 
+function pace(diff: number, planned: number, day: string) {
+  if (Math.abs(diff) < Math.max(50, planned * 0.05)) return `On pace for ${day}.`;
+  return `${usd(diff, false)} ${diff > 0 ? 'more' : 'less'} than the budget plans for by ${day}.`;
+}
+
 function verdict(diff: number, usual: number, when: string) {
   if (Math.abs(diff) < Math.max(50, usual * 0.05)) return `About usual ${when}.`;
   return `${usd(diff, false)} ${diff > 0 ? 'more' : 'less'} than usual ${when}.`;
 }
 
-function Tile({ label, value, usual, signed }: { label: string; value: number; usual?: number; signed?: boolean }) {
+function Tile({
+  label,
+  value,
+  usual,
+  word = 'usual',
+  signed,
+}: {
+  label: string;
+  value: number;
+  usual?: number;
+  word?: string;
+  signed?: boolean;
+}) {
   const show = (n: number) => `${signed && n < 0 ? '−' : ''}${usd(n, false)}`;
   return (
     <div>
       <span className="muted small">{label}</span>
       <strong>{show(value)}</strong>
-      {usual !== undefined && <span className="muted small">usual {show(usual)}</span>}
+      {usual !== undefined && (
+        <span className="muted small">
+          {word} {show(usual)}
+        </span>
+      )}
     </div>
   );
 }
@@ -368,7 +441,7 @@ function Transactions({
 function useRefresh() {
   const queryClient = useQueryClient();
   return () => {
-    for (const key of ['money-txns', 'money-review', 'money-categories', 'money-overview']) {
+    for (const key of ['money-txns', 'money-review', 'money-categories', 'money-overview', 'money-budget', 'money-today']) {
       queryClient.invalidateQueries({ queryKey: [key] });
     }
   };

@@ -1,4 +1,5 @@
 import type {
+  BudgetPlan,
   CaptureResult,
   ConnectorStatus,
   FindTimeInput,
@@ -18,6 +19,7 @@ import type {
   MoneyMonth,
   MoneyOverview,
   MoneyStatus,
+  MoneyToday,
   ReviewGroup,
   Note,
   NoteInput,
@@ -219,6 +221,19 @@ export const api = {
     return request<MoneyMonth>(`/api/money/transactions?${params}`);
   },
   moneyOverview: (month?: string) => request<MoneyOverview>(`/api/money/overview${month ? `?month=${month}` : ''}`),
+  moneyBudget: () => request<BudgetPlan>('/api/money/budget'),
+  setBudgetSettings: (input: { income?: number | null; saving?: number }) =>
+    request<BudgetPlan>('/api/money/budget/settings', json('PUT', input)),
+  /** amount null: back to the category's bills or usual month. */
+  setCategoryBudget: (id: string, amount: number | null) =>
+    request<BudgetPlan>(`/api/money/budget/categories/${id}`, json('PUT', { amount })),
+  fitBudget: () => request<BudgetPlan>('/api/money/budget/fit', { method: 'POST' }),
+  resetEverydayBudgets: () => request<BudgetPlan>('/api/money/budget/categories', { method: 'DELETE' }),
+  setBill: (name: string, state: 'keep' | 'ignore' | null) => request<BudgetPlan>('/api/money/bills', json('PUT', { name, state })),
+  addBill: (input: { name: string; categoryId: string; amount: number; day: number }) =>
+    request<BudgetPlan>('/api/money/bills', json('POST', input)),
+  removeBill: (name: string) => request<BudgetPlan>(`/api/money/bills/${encodeURIComponent(name)}`, { method: 'DELETE' }),
+  moneyToday: () => request<MoneyToday | null>('/api/money/today'),
   moneyReview: () => request<ReviewGroup[]>('/api/money/review'),
   /** How every store with this merchant's name is sorted, past and future. */
   setMerchant: (keys: string[], kind: MoneyKind, categoryId: string | null) =>

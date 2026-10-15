@@ -49,11 +49,21 @@ function useWidth<T extends HTMLElement>() {
 const PACE_H = 170;
 const PAD = { top: 10, right: 58, bottom: 22, left: 40 };
 
-/** Spending added up day by day, this month against a typical month. Touch or hover to read a day. */
-export function PaceChart({ data }: { data: MoneyOverview }) {
+/** What spending is measured against: a usual month, or this month's budget spread the way a usual month goes. */
+export interface PaceReference {
+  values: number[];
+  /** Short, at the line's end: "Usual", "Budget". */
+  label: string;
+  /** In the legend and the readout. */
+  legend: string;
+}
+
+/** Spending added up day by day, this month against a reference line. Touch or hover to read a day. */
+export function PaceChart({ data, reference }: { data: MoneyOverview; reference: PaceReference | null }) {
   const [ref, width] = useWidth<HTMLDivElement>();
   const [hover, setHover] = useState<number | null>(null);
-  const { actual, typical } = data.pace;
+  const { actual } = data.pace;
+  const typical = reference?.values ?? null;
   const days = data.daysInMonth;
   const last = actual.length - 1;
   const i = hover ?? last;
@@ -89,7 +99,7 @@ export function PaceChart({ data }: { data: MoneyOverview }) {
         {typical && (
           <>
             {' '}
-            · usual by then {usd(typical[i])}
+            · {reference!.label.toLowerCase()} by then {usd(typical[i])}
           </>
         )}
       </p>
@@ -116,7 +126,7 @@ export function PaceChart({ data }: { data: MoneyOverview }) {
             {actual.length > 0 && <circle className="chart-dot chart-dot-out" cx={x(i)} cy={y(actual[i])} r={4} />}
             {typical && endTypical !== null && (
               <text className="chart-end" x={x(days - 1) + 8} y={(labelsClose ? endTypical - 7 : endTypical) + 4}>
-                Usual
+                {reference!.label}
               </text>
             )}
             <text className="chart-end" x={(data.current ? x(last) : x(days - 1)) + 8} y={(labelsClose ? (endActual += 7) : endActual) + 4}>
@@ -141,7 +151,7 @@ export function PaceChart({ data }: { data: MoneyOverview }) {
         </span>
         {typical && (
           <span>
-            <i className="key key-line key-typical" /> Usual ({data.typical!.months.map((m) => monthLabel(m, 'short')).join(', ')})
+            <i className="key key-line key-typical" /> {reference!.legend}
           </span>
         )}
       </div>

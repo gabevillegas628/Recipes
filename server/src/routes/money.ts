@@ -6,6 +6,7 @@ import { Prisma } from '../generated/prisma/client.js';
 import { classify, setMerchant, setTransaction } from '../money/classify.js';
 import { connect, disconnect, homeTimeZone } from '../money/connection.js';
 import { importHistory } from '../money/importHistory.js';
+import { budgetPlan } from '../money/budget.js';
 import { overview } from '../money/overview.js';
 import { SimpleFinAuthError } from '../money/simplefin.js';
 import { kickMoneySync, moneySyncRunning } from '../money/sync.js';
@@ -27,6 +28,7 @@ function monthRange(month: string, timeZone: string) {
 }
 
 const money = (d: Prisma.Decimal | null | undefined) => d?.toNumber() ?? 0;
+const round2 = (n: number) => Math.round(n * 100) / 100;
 
 async function status() {
   const [connection, accounts, counts] = await Promise.all([
@@ -149,7 +151,117 @@ export async function moneyRoutes(app: FastifyInstance) {
       })
       .safeParse(request.query);
     if (!parsed.success) return reply.code(400).send({ error: 'Bad month' });
-    return overview(parsed.data.month);
+    const ov = await overview(parsed.data.month);
+    // Budgets are for the month under way; past months compare with their usual.
+    return { ...ov, budget: ov.current ? await budgetPlan(ov) : null };
+  });
+
+  // ---------- Budget ----------
+
+  const plan = async () => budgetPlan(await overview());
+
+  app.get('/api/money/budget', async () => plan());
+
+  app.put('/api/money/budget/settings', async (request, reply) => {
+    const parsed = z
+      .object({ income: z.number().nonnegative().max(10_000_000).nullable(), saving: z.number().nonnegative().max(10_000_000) })
+      .partial()
+      .safeParse(request.body);
+    if (!parsed.success) return reply.code(400).send({ error: 'Amounts must be zero or more' });
+    await prisma.financeBudgetSettings.upsert({ where: { id: 'default' }, create: { id: 'default', ...parsed.data }, update: parsed.data });
+    return plan();
+  });
+
+  /** A category's budget typed in, or (null) back to its bills or usual month. */
+  app.put('/api/money/budget/categories/:id', async (request, reply) => {
+    const { id } = z.object({ id: z.string() }).parse(request.params);
+    const parsed = z.object({ amount: z.number().nonnegative().max(10_000_000).nullable() }).safeParse(request.body);
+    if (!parsed.success) return reply.code(400).send({ error: 'Amounts must be zero or more' });
+    if (!(await prisma.financeCategory.findUnique({ where: { id }, select: { id: true } }))) {
+      return reply.code(404).send({ error: 'Category not found' });
+    }
+    const { amount } = parsed.data;
+    if (amount === null) await prisma.financeBudget.deleteMany({ where: { categoryId: id } });
+    else await prisma.financeBudget.upsert({ where: { categoryId: id }, create: { categoryId: id, amount }, update: { amount } });
+    return plan();
+  });
+
+  /** Scales the everyday budgets so they fit in what income leaves after bills and saving. */
+  app.post('/api/money/budget/fit', async (_request, reply) => {
+    const current = await plan();
+    const everyday = current.categories.filter((c) => !c.fixed && c.budget > 0);
+    const room = current.totals.forEveryday;
+    if (room <= 0) return reply.code(409).send({ error: 'Bills and saving already take all the income, so there’s nothing to fit everyday spending into.' });
+    if (!everyday.length) return current;
+    const ratio = room / current.totals.everyday;
+    await prisma.$transaction(
+      everyday.map((c) => {
+        const amount = Math.max(0, Math.floor((c.budget * ratio) / 10) * 10);
+        return prisma.financeBudget.upsert({ where: { categoryId: c.id }, create: { categoryId: c.id, amount }, update: { amount } });
+      }),
+    );
+    return plan();
+  });
+
+  /** Everyday budgets back to the usual month. */
+  app.delete('/api/money/budget/categories', async () => {
+    const everyday = await prisma.financeCategory.findMany({ where: { fixed: false }, select: { id: true } });
+    await prisma.financeBudget.deleteMany({ where: { categoryId: { in: everyday.map((c) => c.id) } } });
+    return plan();
+  });
+
+  /** A found bill confirmed as monthly, set aside as not monthly, or (null) back to how it was found. */
+  app.put('/api/money/bills', async (request, reply) => {
+    const parsed = z.object({ name: z.string().min(1).max(200), state: z.enum(['keep', 'ignore']).nullable() }).safeParse(request.body);
+    if (!parsed.success) return reply.code(400).send({ error: 'Bad bill' });
+    const { name, state } = parsed.data;
+    if (state === null) await prisma.financeBill.deleteMany({ where: { name } });
+    else await prisma.financeBill.upsert({ where: { name }, create: { name, state }, update: { state, categoryId: null, amount: null, day: null } });
+    return plan();
+  });
+
+  /** A bill that hasn't been charged yet (a new insurance policy). */
+  app.post('/api/money/bills', async (request, reply) => {
+    const parsed = z
+      .object({
+        name: z.string().trim().min(1).max(200),
+        categoryId: z.string(),
+        amount: z.number().positive().max(10_000_000),
+        day: z.number().int().min(1).max(31).default(1),
+      })
+      .safeParse(request.body);
+    if (!parsed.success) return reply.code(400).send({ error: 'A bill needs a name, a category and an amount' });
+    const category = await prisma.financeCategory.findUnique({ where: { id: parsed.data.categoryId } });
+    if (!category?.fixed) return reply.code(400).send({ error: 'Bills go in a fixed category' });
+    const data = { ...parsed.data, state: 'added' };
+    await prisma.financeBill.upsert({ where: { name: data.name }, create: data, update: data });
+    return plan();
+  });
+
+  app.delete('/api/money/bills/:name', async (request) => {
+    const { name } = z.object({ name: z.string() }).parse(request.params);
+    await prisma.financeBill.deleteMany({ where: { name, state: 'added' } });
+    return plan();
+  });
+
+  /** For the Today card: what's left of this month's budget, and the everyday category closest to (or furthest past) its own. */
+  app.get('/api/money/today', async () => {
+    const ov = await overview();
+    if (!ov.typical && !ov.totals.spending) return null;
+    const b = await budgetPlan(ov);
+    // The biggest overspend (a trip with no budget counts); with none, the category nearest its budget.
+    const everyday = b.categories
+      .filter((c) => !c.fixed && (c.budget > 0 || c.spent > 0))
+      .map((c) => ({ name: c.name, left: round2(c.budget - c.spent), share: c.budget > 0 ? c.spent / c.budget : Infinity }))
+      .sort((x, y) => (x.left < 0 || y.left < 0 ? x.left - y.left : y.share - x.share));
+    return {
+      spent: ov.totals.spending,
+      budget: b.totals.budget,
+      left: round2(b.totals.budget - ov.totals.spending),
+      day: ov.day,
+      daysInMonth: ov.daysInMonth,
+      tightest: everyday[0] ? { name: everyday[0].name, left: everyday[0].left } : null,
+    };
   });
 
   // ---------- Transactions ----------
