@@ -419,6 +419,64 @@ export interface MoneyStatus {
   accounts: FinanceAccount[];
 }
 
+/** Spending (refunds included, as plus amounts), income, a transfer between our own accounts, or saving. */
+export type MoneyKind = 'SPENDING' | 'INCOME' | 'TRANSFER' | 'SAVING';
+
+export interface FinanceCategory {
+  id: string;
+  name: string;
+  /** A fixed cost (insurance) rather than a flexible one (groceries). */
+  fixed: boolean;
+  position: number;
+  transactions: number;
+}
+
+export interface MoneyTransaction {
+  id: string;
+  /** "2026-10-14", the day of the purchase at home. */
+  date: string;
+  /** The merchant's name, or the bank's description if it hasn't been read yet. */
+  merchant: string;
+  merchantKey: string | null;
+  description: string;
+  account: string;
+  institution: string;
+  /** Negative is money out of the account. */
+  amount: number;
+  kind: MoneyKind | null;
+  categoryId: string | null;
+  category: string | null;
+  pending: boolean;
+  needsLook: boolean;
+  byHand: boolean;
+  /** Matched with the same money on another of our accounts. */
+  paired: boolean;
+}
+
+export interface MoneyMonth {
+  month: string;
+  totals: { income: number; spending: number; saving: number };
+  /** Across all months. */
+  needsLook: number;
+  transactions: MoneyTransaction[];
+}
+
+/** One merchant's unsettled transactions in the needs-a-look list. */
+export interface ReviewGroup {
+  name: string;
+  keys: string[];
+  count: number;
+  total: number;
+  firstDate: string;
+  lastDate: string;
+  example: string;
+  /** The AI's best guess. */
+  kind: MoneyKind | null;
+  categoryId: string | null;
+  accounts: string[];
+  ids: string[];
+}
+
 /** What importing a CSV did, or would do on a dry run. */
 export interface ImportSummary {
   rows: number;

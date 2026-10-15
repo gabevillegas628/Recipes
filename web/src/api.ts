@@ -9,11 +9,15 @@ import type {
   GoogleStatus,
   GroceryGroup,
   FinanceAccountKind,
+  FinanceCategory,
   ImportSummary,
   Meal,
   MealInput,
   MealSummary,
+  MoneyKind,
+  MoneyMonth,
   MoneyStatus,
+  ReviewGroup,
   Note,
   NoteInput,
   PlanDraft,
@@ -208,6 +212,27 @@ export const api = {
     rows: { date: string; amount: number; description: string }[],
     options: { flip: boolean; dryRun: boolean },
   ) => request<ImportSummary>(`/api/money/accounts/${id}/import`, json('POST', { rows, ...options })),
+
+  moneyTransactions: (filter: { month?: string; q?: string; kind?: MoneyKind; categoryId?: string; accountId?: string }) => {
+    const params = new URLSearchParams(Object.entries(filter).filter((e): e is [string, string] => Boolean(e[1])));
+    return request<MoneyMonth>(`/api/money/transactions?${params}`);
+  },
+  moneyReview: () => request<ReviewGroup[]>('/api/money/review'),
+  /** How every store with this merchant's name is sorted, past and future. */
+  setMerchant: (keys: string[], kind: MoneyKind, categoryId: string | null) =>
+    request<{ ok: true }>('/api/money/merchants', json('PUT', { keys, kind, categoryId })),
+  /** One transaction by hand; kind null hands it back to its merchant. */
+  setTransaction: (id: string, kind: MoneyKind | null, categoryId: string | null) =>
+    request<{ ok: true }>(`/api/money/transactions/${id}`, json('PUT', { kind, categoryId })),
+  moneyCategories: () => request<FinanceCategory[]>('/api/money/categories'),
+  addCategory: (name: string, fixed: boolean) =>
+    request<FinanceCategory[]>('/api/money/categories', json('POST', { name, fixed })),
+  updateCategory: (id: string, input: { name?: string; fixed?: boolean }) =>
+    request<FinanceCategory[]>(`/api/money/categories/${id}`, json('PATCH', input)),
+  deleteCategory: (id: string, moveTo?: string) =>
+    request<FinanceCategory[]>(`/api/money/categories/${id}${moveTo ? `?moveTo=${encodeURIComponent(moveTo)}` : ''}`, {
+      method: 'DELETE',
+    }),
 
   changePassword: (currentPassword: string, newPassword: string) =>
     request<{ ok: true }>('/api/auth/password', json('POST', { currentPassword, newPassword })),

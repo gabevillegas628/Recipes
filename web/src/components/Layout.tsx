@@ -1,39 +1,63 @@
+import { useEffect, useState } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
 
 /**
- * Five tabs: Today (home), Kitchen (recipes, meals, this week), Add in the middle,
- * Groceries and Notes. Settings opens from Today.
+ * Five tabs: Today (home), Kitchen, Add in the middle, Money and Notes.
+ * Kitchen opens a small menu: Recipes (recipes, meals, this week) or Groceries.
+ * Settings opens from Today.
  */
 export function Layout() {
   const { pathname } = useLocation();
+  const [kitchenOpen, setKitchenOpen] = useState(false);
+  // Close the menu once it has taken you somewhere (or you went elsewhere).
+  useEffect(() => setKitchenOpen(false), [pathname]);
   const tab = (active: boolean, extra = '') => `tab ${extra} ${active ? 'active' : ''}`;
+  // Recipes, meals, this week, each recipe and groceries all live under Kitchen.
+  const inKitchen = /^\/(recipes|meals|m\/|r\/|week|new|groceries)/.test(pathname);
+  const inRecipes = inKitchen && !pathname.startsWith('/groceries');
+
   return (
     <div className="app">
       <main className="main">
         <Outlet />
       </main>
+      {kitchenOpen && <div className="kitchen-scrim" onClick={() => setKitchenOpen(false)} />}
       <nav className="tabbar">
         <NavLink to="/" end className={({ isActive }) => tab(isActive || pathname.startsWith('/settings'))}>
           <SunIcon />
           <span>Today</span>
         </NavLink>
-        <NavLink
-          to="/recipes"
-          // Recipes, meals, this week and each recipe all live under Kitchen.
-          className={({ isActive }) => tab(isActive || /^\/(meals|m\/|r\/|week|new)/.test(pathname))}
+        <button
+          type="button"
+          className={tab(inKitchen || kitchenOpen)}
+          aria-haspopup="menu"
+          aria-expanded={kitchenOpen}
+          onClick={() => setKitchenOpen((o) => !o)}
         >
           <PotIcon />
           <span>Kitchen</span>
-        </NavLink>
+        </button>
+        {kitchenOpen && (
+          <div className="kitchen-menu" role="menu">
+            <NavLink to="/recipes" role="menuitem" className={inRecipes ? 'on' : ''}>
+              <PotIcon />
+              Recipes
+            </NavLink>
+            <NavLink to="/groceries" role="menuitem">
+              <CartIcon />
+              Groceries
+            </NavLink>
+          </div>
+        )}
         <NavLink to="/add" className={({ isActive }) => tab(isActive || pathname.startsWith('/import'), 'tab-add')}>
           <span className="tab-add-button">
             <PlusIcon />
           </span>
           <span>Add</span>
         </NavLink>
-        <NavLink to="/groceries" className={({ isActive }) => tab(isActive)}>
-          <CartIcon />
-          <span>Groceries</span>
+        <NavLink to="/money" className={({ isActive }) => tab(isActive)}>
+          <WalletIcon />
+          <span>Money</span>
         </NavLink>
         <NavLink to="/notes" className={({ isActive }) => tab(isActive || pathname.startsWith('/n/'))}>
           <NoteIcon />
@@ -98,6 +122,15 @@ function NoteIcon() {
     <svg {...iconProps}>
       <path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z" />
       <path d="M14 3v6h6M8 13h8M8 17h5" />
+    </svg>
+  );
+}
+
+function WalletIcon() {
+  return (
+    <svg {...iconProps}>
+      <path d="M19 7V5a1 1 0 0 0-1-1H5a2 2 0 0 0 0 4h14a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H5a2 2 0 0 1-2-2V6" />
+      <path d="M16 13.5h.01" />
     </svg>
   );
 }

@@ -4,7 +4,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { api } from '../api';
 import { GoogleCalendarSection } from '../components/GoogleCalendarSettings';
 import { HouseholdSection } from '../components/HouseholdSettings';
-import { MoneySection } from '../components/MoneySettings';
+import { CategoriesSection, MoneySection } from '../components/MoneySettings';
 import { ChangePassword, PeopleSection } from '../components/UserSettings';
 import { WeatherSection } from '../components/WeatherSettings';
 import { comingUpOn } from '../notes';
@@ -16,7 +16,7 @@ import type { ConnectorStatus, User } from '../types';
 const SECTIONS = [
   { id: 'calendar', title: 'Calendar & reminders', detail: 'Google Calendar, and where reminders go' },
   { id: 'household', title: 'Household', detail: 'The family, school hours, travel time' },
-  { id: 'money', title: 'Money', detail: 'Bank, card and investment accounts' },
+  { id: 'money', title: 'Money', detail: 'Bank, card and investment accounts, categories' },
   { id: 'weather', title: 'Weather', detail: 'Where Today’s forecast is for' },
   { id: 'connector', title: 'Claude connector', detail: 'Save recipes and notes from Claude chats' },
   { id: 'cleanup', title: 'Clean up', detail: 'Remove past appointments from Mise' },
@@ -56,7 +56,12 @@ export function SettingsPage({ user }: { user: User }) {
       <h1 className="form-title">{section.title}</h1>
       {section.id === 'calendar' && <GoogleCalendarSection />}
       {section.id === 'household' && <HouseholdSection />}
-      {section.id === 'money' && <MoneySection />}
+      {section.id === 'money' && (
+        <>
+          <MoneySection />
+          <CategoriesSection />
+        </>
+      )}
       {section.id === 'weather' && <WeatherSection />}
       {section.id === 'connector' && <ConnectorSection />}
       {section.id === 'cleanup' && <CleanupSection />}

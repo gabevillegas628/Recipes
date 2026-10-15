@@ -1,6 +1,7 @@
 import { prisma } from '../db.js';
 import { Prisma, type FinanceAccountKind } from '../generated/prisma/client.js';
 import { wallTime } from '../zone.js';
+import { classify } from './classify.js';
 import { connectionSecret, homeTimeZone } from './connection.js';
 import { fetchAccounts, MAX_DAYS, SimpleFinAuthError, type SfAccount, type SfResponse } from './simplefin.js';
 
@@ -71,6 +72,7 @@ async function sync(ifOlderThan?: number) {
       where: { id: 'default' },
       data: { lastSyncAt: now, backfilledAt, warnings: recent.problems, error: null },
     });
+    await classify();
   } catch (err) {
     if (!(err instanceof SimpleFinAuthError)) throw err;
     await prisma.financeConnection.update({ where: { id: 'default' }, data: { error: err.message } });

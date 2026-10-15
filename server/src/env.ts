@@ -24,6 +24,8 @@ export const env = {
   groceryModel: process.env.GROCERY_MODEL || 'claude-haiku-4-5',
   /** Adding up mixed units ("2 cups + 1 carton of stock") needs more care than sorting, and runs far less often. */
   groceryTotalsModel: process.env.GROCERY_TOTALS_MODEL || 'claude-sonnet-5',
+  /** Sorting bank and card merchants into categories: frequent, simple, done once per merchant. */
+  financeModel: process.env.FINANCE_MODEL || 'claude-haiku-4-5',
   /** Optional. An OAuth client (Google Cloud → Clients, type Web) for writing to Google Calendar. */
   googleClientId: process.env.GOOGLE_CLIENT_ID || null,
   googleClientSecret: process.env.GOOGLE_CLIENT_SECRET || null,

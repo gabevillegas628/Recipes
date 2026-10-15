@@ -11,6 +11,8 @@
   --danger: #b3261e;
   /* Busy time on the find-a-time day view. */
   --busy: #d8cdbf;
+  /* Money coming in on the Money tab. */
+  --money-in: #2f7d32;
   --radius: 12px;
   --tabbar-h: 64px;
   --safe-bottom: env(safe-area-inset-bottom, 0px);
@@ -29,6 +31,7 @@
     --on-accent: #ffffff;
     --danger: #f2877f;
     --busy: #4d463f;
+    --money-in: #7cc47f;
     color-scheme: dark;
   }
 }
@@ -3333,3 +3336,262 @@ html.has-timers .cook {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* ---------- Kitchen menu (tab bar) ---------- */
+
+.kitchen-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 9;
+}
+
+.kitchen-menu {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 8px;
+  display: flex;
+  flex-direction: column;
+  min-width: 180px;
+  padding: 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.18);
+}
+
+.kitchen-menu a {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 46px;
+  padding: 0 12px;
+  border-radius: 8px;
+  color: var(--text);
+  font-size: 16px;
+  text-decoration: none;
+}
+
+.kitchen-menu a.active,
+.kitchen-menu a.on {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+/* ---------- Money tab ---------- */
+
+.money-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.money-month {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.money-totals {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.money-totals > div {
+  display: flex;
+  flex-direction: column;
+  padding: 10px 12px;
+  border-radius: var(--radius);
+  background: var(--surface);
+  border: 1px solid var(--border);
+}
+
+.money-totals strong {
+  font-size: 18px;
+  font-variant-numeric: tabular-nums;
+}
+
+.money-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.money-filters input {
+  flex: 1 1 100%;
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 16px;
+}
+
+.money-filters select {
+  flex: 1 1 0;
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 15px;
+}
+
+.money-day-title {
+  margin: 16px 0 4px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.money-list,
+.money-review,
+.money-categories {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.money-list > li {
+  border-bottom: 1px solid var(--border);
+}
+
+.money-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  padding: 10px 0;
+  border: 0;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.money-row-main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.money-row-merchant {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.money-amount {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+  font-variant-numeric: tabular-nums;
+}
+
+.money-in {
+  color: var(--money-in);
+}
+
+.money-look {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+.money-editor {
+  padding: 4px 0 14px;
+}
+
+.money-editor .muted.small {
+  margin: 0 0 10px;
+  overflow-wrap: anywhere;
+}
+
+.sort-picker .chips {
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+
+.sort-picker > p {
+  margin: 0 0 10px;
+}
+
+.money-review-item {
+  padding: 14px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.money-review-item > p {
+  margin: 4px 0 10px;
+  overflow-wrap: anywhere;
+}
+
+/* ---------- Settings → Money → Categories ---------- */
+
+.money-category {
+  padding: 6px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.money-category-row,
+.money-category-add {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.money-category-row input:not([type]),
+.money-category-add input:not([type]) {
+  flex: 1;
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: none;
+  color: var(--text);
+  font-size: 16px;
+}
+
+.money-category-row input:not([type]):focus,
+.money-category-add input:not([type]) {
+  border-color: var(--border);
+  background: var(--surface);
+}
+
+.money-category-add {
+  margin-top: 12px;
+}
+
+.money-category .checkbox,
+.money-category-add .checkbox {
+  margin: 0;
+  font-size: 14px;
+}
+
+.money-category-delete {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 6px 0 4px;
+}
+
+.money-category-delete select {
+  flex: 1 1 200px;
+  min-width: 0;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+}
+

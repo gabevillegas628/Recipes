@@ -9,6 +9,7 @@ import { GroceriesPage } from './pages/GroceriesPage';
 import { MealEditPage } from './pages/MealEditPage';
 import { MealPage } from './pages/MealPage';
 import { MealsPage } from './pages/MealsPage';
+import { MoneyPage } from './pages/MoneyPage';
 import { NoteEditPage } from './pages/NoteEditPage';
 import { NotePage } from './pages/NotePage';
 import { ReminderTimePage } from './pages/ReminderTimePage';
@@ -49,6 +50,7 @@ export function App() {
         <Route path="week" element={<WeekPage />} />
         <Route path="week/plan" element={<PlanMealsPage />} />
         <Route path="groceries" element={<GroceriesPage />} />
+        <Route path="money" element={<MoneyPage />} />
         <Route path="add" element={<CapturePage />} />
         <Route path="notes" element={<NotesPage />} />
         <Route path="n/:id" element={<NotePage />} />

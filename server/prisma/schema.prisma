@@ -406,11 +406,63 @@ model FinanceTransaction {
   pending      Boolean        @default(false)
   /// "simplefin" or "csv".
   source       String         @default("simplefin")
+  /// merchantKey() of the description; how it finds its FinanceMerchant.
+  merchantKey  String?
+  /// What the money was (see src/money/classify.ts). Null until sorted.
+  kind         FinanceKind?
+  /// For spending (and refunds, which are spending with a plus sign).
+  category     FinanceCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  categoryId   String?
+  /// The same money seen from our other account: the card's side of a card payment.
+  pairId       String?        @unique
+  /// Kind and category picked for this one transaction; sorting leaves it alone.
+  byHand       Boolean        @default(false)
+  /// Sorting couldn't settle it (Zelle, cash, a merchant the AI wasn't sure of).
+  needsLook    Boolean        @default(false)
   createdAt    DateTime       @default(now())
   updatedAt    DateTime       @updatedAt
 
   @@unique([accountId, externalId])
   @@index([transactedAt])
+  @@index([merchantKey])
+}
+
+enum FinanceKind {
+  /// Purchases and bills. A plus amount is a refund or someone paying us back.
+  SPENDING
+  INCOME
+  /// Between our own accounts (card payments); not counted.
+  TRANSFER
+  /// Into savings or investments. A plus amount is taking some back out.
+  SAVING
+}
+
+/// What money is spent on. Starts with a default list; edited in Settings → Money.
+model FinanceCategory {
+  id           String               @id @default(cuid())
+  name         String               @unique
+  /// Fixed costs (insurance, car payments) vs. flexible ones (groceries, dining).
+  fixed        Boolean              @default(false)
+  position     Int                  @default(0)
+  merchants    FinanceMerchant[]
+  transactions FinanceTransaction[]
+}
+
+/// How a merchant's transactions are sorted: read by AI once, or set by hand. Like EventTag.
+model FinanceMerchant {
+  /// merchantKey() of a transaction description.
+  key        String           @id
+  /// The merchant as people say it ("Kroger"). Every store of a chain shares it, and a correction applies to all of them.
+  name       String
+  kind       FinanceKind?
+  category   FinanceCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  categoryId String?
+  /// The AI couldn't tell (Zelle to a person, a cash withdrawal).
+  unsure     Boolean          @default(false)
+  byHand     Boolean          @default(false)
+  updatedAt  DateTime         @updatedAt
+
+  @@index([name])
 }
 
 /// An account's balance at the end of a day, for net worth over time.

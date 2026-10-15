@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState, type FormEvent } from 'react';
 import { api } from '../api';
 import { readTransactions, type CsvResult } from '../csv';
-import type { FinanceAccount, FinanceAccountKind, ImportSummary, MoneyStatus } from '../types';
+import type { FinanceAccount, FinanceAccountKind, FinanceCategory, ImportSummary, MoneyStatus } from '../types';
 
 const KINDS: { value: FinanceAccountKind; label: string }[] = [
   { value: 'CHECKING', label: 'Checking' },
@@ -211,7 +211,7 @@ function AccountRow({ account: a, onStatus }: { account: FinanceAccount; onStatu
         </select>
         <span className="muted small">
           {a.transactions
-            ? `${a.transactions.toLocaleString()} transactions since ${shortDate(a.firstDate!)}`
+            ? `${a.transactions.toLocaleString()} transaction${a.transactions === 1 ? '' : 's'} since ${shortDate(a.firstDate!)}`
             : 'No transactions yet'}
           {a.imported > 0 && ` (${a.imported.toLocaleString()} imported)`}
           {a.holdings > 0 && ` · ${a.holdings} holdings`}
@@ -345,5 +345,126 @@ function ImportHistory({ account, onDone }: { account: FinanceAccount; onDone: (
         </button>
       </div>
     </div>
+  );
+}
+
+/** Settings → Money → Categories: rename, fixed or flexible, add, delete (moving what's in it). */
+export function CategoriesSection() {
+  const queryClient = useQueryClient();
+  const list = useQuery({ queryKey: ['money-categories'], queryFn: api.moneyCategories });
+  const onList = (next: FinanceCategory[]) => {
+    queryClient.setQueryData(['money-categories'], next);
+    queryClient.invalidateQueries({ queryKey: ['money-txns'] });
+  };
+  const [name, setName] = useState('');
+  const [fixed, setFixed] = useState(false);
+  const add = useMutation({
+    mutationFn: () => api.addCategory(name.trim(), fixed),
+    onSuccess: (next) => {
+      onList(next);
+      setName('');
+      setFixed(false);
+    },
+  });
+
+  if (!list.data) return null;
+  return (
+    <section className="settings-section">
+      <h3>Categories</h3>
+      <p className="muted small">
+        What spending is sorted into. Fixed costs are the same most months (insurance, car payments); flexible ones are
+        where the choices are.
+      </p>
+      <ul className="money-categories">
+        {list.data.map((c) => (
+          <CategoryRow key={c.id} category={c} all={list.data} onList={onList} />
+        ))}
+      </ul>
+      <form
+        className="money-category-add"
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (name.trim()) add.mutate();
+        }}
+      >
+        <input value={name} onChange={(e) => setName(e.target.value)} placeholder="New category" maxLength={40} />
+        <label className="checkbox">
+          <input type="checkbox" checked={fixed} onChange={(e) => setFixed(e.target.checked)} />
+          Fixed
+        </label>
+        <button className="btn" disabled={!name.trim() || add.isPending}>
+          Add
+        </button>
+      </form>
+      {add.error && <p className="error">{add.error.message}</p>}
+    </section>
+  );
+}
+
+function CategoryRow({
+  category: c,
+  all,
+  onList,
+}: {
+  category: FinanceCategory;
+  all: FinanceCategory[];
+  onList: (next: FinanceCategory[]) => void;
+}) {
+  const [name, setName] = useState(c.name);
+  const [deleting, setDeleting] = useState(false);
+  const [moveTo, setMoveTo] = useState('');
+  const update = useMutation({
+    mutationFn: (input: { name?: string; fixed?: boolean }) => api.updateCategory(c.id, input),
+    onSuccess: onList,
+    onError: () => setName(c.name),
+  });
+  const remove = useMutation({ mutationFn: () => api.deleteCategory(c.id, moveTo || undefined), onSuccess: onList });
+
+  return (
+    <li className="money-category">
+      <div className="money-category-row">
+        <input
+          value={name}
+          maxLength={40}
+          onChange={(e) => setName(e.target.value)}
+          onBlur={() => name.trim() && name.trim() !== c.name && update.mutate({ name: name.trim() })}
+          aria-label="Category name"
+        />
+        <label className="checkbox">
+          <input type="checkbox" checked={c.fixed} onChange={(e) => update.mutate({ fixed: e.target.checked })} />
+          Fixed
+        </label>
+        <button type="button" className="btn btn-small" onClick={() => setDeleting((d) => !d)} aria-label={`Delete ${c.name}`}>
+          ✕
+        </button>
+      </div>
+      {deleting && (
+        <div className="money-category-delete">
+          {c.transactions > 0 && (
+            <select value={moveTo} onChange={(e) => setMoveTo(e.target.value)}>
+              <option value="" disabled>
+                Move its {c.transactions.toLocaleString()} transactions to…
+              </option>
+              {all
+                .filter((o) => o.id !== c.id)
+                .map((o) => (
+                  <option key={o.id} value={o.id}>
+                    {o.name}
+                  </option>
+                ))}
+            </select>
+          )}
+          <button
+            type="button"
+            className="btn btn-small btn-danger"
+            disabled={(c.transactions > 0 && !moveTo) || remove.isPending}
+            onClick={() => remove.mutate()}
+          >
+            Delete {c.name}
+          </button>
+        </div>
+      )}
+      {(update.error || remove.error) && <p className="error">{(update.error ?? remove.error)!.message}</p>}
+    </li>
   );
 }
