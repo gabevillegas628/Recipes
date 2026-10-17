@@ -571,7 +571,10 @@ function Everyday({ plan: b, onPlan }: { plan: BudgetPlan; onPlan: (p: BudgetPla
       <h2>
         Everyday spending <span>{usd(b.totals.everyday)} a month</span>
       </h2>
-      <p className="muted small">Starts from a usual month. Type a different amount to set your own; clear it to go back to usual.</p>
+      <p className="muted small">
+        Starts from a usual month. Type a different amount to set your own; clear it to go back to usual. Watched categories
+        follow their step-down (change them on their page).
+      </p>
       <ul className="budget-list budget-everyday">
         {rows.map((c) => (
           <EverydayRow key={`${c.id}-${c.budget}-${c.from}`} row={c} onPlan={onPlan} />
@@ -582,6 +585,26 @@ function Everyday({ plan: b, onPlan }: { plan: BudgetPlan; onPlan: (p: BudgetPla
 }
 
 function EverydayRow({ row: c, onPlan }: { row: BudgetPlan['categories'][number]; onPlan: (p: BudgetPlan) => void }) {
+  if (c.from === 'watch') {
+    return (
+      <li>
+        <span>
+          {c.name}
+          <span className="muted small">
+            watching: this month’s step · {usd(c.spent)} so far
+            {c.oneOffs > 0 ? ` + ${usd(c.oneOffs)} one-off` : ''}
+          </span>
+        </span>
+        <Link to={`/money/c/${c.id}`} className="budget-watched">
+          {usd(c.budget)} ›
+        </Link>
+      </li>
+    );
+  }
+  return <EverydayInput row={c} onPlan={onPlan} />;
+}
+
+function EverydayInput({ row: c, onPlan }: { row: BudgetPlan['categories'][number]; onPlan: (p: BudgetPlan) => void }) {
   const [text, setText] = useState(String(Math.round(c.budget)));
   const save = useMutation({ mutationFn: (amount: number | null) => api.setCategoryBudget(c.id, amount), onSuccess: onPlan });
 

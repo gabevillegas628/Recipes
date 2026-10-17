@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { api } from '../api';
 import { InOutChart, monthLabel, PaceChart, type PaceReference } from '../components/MoneyCharts';
+import { WatchingCard } from '../components/Watch';
 import type { FinanceCategory, MoneyKind, MoneyRecap, MoneyTransaction, ReviewGroup } from '../types';
 
 /**
@@ -202,6 +203,7 @@ function Overview({
 
   return (
     <div className="money-overview">
+      {d.current && <WatchingCard watches={d.watches} />}
       {(d.recap || (!d.current && !partial)) && <RecapCard month={d.month} recap={d.recap} />}
       <section className="money-hero">
         <span className="muted small">{d.current ? 'Spent so far' : 'Spent'}</span>

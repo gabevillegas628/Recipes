@@ -11,6 +11,7 @@ import { categoryDetail, setOneOff } from '../money/category.js';
 import { overview } from '../money/overview.js';
 import { writeRecap } from '../money/recap.js';
 import { findCharges } from '../money/recurring.js';
+import { pauseWatch, setWatch, suggestedMonths, watchStatuses } from '../money/watch.js';
 import { SimpleFinAuthError } from '../money/simplefin.js';
 import { kickMoneySync, moneySyncRunning } from '../money/sync.js';
 import { wallTime, zonedInstant } from '../zone.js';
@@ -161,8 +162,13 @@ export async function moneyRoutes(app: FastifyInstance) {
     // A past month shows its own recap; early in a month, last month's is still news.
     const recapMonth = ov.current ? (ov.day <= 10 ? previousMonth(ov.month) : null) : ov.month;
     const recap = recapMonth ? await prisma.financeRecap.findUnique({ where: { month: recapMonth } }) : null;
-    // Budgets are for the month under way; past months compare with their usual.
-    return { ...ov, budget: ov.current ? await budgetPlan(ov) : null, recap };
+    // Budgets and watches are for the month under way; past months compare with their usual.
+    return {
+      ...ov,
+      budget: ov.current ? await budgetPlan(ov) : null,
+      watches: ov.current ? await watchStatuses() : [],
+      recap,
+    };
   });
 
   /** Writes (or rewrites) a finished month's recap. */
@@ -205,6 +211,43 @@ export async function moneyRoutes(app: FastifyInstance) {
     const detail = await categoryDetail(id, parsed.data.month);
     if (!detail) return reply.code(404).send({ error: 'Category not found' });
     return detail;
+  });
+
+  // ---------- Watched categories ----------
+
+  app.get('/api/money/watches', async () => watchStatuses());
+
+  /** Starts or changes watching a category: a target a month, reached over `months` steps (default: a suggested pace). */
+  app.put('/api/money/watches/:categoryId', async (request, reply) => {
+    const { categoryId } = z.object({ categoryId: z.string() }).parse(request.params);
+    const parsed = z
+      .object({ target: z.number().nonnegative().max(10_000_000), months: z.number().int().min(1).max(12).optional() })
+      .safeParse(request.body);
+    if (!parsed.success) return reply.code(400).send({ error: 'A target needs an amount, and the pace 1 to 12 months' });
+    const category = await prisma.financeCategory.findUnique({ where: { id: categoryId } });
+    if (!category) return reply.code(404).send({ error: 'Category not found' });
+    if (category.fixed) return reply.code(400).send({ error: 'Fixed costs are set by their bills; watch an everyday category instead.' });
+    // Steps come down from the habit as it is now: the usual month, one-offs left out.
+    const ov = await overview();
+    const usual = ov.categories.find((c) => c.id === categoryId)?.typical ?? null;
+    const start = Math.max(parsed.data.target, Math.round(usual ?? parsed.data.target));
+    const months = parsed.data.months ?? suggestedMonths(start, parsed.data.target);
+    await setWatch(categoryId, parsed.data.target, months, start);
+    return watchStatuses();
+  });
+
+  app.post('/api/money/watches/:categoryId/pause', async (request, reply) => {
+    const { categoryId } = z.object({ categoryId: z.string() }).parse(request.params);
+    const { paused } = z.object({ paused: z.boolean() }).parse(request.body);
+    if (!(await pauseWatch(categoryId, paused))) return reply.code(404).send({ error: 'Not watched' });
+    return watchStatuses();
+  });
+
+  /** Stops watching; the category goes back to its usual (or typed-in) budget. */
+  app.delete('/api/money/watches/:categoryId', async (request) => {
+    const { categoryId } = z.object({ categoryId: z.string() }).parse(request.params);
+    await prisma.financeWatch.deleteMany({ where: { categoryId } });
+    return watchStatuses();
   });
 
   /** A charge as a one-off (true), part of the habit (false), or undecided (null). */
@@ -253,11 +296,17 @@ export async function moneyRoutes(app: FastifyInstance) {
   /** Scales the everyday budgets so they fit in what income leaves after bills and saving. */
   app.post('/api/money/budget/fit', async (_request, reply) => {
     const current = await plan();
-    const everyday = current.categories.filter((c) => !c.fixed && c.budget > 0);
-    const room = current.totals.forEveryday;
-    if (room <= 0) return reply.code(409).send({ error: 'Bills and saving already take all the income, so there’s nothing to fit everyday spending into.' });
+    // Watched categories keep their steps; the rest share what's left after them.
+    const everyday = current.categories.filter((c) => !c.fixed && c.budget > 0 && c.from !== 'watch');
+    const watched = current.categories.filter((c) => c.from === 'watch').reduce((n, c) => n + c.budget, 0);
+    const room = current.totals.forEveryday - watched;
+    if (room <= 0) {
+      return reply.code(409).send({
+        error: 'Bills, saving, one-offs and the watched categories already take all the income, so there’s nothing to fit the rest into.',
+      });
+    }
     if (!everyday.length) return current;
-    const ratio = room / current.totals.everyday;
+    const ratio = room / everyday.reduce((n, c) => n + c.budget, 0);
     await prisma.$transaction(
       everyday.map((c) => {
         const amount = Math.max(0, Math.floor((c.budget * ratio) / 10) * 10);

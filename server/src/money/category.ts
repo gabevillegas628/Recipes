@@ -3,6 +3,7 @@ import { wallTime, zonedInstant } from '../zone.js';
 import { budgetPlan } from './budget.js';
 import { homeTimeZone } from './connection.js';
 import { overview } from './overview.js';
+import { watchStatuses, type WatchStatus } from './watch.js';
 
 /**
  * One category up close, for spotting what drives it: 12 months of habit
@@ -39,6 +40,10 @@ export interface CategoryDetail {
   maybeOneOffs: Charge[];
   /** Charges marked one-off in the last 12 months. */
   oneOffs: Charge[];
+  /** Being brought down to a target, if it is. */
+  watch: WatchStatus | null;
+  /** For starting to watch: a pace that cuts about a tenth a month. */
+  canWatch: boolean;
 }
 
 interface Charge {
@@ -150,6 +155,8 @@ export async function categoryDetail(id: string, requested?: string): Promise<Ca
     // Fixed costs (rent, a car payment) are big by nature, not occasions.
     maybeOneOffs: category.fixed ? [] : rows.filter((r) => r.oneOff === null && r.amount >= threshold).map(pick),
     oneOffs: rows.filter((r) => r.oneOff).map(pick),
+    watch: (await watchStatuses()).find((w) => w.categoryId === id) ?? null,
+    canWatch: !category.fixed,
   };
 }
 

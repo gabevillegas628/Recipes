@@ -7,6 +7,7 @@ import { budgetPlan } from './budget.js';
 import { homeTimeZone } from './connection.js';
 import { overview } from './overview.js';
 import { findCharges } from './recurring.js';
+import { watchStatuses } from './watch.js';
 
 /**
  * Read-only money tools for the Claude connector, so a chat can answer "can
@@ -77,7 +78,7 @@ export function registerMoneyTools(server: McpServer, appUrl: string) {
     'money_budget',
     {
       title: 'Money: the budget',
-      description: `${ABOUT} The monthly budget, set against income: expected income (their regular paychecks; bonuses aren't counted on) minus fixed bills (what they pay now) minus a saving goal leaves what everyday spending has to fit in. Shows each paycheck source, each bill, each category's budget and whether the plan adds up. Use it for "can we afford…" questions: what's unplanned (or short) each month is the room there is. They change the budget in the app, not through you.`,
+      description: `${ABOUT} The monthly budget, set against income. Categories they're watching come down to a target a step a month, with a weekly allowance (unspent money carries to the next week): expected income (their regular paychecks; bonuses aren't counted on) minus fixed bills (what they pay now) minus a saving goal leaves what everyday spending has to fit in. Shows each paycheck source, each bill, each category's budget and whether the plan adds up. Use it for "can we afford…" questions: what's unplanned (or short) each month is the room there is. They change the budget in the app, not through you.`,
       inputSchema: {},
       annotations: { readOnlyHint: true },
     },
@@ -95,6 +96,15 @@ export function registerMoneyTools(server: McpServer, appUrl: string) {
           .map((b) => ({ name: b.name, category: categoryName.get(b.categoryId), monthly: whole(b.amount), aroundDay: b.day })),
         possibleNewBills: plan.bills.filter((b) => b.state === 'suggested').map((b) => ({ name: b.name, monthly: whole(b.amount) })),
         savingGoal: whole(plan.saving),
+        watching: (await watchStatuses()).map((w) => ({
+          category: w.name,
+          target: whole(w.target),
+          thisMonthsStep: whole(w.monthAmount),
+          step: `${w.step + 1} of ${w.months}`,
+          paused: w.paused || undefined,
+          spentThisMonth: whole(w.spent),
+          thisWeek: { allowance: whole(w.week.allowance), spent: whole(w.week.spent), left: whole(w.week.left) },
+        })),
         oneOffsAndEvents: { plannedPerMonth: whole(plan.oneOffs.planned), usualPerMonth: plan.oneOffs.usual === null ? null : whole(plan.oneOffs.usual) },
         everyday: plan.categories
           .filter((c) => !c.fixed && (c.budget > 0 || c.spent > 0))

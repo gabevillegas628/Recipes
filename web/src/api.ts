@@ -1,5 +1,6 @@
 import type {
   BudgetPlan,
+  WatchStatus,
   CategoryDetail,
   CaptureResult,
   ConnectorStatus,
@@ -226,6 +227,12 @@ export const api = {
   moneyBudget: () => request<BudgetPlan>('/api/money/budget'),
   categoryDetail: (id: string, month?: string) =>
     request<CategoryDetail>(`/api/money/categories/${id}/detail${month ? `?month=${month}` : ''}`),
+  /** Watches a category: a monthly target reached over `months` steps (omit for the suggested pace). */
+  setWatch: (categoryId: string, target: number, months?: number) =>
+    request<WatchStatus[]>(`/api/money/watches/${categoryId}`, json('PUT', { target, months })),
+  pauseWatch: (categoryId: string, paused: boolean) =>
+    request<WatchStatus[]>(`/api/money/watches/${categoryId}/pause`, json('POST', { paused })),
+  stopWatch: (categoryId: string) => request<WatchStatus[]>(`/api/money/watches/${categoryId}`, { method: 'DELETE' }),
   /** true: a one-off, false: part of the habit, null: undecided. */
   setOneOff: (id: string, oneOff: boolean | null) =>
     request<{ ok: true }>(`/api/money/transactions/${id}/one-off`, json('PUT', { oneOff })),

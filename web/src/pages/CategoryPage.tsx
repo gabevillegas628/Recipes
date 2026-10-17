@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { api } from '../api';
 import { HabitChart, monthLabel, usd } from '../components/MoneyCharts';
+import { WatchPanel } from '../components/Watch';
 import type { CategoryDetail, OneOffCharge } from '../types';
 
 /**
@@ -45,6 +46,8 @@ export function CategoryPage() {
       <Worth detail={d} />
 
       <HabitChart history={d.history} selected={d.month} line={line} onPick={pick} />
+
+      {d.canWatch && <WatchPanel categoryId={d.category.id} watch={d.watch} usual={d.usual} budget={d.budget} />}
 
       <h2 className="money-section-title">
         {monthLabel(d.month)}
@@ -129,6 +132,13 @@ export function CategoryPage() {
 
 /** What keeping to the budget is worth, when the habit runs above it. */
 function Worth({ detail: d }: { detail: CategoryDetail }) {
+  if (d.watch) {
+    return (
+      <p className="money-verdict">
+        Usually {usd(d.watch.start)} a month, coming down to {usd(d.watch.target)}. This month: {usd(d.watch.monthAmount)}.
+      </p>
+    );
+  }
   if (!d.budget || d.usual === null || d.usual <= d.budget + 10) {
     if (d.usual !== null) {
       return (

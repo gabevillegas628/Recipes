@@ -4208,3 +4208,139 @@ html.has-timers .cook {
   margin-top: 8px;
 }
 
+/* ---------- Watched categories ---------- */
+
+.watching {
+  margin: 0 0 16px;
+  padding: 12px 14px 4px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.watching-title {
+  margin: 0 0 4px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.watching ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.watching li + li {
+  border-top: 1px solid var(--border);
+}
+
+.watching-row {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 10px 0;
+  color: var(--text);
+  text-decoration: none;
+}
+
+.watching-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.watch-meter {
+  display: block;
+  height: 8px;
+  overflow: hidden;
+  border-radius: 4px;
+  background: var(--border);
+}
+
+.watch-meter > span {
+  display: block;
+  height: 100%;
+  border-radius: 4px;
+  background: var(--series-out);
+}
+
+/* Over is stated, not alarmed: the bar is simply full. */
+.watch-over > span {
+  background: var(--accent);
+}
+
+.watch-panel {
+  margin-top: 8px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+.watch-steps {
+  display: flex;
+  gap: 6px;
+  margin: 10px 0 14px;
+  padding: 0;
+  list-style: none;
+  overflow-x: auto;
+}
+
+.watch-steps li {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 64px;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.watch-steps li strong {
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.watch-steps li.on {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.watch-steps li.done {
+  opacity: 0.6;
+}
+
+.watch-week {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin: 6px 0 10px;
+}
+
+.watch-weeks {
+  margin: 0 0 12px;
+  padding: 0;
+  list-style: none;
+  font-size: 14px;
+}
+
+.watch-weeks li {
+  display: grid;
+  grid-template-columns: 1fr auto 64px;
+  gap: 10px;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--border);
+  font-variant-numeric: tabular-nums;
+}
+
+.watch-weeks li span:last-child {
+  text-align: right;
+}
+
+.budget-watched {
+  font-variant-numeric: tabular-nums;
+  text-decoration: none;
+}
+

@@ -450,6 +450,7 @@ model FinanceCategory {
   merchants    FinanceMerchant[]
   transactions FinanceTransaction[]
   budget       FinanceBudget?
+  watch        FinanceWatch?
 }
 
 /// How a merchant's transactions are sorted: read by AI once, or set by hand. Like EventTag.
@@ -520,3 +521,22 @@ model FinanceRecap {
   model     String
   createdAt DateTime @default(now())
 }
+
+/// An everyday category being brought down to a target, a step a month, with a weekly allowance (src/money/watch.ts).
+model FinanceWatch {
+  category    FinanceCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  categoryId  String          @id
+  /// Where the monthly habit should end up.
+  target      Decimal         @db.Decimal(14, 2)
+  /// The habit when watching started: the first step comes down from here.
+  start       Decimal         @db.Decimal(14, 2)
+  /// How many monthly steps to reach the target (1: all at once).
+  months      Int
+  /// The month of the first step, "2026-10".
+  startMonth  String
+  /// Set while the step-down is paused (the month it was paused); steps don't advance until it resumes.
+  pausedSince String?
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+}
+

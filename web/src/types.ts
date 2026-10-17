@@ -492,6 +492,8 @@ export interface MoneyOverview {
   budget: BudgetPlan | null;
   /** Claude's recap: this month's, for a past month; early in a month, last month's. */
   recap: MoneyRecap | null;
+  /** Categories being brought down to a target (current month only). */
+  watches: WatchStatus[];
 }
 
 export interface MoneyRecap {
@@ -552,7 +554,7 @@ export interface BudgetPlan {
     name: string;
     fixed: boolean;
     budget: number;
-    from: 'bills' | 'usual' | 'hand';
+    from: 'bills' | 'usual' | 'hand' | 'watch';
     usual: number | null;
     /** This month so far, habit only. */
     spent: number;
@@ -676,5 +678,28 @@ export interface CategoryDetail {
   };
   maybeOneOffs: OneOffCharge[];
   oneOffs: OneOffCharge[];
+  watch: WatchStatus | null;
+  canWatch: boolean;
+}
+
+/** A category brought down to a target a step a month, with a weekly allowance. */
+export interface WatchStatus {
+  categoryId: string;
+  name: string;
+  target: number;
+  /** The habit when watching started. */
+  start: number;
+  months: number;
+  paused: boolean;
+  /** 0-based. */
+  step: number;
+  /** This month's step, which is the category's budget. */
+  monthAmount: number;
+  steps: { month: string; amount: number }[];
+  /** Habit this month so far. */
+  spent: number;
+  /** This week: what it has (carry-over included), spent, and left. */
+  week: { from: string; to: string; allowance: number; spent: number; left: number };
+  weeks: { from: string; to: string; allowance: number; spent: number }[];
 }
 
