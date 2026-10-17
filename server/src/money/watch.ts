@@ -2,6 +2,7 @@ import { prisma } from '../db.js';
 import type { FinanceWatch } from '../generated/prisma/client.js';
 import { wallTime, zonedInstant } from '../zone.js';
 import { homeTimeZone } from './connection.js';
+import { overview } from './overview.js';
 
 /**
  * Watched categories: an everyday category brought down to a target a step at
@@ -15,6 +16,12 @@ import { homeTimeZone } from './connection.js';
  *   next week and overspending comes out of it, so this week has whatever the
  *   month so far allowed minus what the habit has spent; each month starts fresh.
  * Only the habit counts: one-offs don't use up the allowance.
+ *
+ * A watch can also have no target: the category is just kept an eye on. Then
+ * nothing steps down and the budget is left alone; each week is set against
+ * the category's own budget if one was typed in (carrying over, like an
+ * allowance), or else against a usual week (its usual month spread over the
+ * days, no carry-over: nothing to hit or miss).
  */
 
 const round = (n: number) => Math.round(n * 100) / 100;
@@ -38,8 +45,9 @@ const daysIn = (month: string) => {
 
 type WatchRow = Pick<FinanceWatch, 'target' | 'start' | 'months' | 'startMonth' | 'pausedSince'>;
 
-/** The month's step (0-based) and amount. Before the first month there's no step. */
+/** The month's step (0-based) and amount. Before the first month, or with no target, there's no step. */
 export function stepFor(w: WatchRow, month: string): { step: number; amount: number } | null {
+  if (w.target === null) return null;
   const held = w.pausedSince ? Math.max(0, monthsBetween(w.pausedSince, month)) : 0;
   const elapsed = monthsBetween(w.startMonth, month) - held;
   if (elapsed < 0) return null;
@@ -49,7 +57,7 @@ export function stepFor(w: WatchRow, month: string): { step: number; amount: num
 
 function stepAmount(w: WatchRow, step: number) {
   const start = w.start.toNumber();
-  const target = w.target.toNumber();
+  const target = w.target?.toNumber() ?? start;
   if (step >= w.months - 1) return target;
   return roundTen(start + ((target - start) * (step + 1)) / w.months);
 }
@@ -63,13 +71,19 @@ export function suggestedMonths(start: number, target: number) {
 export interface WatchStatus {
   categoryId: string;
   name: string;
-  target: number;
+  /**
+   * goal: stepping down to a target, with an allowance. budget: no target, held to
+   * the category's own budget, with an allowance. usual: no target or budget,
+   * compared with a usual week.
+   */
+  mode: 'goal' | 'budget' | 'usual';
+  target: number | null;
   start: number;
   months: number;
   paused: boolean;
   /** 0-based. */
   step: number;
-  /** This month's step: the category's budget. */
+  /** This month's step (goal), its budget (budget), or its usual month (usual). */
   monthAmount: number;
   /** Every step, from the first month. */
   steps: { month: string; amount: number }[];
@@ -82,8 +96,12 @@ export interface WatchStatus {
 
 /** Every watch, as of today. */
 export async function watchStatuses(): Promise<WatchStatus[]> {
-  const watches = await prisma.financeWatch.findMany({ include: { category: { select: { name: true } } } });
+  const watches = await prisma.financeWatch.findMany({ include: { category: { select: { name: true, budget: true } } } });
   if (!watches.length) return [];
+  // Without a target, a category's month is its own budget (typed in) or its usual habit.
+  const usual = watches.some((w) => w.target === null && !w.category.budget)
+    ? new Map((await overview()).categories.map((c) => [c.id, c.typical ?? 0]))
+    : new Map<string, number>();
   const timeZone = await homeTimeZone();
   const today = wallTime(new Date(), timeZone).slice(0, 10);
   const month = today.slice(0, 7);
@@ -124,12 +142,18 @@ export async function watchStatuses(): Promise<WatchStatus[]> {
 
   return watches
     .map((w) => {
-      const s = stepFor(w, month) ?? { step: 0, amount: stepAmount(w, 0) };
+      const mode: WatchStatus['mode'] = w.target !== null ? 'goal' : w.category.budget ? 'budget' : 'usual';
+      const s =
+        mode === 'goal'
+          ? (stepFor(w, month) ?? { step: 0, amount: stepAmount(w, 0) })
+          : { step: 0, amount: mode === 'budget' ? w.category.budget!.amount.toNumber() : round(usual.get(w.categoryId) ?? 0) };
+      // A usual week is only a reference: nothing carries over.
+      const carries = mode !== 'usual';
       const perDay = s.amount / days;
       const thisWeek = weeks.find((wk) => dayOfMonth >= wk.from && dayOfMonth <= wk.to)!;
       // What the month has allowed through this week's end, less what the habit spent before it: carried over both ways.
       const before = spentBy(w.categoryId, 1, thisWeek.from - 1);
-      const allowance = round(perDay * thisWeek.to - before);
+      const allowance = round(carries ? perDay * thisWeek.to - before : perDay * (thisWeek.to - thisWeek.from + 1));
       const spentThisWeek = spentBy(w.categoryId, thisWeek.from, thisWeek.to);
       let carried = 0;
       const past = weeks
@@ -138,19 +162,21 @@ export async function watchStatuses(): Promise<WatchStatus[]> {
           const fresh = perDay * (wk.to - wk.from + 1);
           const spent = spentBy(w.categoryId, wk.from, wk.to);
           const row = { from: date(wk.from), to: date(wk.to), allowance: round(fresh + carried), spent };
-          carried = fresh + carried - spent;
+          if (carries) carried = fresh + carried - spent;
           return row;
         });
       return {
         categoryId: w.categoryId,
         name: w.category.name,
-        target: w.target.toNumber(),
+        mode,
+        target: w.target?.toNumber() ?? null,
         start: w.start.toNumber(),
         months: w.months,
         paused: Boolean(w.pausedSince),
         step: s.step,
         monthAmount: s.amount,
-        steps: Array.from({ length: w.months }, (_, i) => ({ month: shift(w.startMonth, i), amount: stepAmount(w, i) })),
+        steps:
+          mode === 'goal' ? Array.from({ length: w.months }, (_, i) => ({ month: shift(w.startMonth, i), amount: stepAmount(w, i) })) : [],
         spent: spentBy(w.categoryId, 1, days),
         week: {
           from: date(thisWeek.from),
@@ -165,8 +191,11 @@ export async function watchStatuses(): Promise<WatchStatus[]> {
     .sort((a, b) => a.name.localeCompare(b.name));
 }
 
-/** Starts (or changes) watching a category. Changing the target or pace starts the steps again from this month. */
-export async function setWatch(categoryId: string, target: number, months: number, start: number) {
+/**
+ * Starts (or changes) watching a category; target null keeps an eye on it without a goal.
+ * Changing the target or pace starts the steps again from this month.
+ */
+export async function setWatch(categoryId: string, target: number | null, months: number, start: number) {
   const timeZone = await homeTimeZone();
   const month = wallTime(new Date(), timeZone).slice(0, 7);
   const data = { target, months, start, startMonth: month, pausedSince: null };

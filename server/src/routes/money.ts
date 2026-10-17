@@ -217,11 +217,14 @@ export async function moneyRoutes(app: FastifyInstance) {
 
   app.get('/api/money/watches', async () => watchStatuses());
 
-  /** Starts or changes watching a category: a target a month, reached over `months` steps (default: a suggested pace). */
+  /**
+   * Starts or changes watching a category: a target a month, reached over `months` steps (default: a
+   * suggested pace), or target null to keep an eye on it without a goal.
+   */
   app.put('/api/money/watches/:categoryId', async (request, reply) => {
     const { categoryId } = z.object({ categoryId: z.string() }).parse(request.params);
     const parsed = z
-      .object({ target: z.number().nonnegative().max(10_000_000), months: z.number().int().min(1).max(12).optional() })
+      .object({ target: z.number().nonnegative().max(10_000_000).nullable(), months: z.number().int().min(1).max(12).optional() })
       .safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ error: 'A target needs an amount, and the pace 1 to 12 months' });
     const category = await prisma.financeCategory.findUnique({ where: { id: categoryId } });
@@ -230,9 +233,14 @@ export async function moneyRoutes(app: FastifyInstance) {
     // Steps come down from the habit as it is now: the usual month, one-offs left out.
     const ov = await overview();
     const usual = ov.categories.find((c) => c.id === categoryId)?.typical ?? null;
-    const start = Math.max(parsed.data.target, Math.round(usual ?? parsed.data.target));
-    const months = parsed.data.months ?? suggestedMonths(start, parsed.data.target);
-    await setWatch(categoryId, parsed.data.target, months, start);
+    const { target } = parsed.data;
+    if (target === null) {
+      await setWatch(categoryId, null, 1, Math.round(usual ?? 0));
+      return watchStatuses();
+    }
+    const start = Math.max(target, Math.round(usual ?? target));
+    const months = parsed.data.months ?? suggestedMonths(start, target);
+    await setWatch(categoryId, target, months, start);
     return watchStatuses();
   });
 

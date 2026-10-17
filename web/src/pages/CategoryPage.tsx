@@ -132,7 +132,8 @@ export function CategoryPage() {
 
 /** What keeping to the budget is worth, when the habit runs above it. */
 function Worth({ detail: d }: { detail: CategoryDetail }) {
-  if (d.watch) {
+  // With a goal, the headline is the step-down; without one, the usual line below still applies.
+  if (d.watch && d.watch.target !== null) {
     return (
       <p className="money-verdict">
         Usually {usd(d.watch.start)} a month, coming down to {usd(d.watch.target)}. This month: {usd(d.watch.monthAmount)}.

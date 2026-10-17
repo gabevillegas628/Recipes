@@ -522,12 +522,13 @@ model FinanceRecap {
   createdAt DateTime @default(now())
 }
 
-/// An everyday category being brought down to a target, a step a month, with a weekly allowance (src/money/watch.ts).
+/// An everyday category being watched (src/money/watch.ts): brought down to a target a step a month with a
+/// weekly allowance, or, with no target, just kept an eye on against its usual week.
 model FinanceWatch {
   category    FinanceCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
   categoryId  String          @id
-  /// Where the monthly habit should end up.
-  target      Decimal         @db.Decimal(14, 2)
+  /// Where the monthly habit should end up. Null to keep an eye on it without a goal.
+  target      Decimal?        @db.Decimal(14, 2)
   /// The habit when watching started: the first step comes down from here.
   start       Decimal         @db.Decimal(14, 2)
   /// How many monthly steps to reach the target (1: all at once).

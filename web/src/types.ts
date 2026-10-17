@@ -686,19 +686,25 @@ export interface CategoryDetail {
 export interface WatchStatus {
   categoryId: string;
   name: string;
-  target: number;
+  /**
+   * goal: stepping down to a target, with an allowance. budget: no goal, held to the
+   * category's own budget. usual: no goal or budget, set against a usual week.
+   */
+  mode: 'goal' | 'budget' | 'usual';
+  /** Null when kept an eye on without a goal. */
+  target: number | null;
   /** The habit when watching started. */
   start: number;
   months: number;
   paused: boolean;
   /** 0-based. */
   step: number;
-  /** This month's step, which is the category's budget. */
+  /** This month's step (goal), its budget (budget), or its usual month (usual). */
   monthAmount: number;
   steps: { month: string; amount: number }[];
   /** Habit this month so far. */
   spent: number;
-  /** This week: what it has (carry-over included), spent, and left. */
+  /** This week: what it has (carry-over included; a usual week, with no goal or budget), spent, and left. */
   week: { from: string; to: string; allowance: number; spent: number; left: number };
   weeks: { from: string; to: string; allowance: number; spent: number }[];
 }

@@ -98,12 +98,16 @@ export function registerMoneyTools(server: McpServer, appUrl: string) {
         savingGoal: whole(plan.saving),
         watching: (await watchStatuses()).map((w) => ({
           category: w.name,
-          target: whole(w.target),
-          thisMonthsStep: whole(w.monthAmount),
-          step: `${w.step + 1} of ${w.months}`,
+          goal: w.target === null ? 'none: just keeping an eye on it' : whole(w.target),
+          thisMonth: whole(w.monthAmount),
+          thisMonthIs: w.mode === 'goal' ? 'step toward the goal' : w.mode === 'budget' ? 'its budget' : 'its usual month',
+          step: w.mode === 'goal' ? `${w.step + 1} of ${w.months}` : undefined,
           paused: w.paused || undefined,
           spentThisMonth: whole(w.spent),
-          thisWeek: { allowance: whole(w.week.allowance), spent: whole(w.week.spent), left: whole(w.week.left) },
+          thisWeek:
+            w.mode === 'usual'
+              ? { spent: whole(w.week.spent), usualWeek: whole(w.week.allowance) }
+              : { allowance: whole(w.week.allowance), spent: whole(w.week.spent), left: whole(w.week.left) },
         })),
         oneOffsAndEvents: { plannedPerMonth: whole(plan.oneOffs.planned), usualPerMonth: plan.oneOffs.usual === null ? null : whole(plan.oneOffs.usual) },
         everyday: plan.categories

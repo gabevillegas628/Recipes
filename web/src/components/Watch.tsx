@@ -7,7 +7,8 @@ import { monthLabel, usd } from './MoneyCharts';
 
 /**
  * Watched categories: the Watching card at the top of the Money overview (one
- * line each: what's left this week), and the panel on a category's page to
+ * line each: what's left this week, or, kept an eye on without a goal, what's
+ * been spent against a usual week), and the panel on a category's page to
  * start, change, pause or stop watching it. Going over is shown plainly, not as
  * an alarm: no red, no warning signs.
  */
@@ -19,15 +20,34 @@ function left(n: number) {
   return n >= 0 ? `${usd(n)} left` : `${usd(n)} over`;
 }
 
-/** This week's allowance as a meter: the fill is what's spent, the track what the week has. */
+/** This week as a meter: the fill is what's spent, the track what the week has (or a usual week). */
 function WeekMeter({ w }: { w: WatchStatus }) {
   const share = w.week.allowance > 0 ? Math.min(1, w.week.spent / w.week.allowance) : w.week.spent > 0 ? 1 : 0;
   return (
-    <span className={`watch-meter ${w.week.left < 0 ? 'watch-over' : ''}`} aria-hidden>
+    <span className={`watch-meter ${w.week.left < 0 && w.mode !== 'usual' ? 'watch-over' : ''}`} aria-hidden>
       <span style={{ width: `${share * 100}%` }} />
     </span>
   );
 }
+
+/** The week's headline: what's left of an allowance, or, kept an eye on, what's been spent. */
+const weekHeadline = (w: WatchStatus) => (w.mode === 'usual' ? `${usd(w.week.spent)} this week` : left(w.week.left));
+
+/** The line under it. */
+function weekDetail(w: WatchStatus) {
+  if (w.mode === 'usual') {
+    return `a usual week is about ${usd(w.week.allowance)} · ${usd(w.spent)} this month, usually ${usd(w.monthAmount)}`;
+  }
+  const month = `${usd(w.spent)} of ${usd(w.monthAmount)} ${w.mode === 'budget' ? 'budget ' : ''}this month`;
+  const step = w.mode === 'goal' && w.months > 1 ? ` · step ${w.step + 1} of ${w.months}` : '';
+  return `${weekShare(w)} · ${month}${step}${w.paused ? ' · paused' : ''}`;
+}
+
+/** This week against its share; once earlier weeks have used the share up, say so instead of "of $0". */
+const weekShare = (w: WatchStatus) =>
+  w.week.allowance < 1
+    ? `${usd(w.week.spent)} this week, earlier weeks used its share`
+    : `${usd(w.week.spent)} of ${usd(w.week.allowance)} this week`;
 
 export function WatchingCard({ watches }: { watches: WatchStatus[] }) {
   if (!watches.length) return null;
@@ -40,16 +60,10 @@ export function WatchingCard({ watches }: { watches: WatchStatus[] }) {
             <Link to={`/money/c/${w.categoryId}`} className="watching-row">
               <span className="watching-head">
                 <span>{w.name}</span>
-                <strong>
-                  {left(w.week.left)}
-                </strong>
+                <strong>{weekHeadline(w)}</strong>
               </span>
               <WeekMeter w={w} />
-              <span className="muted small">
-                {usd(w.week.spent)} of {usd(Math.max(0, w.week.allowance))} this week · {usd(w.spent)} of {usd(w.monthAmount)} this month
-                {w.months > 1 ? ` · step ${w.step + 1} of ${w.months}` : ''}
-                {w.paused ? ' · paused' : ''}
-              </span>
+              <span className="muted small">{weekDetail(w)}</span>
             </Link>
           </li>
         ))}
@@ -58,7 +72,7 @@ export function WatchingCard({ watches }: { watches: WatchStatus[] }) {
   );
 }
 
-/** On a category's page: start watching it, or see and change how it's going. */
+/** On a category's page: start watching it (with a goal or without), or see and change how it's going. */
 export function WatchPanel({
   categoryId,
   watch,
@@ -78,42 +92,63 @@ export function WatchPanel({
   };
   const pause = useMutation({ mutationFn: (paused: boolean) => api.pauseWatch(categoryId, paused), onSuccess: refresh });
   const stop = useMutation({ mutationFn: () => api.stopWatch(categoryId), onSuccess: refresh });
+  // Watching without a goal, or dropping one: target null.
+  const eyeOn = useMutation({ mutationFn: () => api.setWatch(categoryId, null), onSuccess: refresh });
+  const errors = pause.error ?? stop.error ?? eyeOn.error;
 
   if (!watch || editing) {
+    const hasGoal = watch?.mode === 'goal';
     return (
       <section className="watch-panel">
-        <h2 className="money-section-title">{watch ? 'Change the target' : 'Bring it down'}</h2>
+        <h2 className="money-section-title">{hasGoal ? 'Change the goal' : watch ? 'Set a goal' : 'Watch it'}</h2>
         {!watch && (
           <p className="muted small">
-            Set where you want this category to land each month. It comes down a step a month from your usual, with a weekly
-            allowance so you see how it’s going mid-month. Unspent money carries into the next week.
+            Keep an eye on it to see each week against a usual week, with nothing to hit. Or set a goal: it comes down a step a
+            month from your usual, with a weekly allowance; unspent money carries into the next week.
           </p>
+        )}
+        {!watch && (
+          <div className="settings-actions">
+            <button type="button" className="btn" disabled={eyeOn.isPending} onClick={() => eyeOn.mutate()}>
+              Just keep an eye on it
+            </button>
+          </div>
         )}
         <WatchForm
           categoryId={categoryId}
           initial={watch?.target ?? budget ?? usual ?? null}
           usual={usual}
-          months={watch?.months}
+          months={hasGoal ? watch?.months : undefined}
+          label={watch ? (hasGoal ? 'Save' : 'Set goal') : 'Set a goal'}
           onDone={refresh}
           onCancel={watch ? () => setEditing(false) : undefined}
         />
+        {errors && <p className="error">{errors.message}</p>}
       </section>
     );
   }
 
   const w = watch;
-  const yearly = Math.max(0, (w.start - w.target) * 12);
+  const goal = w.mode === 'goal' && w.target !== null ? w.target : null;
+  const yearly = goal !== null ? Math.max(0, (w.start - goal) * 12) : 0;
   return (
     <section className="watch-panel">
       <h2 className="money-section-title">
-        Watching: {usd(w.target)} a month{w.paused ? ' (paused)' : ''}
+        {goal !== null ? `Watching: ${usd(goal)} a month${w.paused ? ' (paused)' : ''}` : 'Keeping an eye on it'}
       </h2>
-      {yearly > 0 && (
+      {goal !== null && yearly > 0 && (
         <p className="muted small">
-          From {usd(w.start)} a month to {usd(w.target)}: {usd(w.start - w.target)} a month, {usd(yearly)} a year.
+          From {usd(w.start)} a month to {usd(goal)}: {usd(w.start - goal)} a month, {usd(yearly)} a year.
         </p>
       )}
-      {w.months > 1 && (
+      {goal === null && (
+        <p className="muted small">
+          {w.mode === 'budget'
+            ? `No goal: each week is set against its ${usd(w.monthAmount)} budget, and unspent money carries over.`
+            : `No goal: each week is set against a usual week, its usual ${usd(w.monthAmount)} month spread over the days.`}
+        </p>
+      )}
+      {goal !== null && w.months > 1 && (
         <ol className="watch-steps">
           {w.steps.map((s, i) => (
             <li key={s.month} className={i === w.step ? 'on' : i < w.step ? 'done' : ''}>
@@ -127,12 +162,13 @@ export function WatchPanel({
       <div className="watch-week">
         <span className="watching-head">
           <span>This week ({weekLabel(w.week.from, w.week.to)})</span>
-          <strong>{left(w.week.left)}</strong>
+          <strong>{weekHeadline(w)}</strong>
         </span>
         <WeekMeter w={w} />
         <span className="muted small">
-          {usd(w.week.spent)} spent of {usd(Math.max(0, w.week.allowance))}, carry-over included · {usd(w.spent)} of {usd(w.monthAmount)}{' '}
-          this month
+          {w.mode === 'usual'
+            ? `A usual week is about ${usd(w.week.allowance)} · ${usd(w.spent)} this month, usually ${usd(w.monthAmount)}`
+            : `${weekShare(w)}, carry-over included · ${usd(w.spent)} of ${usd(w.monthAmount)} this month`}
         </span>
       </div>
       {w.weeks.length > 1 && (
@@ -141,9 +177,11 @@ export function WatchPanel({
             <li key={wk.from}>
               <span>{weekLabel(wk.from, wk.to)}</span>
               <span>
-                {usd(wk.spent)} of {usd(Math.max(0, wk.allowance))}
+                {usd(wk.spent)} {w.mode === 'usual' ? `· usual ${usd(wk.allowance)}` : `of ${usd(Math.max(0, wk.allowance))}`}
               </span>
-              <span className="muted">{wk.spent > wk.allowance ? 'over' : '✓'}</span>
+              <span className="muted">
+                {w.mode === 'usual' ? (wk.spent > wk.allowance ? 'more' : 'less') : wk.spent > wk.allowance ? 'over' : '✓'}
+              </span>
             </li>
           ))}
         </ul>
@@ -151,23 +189,31 @@ export function WatchPanel({
 
       <div className="settings-actions">
         <button type="button" className="btn btn-small" onClick={() => setEditing(true)}>
-          Change target
+          {goal !== null ? 'Change goal' : 'Set a goal'}
         </button>
-        {w.months > 1 && (
+        {goal !== null && w.months > 1 && (
           <button type="button" className="btn btn-small" disabled={pause.isPending} onClick={() => pause.mutate(!w.paused)}>
             {w.paused ? 'Resume stepping down' : 'Pause stepping down'}
+          </button>
+        )}
+        {goal !== null && (
+          <button type="button" className="btn btn-small" disabled={eyeOn.isPending} onClick={() => eyeOn.mutate()}>
+            Remove the goal
           </button>
         )}
         <button
           type="button"
           className="btn btn-small"
           disabled={stop.isPending}
-          onClick={() => confirm(`Stop watching ${w.name}? Its budget goes back to its usual month.`) && stop.mutate()}
+          onClick={() =>
+            confirm(goal !== null ? `Stop watching ${w.name}? Its budget goes back to its usual month.` : `Stop watching ${w.name}?`) &&
+            stop.mutate()
+          }
         >
           Stop watching
         </button>
       </div>
-      {(pause.error || stop.error) && <p className="error">{(pause.error ?? stop.error)!.message}</p>}
+      {errors && <p className="error">{errors.message}</p>}
     </section>
   );
 }
@@ -177,6 +223,7 @@ function WatchForm({
   initial,
   usual,
   months: initialMonths,
+  label,
   onDone,
   onCancel,
 }: {
@@ -184,6 +231,7 @@ function WatchForm({
   initial: number | null;
   usual: number | null;
   months?: number;
+  label: string;
   onDone: () => void;
   onCancel?: () => void;
 }) {
@@ -236,7 +284,7 @@ function WatchForm({
       {save.error && <p className="error">{save.error.message}</p>}
       <div className="settings-actions">
         <button className="btn btn-primary" disabled={!valid || save.isPending}>
-          {onCancel ? 'Save' : 'Start watching'}
+          {label}
         </button>
         {onCancel && (
           <button type="button" className="btn" onClick={onCancel}>
