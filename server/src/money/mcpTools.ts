@@ -33,7 +33,7 @@ export function registerMoneyTools(server: McpServer, appUrl: string) {
     'money_overview',
     {
       title: 'Money: a month at a glance',
-      description: `${ABOUT} One month: money in, spent, saved and left over, against a usual month (the average of recent complete months) and, for the current month, the budget; spending by category; and in vs. spent for the last 12 months (months marked partial are missing some accounts, so they undercount). Use it for "how are we doing this month" or "how did September go".`,
+      description: `${ABOUT} One month: money in, spent, saved and left over, against a usual month (the average of recent complete months) and, for the current month, the budget. Charges they marked one-off (a birthday dinner) count in spent but not in a category's usual habit or its budget; spending by category; and in vs. spent for the last 12 months (months marked partial are missing some accounts, so they undercount). Use it for "how are we doing this month" or "how did September go".`,
       inputSchema: { month: month.optional() },
       annotations: { readOnlyHint: true },
     },
@@ -62,7 +62,8 @@ export function registerMoneyTools(server: McpServer, appUrl: string) {
           name: c.name,
           fixed: c.fixed,
           spent: whole(c.spent),
-          usual: c.typical === null ? null : whole(c.typical),
+          ofWhichOneOffs: c.oneOffs ? whole(c.oneOffs) : undefined,
+          usualHabit: c.typical === null ? null : whole(c.typical),
           budget: plan ? whole(plan.categories.find((p) => p.id === c.id)?.budget ?? 0) : undefined,
         })),
         lastTwelveMonths: ov.history.map((h) => ({ month: h.month, in: whole(h.income), spent: whole(h.spending), saved: whole(h.saving), partial: h.partial || undefined })),
@@ -94,9 +95,17 @@ export function registerMoneyTools(server: McpServer, appUrl: string) {
           .map((b) => ({ name: b.name, category: categoryName.get(b.categoryId), monthly: whole(b.amount), aroundDay: b.day })),
         possibleNewBills: plan.bills.filter((b) => b.state === 'suggested').map((b) => ({ name: b.name, monthly: whole(b.amount) })),
         savingGoal: whole(plan.saving),
+        oneOffsAndEvents: { plannedPerMonth: whole(plan.oneOffs.planned), usualPerMonth: plan.oneOffs.usual === null ? null : whole(plan.oneOffs.usual) },
         everyday: plan.categories
           .filter((c) => !c.fixed && (c.budget > 0 || c.spent > 0))
-          .map((c) => ({ name: c.name, budget: whole(c.budget), usual: c.usual === null ? null : whole(c.usual), spentThisMonth: whole(c.spent), setByThem: c.from === 'hand' })),
+          .map((c) => ({
+            name: c.name,
+            budget: whole(c.budget),
+            usualHabit: c.usual === null ? null : whole(c.usual),
+            habitThisMonth: whole(c.spent),
+            oneOffsThisMonth: c.oneOffs ? whole(c.oneOffs) : undefined,
+            setByThem: c.from === 'hand',
+          })),
         totals: {
           fixedBills: whole(plan.totals.fixed),
           everydayBudget: whole(plan.totals.everyday),

@@ -7,6 +7,7 @@ import { classify, setMerchant, setTransaction } from '../money/classify.js';
 import { connect, disconnect, homeTimeZone } from '../money/connection.js';
 import { importHistory } from '../money/importHistory.js';
 import { budgetPlan } from '../money/budget.js';
+import { categoryDetail, setOneOff } from '../money/category.js';
 import { overview } from '../money/overview.js';
 import { writeRecap } from '../money/recap.js';
 import { findCharges } from '../money/recurring.js';
@@ -30,7 +31,6 @@ function monthRange(month: string, timeZone: string) {
 }
 
 const money = (d: Prisma.Decimal | null | undefined) => d?.toNumber() ?? 0;
-const round2 = (n: number) => Math.round(n * 100) / 100;
 const previousMonth = (month: string) => {
   const [y, m] = month.split('-').map(Number);
   return m === 1 ? `${y - 1}-12` : `${y}-${String(m - 1).padStart(2, '0')}`;
@@ -189,6 +189,33 @@ export async function moneyRoutes(app: FastifyInstance) {
     };
   });
 
+  // ---------- One category up close ----------
+
+  app.get('/api/money/categories/:id/detail', async (request, reply) => {
+    const { id } = z.object({ id: z.string() }).parse(request.params);
+    const parsed = z
+      .object({
+        month: z
+          .string()
+          .regex(/^\d{4}-\d{2}$/)
+          .optional(),
+      })
+      .safeParse(request.query);
+    if (!parsed.success) return reply.code(400).send({ error: 'Bad month' });
+    const detail = await categoryDetail(id, parsed.data.month);
+    if (!detail) return reply.code(404).send({ error: 'Category not found' });
+    return detail;
+  });
+
+  /** A charge as a one-off (true), part of the habit (false), or undecided (null). */
+  app.put('/api/money/transactions/:id/one-off', async (request, reply) => {
+    const { id } = z.object({ id: z.string() }).parse(request.params);
+    const parsed = z.object({ oneOff: z.boolean().nullable() }).safeParse(request.body);
+    if (!parsed.success) return reply.code(400).send({ error: 'Say whether it was a one-off' });
+    if (!(await setOneOff(id, parsed.data.oneOff))) return reply.code(404).send({ error: 'Charge not found' });
+    return { ok: true };
+  });
+
   // ---------- Budget ----------
 
   const plan = async () => budgetPlan(await overview());
@@ -197,7 +224,11 @@ export async function moneyRoutes(app: FastifyInstance) {
 
   app.put('/api/money/budget/settings', async (request, reply) => {
     const parsed = z
-      .object({ income: z.number().nonnegative().max(10_000_000).nullable(), saving: z.number().nonnegative().max(10_000_000) })
+      .object({
+        income: z.number().nonnegative().max(10_000_000).nullable(),
+        saving: z.number().nonnegative().max(10_000_000),
+        oneOffs: z.number().nonnegative().max(10_000_000).nullable(),
+      })
       .partial()
       .safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ error: 'Amounts must be zero or more' });
@@ -277,26 +308,6 @@ export async function moneyRoutes(app: FastifyInstance) {
     return plan();
   });
 
-  /** For the Today card: what's left of this month's budget, and the everyday category closest to (or furthest past) its own. */
-  app.get('/api/money/today', async () => {
-    const ov = await overview();
-    if (!ov.typical && !ov.totals.spending) return null;
-    const b = await budgetPlan(ov);
-    // The biggest overspend (a trip with no budget counts); with none, the category nearest its budget.
-    const everyday = b.categories
-      .filter((c) => !c.fixed && (c.budget > 0 || c.spent > 0))
-      .map((c) => ({ name: c.name, left: round2(c.budget - c.spent), share: c.budget > 0 ? c.spent / c.budget : Infinity }))
-      .sort((x, y) => (x.left < 0 || y.left < 0 ? x.left - y.left : y.share - x.share));
-    return {
-      spent: ov.totals.spending,
-      budget: b.totals.budget,
-      left: round2(b.totals.budget - ov.totals.spending),
-      day: ov.day,
-      daysInMonth: ov.daysInMonth,
-      tightest: everyday[0] ? { name: everyday[0].name, left: everyday[0].left } : null,
-    };
-  });
-
   // ---------- Transactions ----------
 
   /** A month's transactions and totals, or (with q) matches from any time. */
@@ -359,6 +370,7 @@ export async function moneyRoutes(app: FastifyInstance) {
         pending: t.pending,
         needsLook: t.needsLook,
         byHand: t.byHand,
+        oneOff: t.oneOff,
         paired: Boolean(t.pairId),
       })),
     };

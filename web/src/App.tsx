@@ -10,6 +10,7 @@ import { MealEditPage } from './pages/MealEditPage';
 import { MealPage } from './pages/MealPage';
 import { MealsPage } from './pages/MealsPage';
 import { BudgetPage } from './pages/BudgetPage';
+import { CategoryPage } from './pages/CategoryPage';
 import { MoneyPage } from './pages/MoneyPage';
 import { NoteEditPage } from './pages/NoteEditPage';
 import { NotePage } from './pages/NotePage';
@@ -53,6 +54,7 @@ export function App() {
         <Route path="groceries" element={<GroceriesPage />} />
         <Route path="money" element={<MoneyPage />} />
         <Route path="money/budget" element={<BudgetPage />} />
+        <Route path="money/c/:id" element={<CategoryPage />} />
         <Route path="add" element={<CapturePage />} />
         <Route path="notes" element={<NotesPage />} />
         <Route path="n/:id" element={<NotePage />} />

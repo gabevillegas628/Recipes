@@ -449,6 +449,8 @@ export interface MoneyTransaction {
   pending: boolean;
   needsLook: boolean;
   byHand: boolean;
+  /** A special occasion rather than a habit; null until decided. */
+  oneOff: boolean | null;
   /** Matched with the same money on another of our accounts. */
   paired: boolean;
 }
@@ -477,11 +479,12 @@ export interface MoneyOverview {
   day: number;
   daysInMonth: number;
   totals: MoneyTotals;
-  /** Averages of recent complete months, or null before there are any. */
-  typical: (MoneyTotals & { months: string[] }) | null;
+  /** Averages of recent complete months, or null before there are any. oneOffs: spent on one-offs, all categories. */
+  typical: (MoneyTotals & { months: string[]; oneOffs: number }) | null;
   /** Spending added up day by day. */
   pace: { actual: number[]; typical: number[] | null };
-  categories: { id: string; name: string; fixed: boolean; spent: number; typical: number | null }[];
+  /** spent includes this month's one-offs (oneOffs); typical is the habit, one-offs left out. */
+  categories: { id: string; name: string; fixed: boolean; spent: number; oneOffs: number; typical: number | null }[];
   /** Up to 12 months ending with this one. Partial months are missing some accounts. */
   history: (MoneyTotals & { month: string; partial: boolean; current: boolean })[];
   completeFrom: string | null;
@@ -541,6 +544,8 @@ export interface BudgetPlan {
   month: string;
   income: { expected: number; found: number; byHand: boolean; sources: IncomeSource[] };
   saving: number;
+  /** Room for one-offs (celebrations, events): usual months' one-offs, or typed in. */
+  oneOffs: { planned: number; usual: number | null; byHand: boolean };
   bills: BudgetBill[];
   categories: {
     id: string;
@@ -549,18 +554,11 @@ export interface BudgetPlan {
     budget: number;
     from: 'bills' | 'usual' | 'hand';
     usual: number | null;
+    /** This month so far, habit only. */
     spent: number;
+    oneOffs: number;
   }[];
   totals: { fixed: number; everyday: number; forEveryday: number; unplanned: number; budget: number };
-}
-
-export interface MoneyToday {
-  spent: number;
-  budget: number;
-  left: number;
-  day: number;
-  daysInMonth: number;
-  tightest: { name: string; left: number } | null;
 }
 
 /** One merchant's unsettled transactions in the needs-a-look list. */
@@ -649,3 +647,34 @@ export interface PlanSuggestion {
   /** Different things to buy, staples aside. */
   toBuy: number;
 }
+
+export interface OneOffCharge {
+  id: string;
+  date: string;
+  merchant: string;
+  amount: number;
+}
+
+/** One category up close (Money → a category). Amounts are charges as positive numbers. */
+export interface CategoryDetail {
+  category: { id: string; name: string; fixed: boolean };
+  month: string;
+  current: boolean;
+  budget: number | null;
+  /** Its usual month, habit only. */
+  usual: number | null;
+  usualMonths: string[];
+  history: { month: string; habit: number; oneOffs: number; partial: boolean; current: boolean }[];
+  stats: {
+    habit: number;
+    oneOffs: number;
+    charges: number;
+    average: number | null;
+    merchants: { name: string; charges: number; total: number }[];
+    /** Monday first. */
+    weekdays: { total: number; charges: number }[];
+  };
+  maybeOneOffs: OneOffCharge[];
+  oneOffs: OneOffCharge[];
+}
+

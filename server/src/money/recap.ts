@@ -36,7 +36,7 @@ Write:
 
 Rules:
 - Use their numbers, rounded to whole dollars ("$1,240"). Never invent a figure.
-- "usual" is the average of recent complete months; "budget" is their current plan. Mention the budget only where it helps.
+- "usualHabit" is a category's average over recent complete months, leaving out charges they marked as one-offs (special occasions). Compare spent minus ofWhichOneOffs with it, and mention a one-off as an occasion, not as a habit getting worse. "budget" is their current plan; mention it only where it helps.
 - Plain and friendly, not judgmental, no lectures. Suggest something only when it's specific and obvious (a subscription that doubled, say).
 - Saving can be negative: money taken back out of savings.
 - No markdown, no emoji.`;
@@ -87,7 +87,8 @@ export async function composeRecap(month: string) {
       name: c.name,
       fixed: c.fixed,
       spent: whole(c.spent),
-      usual: c.typical === null ? null : whole(c.typical),
+      ofWhichOneOffs: c.oneOffs ? whole(c.oneOffs) : undefined,
+      usualHabit: c.typical === null ? null : whole(c.typical),
       budget: whole(budgetOf.get(c.id) ?? 0),
     })),
     biggestCharges: big.map((t) => ({

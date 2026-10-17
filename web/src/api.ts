@@ -1,5 +1,6 @@
 import type {
   BudgetPlan,
+  CategoryDetail,
   CaptureResult,
   ConnectorStatus,
   FindTimeInput,
@@ -19,7 +20,6 @@ import type {
   MoneyMonth,
   MoneyOverview,
   MoneyStatus,
-  MoneyToday,
   MoneyRecap,
   RecurringCharge,
   ReviewGroup,
@@ -224,7 +224,12 @@ export const api = {
   },
   moneyOverview: (month?: string) => request<MoneyOverview>(`/api/money/overview${month ? `?month=${month}` : ''}`),
   moneyBudget: () => request<BudgetPlan>('/api/money/budget'),
-  setBudgetSettings: (input: { income?: number | null; saving?: number }) =>
+  categoryDetail: (id: string, month?: string) =>
+    request<CategoryDetail>(`/api/money/categories/${id}/detail${month ? `?month=${month}` : ''}`),
+  /** true: a one-off, false: part of the habit, null: undecided. */
+  setOneOff: (id: string, oneOff: boolean | null) =>
+    request<{ ok: true }>(`/api/money/transactions/${id}/one-off`, json('PUT', { oneOff })),
+  setBudgetSettings: (input: { income?: number | null; saving?: number; oneOffs?: number | null }) =>
     request<BudgetPlan>('/api/money/budget/settings', json('PUT', input)),
   /** amount null: back to the category's bills or usual month. */
   setCategoryBudget: (id: string, amount: number | null) =>
@@ -235,7 +240,6 @@ export const api = {
   addBill: (input: { name: string; categoryId: string; amount: number; day: number }) =>
     request<BudgetPlan>('/api/money/bills', json('POST', input)),
   removeBill: (name: string) => request<BudgetPlan>(`/api/money/bills/${encodeURIComponent(name)}`, { method: 'DELETE' }),
-  moneyToday: () => request<MoneyToday | null>('/api/money/today'),
   writeRecap: (month: string) => request<MoneyRecap>(`/api/money/recap/${month}`, { method: 'POST' }),
   moneyRecurring: () => request<{ charges: RecurringCharge[]; ignored: RecurringCharge[] }>('/api/money/recurring'),
   moneyReview: () => request<ReviewGroup[]>('/api/money/review'),

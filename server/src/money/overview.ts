@@ -15,6 +15,10 @@ import { MAX_DAYS } from './simplefin.js';
  * short by how far back the first sync reached; one that starts later than that
  * is simply new (a card first used in November) and doesn't make earlier months
  * partial.
+ *
+ * Charges marked one-off (a birthday dinner) count in what was spent, but a
+ * category's usual month is its habit: one-offs are left out of it and shown
+ * on their own.
  */
 
 /** How many complete months "typical" averages. */
@@ -27,10 +31,12 @@ export interface Overview {
   day: number;
   daysInMonth: number;
   totals: Totals;
-  typical: (Totals & { months: string[] }) | null;
+  /** oneOffs: what usual months spent on one-offs, all categories together. */
+  typical: (Totals & { months: string[]; oneOffs: number }) | null;
   /** Spending added up day by day: this month so far, and a typical month. */
   pace: { actual: number[]; typical: number[] | null };
-  categories: { id: string; name: string; fixed: boolean; spent: number; typical: number | null }[];
+  /** spent includes one-offs (oneOffs, this month); typical is the habit, one-offs left out. */
+  categories: { id: string; name: string; fixed: boolean; spent: number; oneOffs: number; typical: number | null }[];
   history: (Totals & { month: string; partial: boolean; current: boolean })[];
   /** The first complete month, if any. */
   completeFrom: string | null;
@@ -83,8 +89,9 @@ export async function overview(requested?: string): Promise<Overview> {
        WHERE t.kind IN ('INCOME', 'SPENDING', 'SAVING')
        GROUP BY 1, 2`,
     ),
-    prisma.$queryRawUnsafe<{ month: string; categoryId: string | null; total: string }[]>(
-      `SELECT to_char(${local}, 'YYYY-MM') AS month, t."categoryId", sum(t.amount)::text AS total
+    prisma.$queryRawUnsafe<{ month: string; categoryId: string | null; total: string; oneOff: string }[]>(
+      `SELECT to_char(${local}, 'YYYY-MM') AS month, t."categoryId", sum(t.amount)::text AS total,
+         sum(CASE WHEN t."oneOff" THEN t.amount ELSE 0 END)::text AS "oneOff"
        FROM "FinanceTransaction" t WHERE t.kind = 'SPENDING'
        GROUP BY 1, 2`,
     ),
@@ -118,6 +125,8 @@ export async function overview(requested?: string): Promise<Overview> {
     .slice(-TYPICAL_MONTHS);
   const average = (values: number[]) => round(values.reduce((a, b) => a + b, 0) / values.length);
 
+  const oneOffsIn = (m: string) => -byCategory.filter((r) => r.month === m).reduce((n, r) => n + Number(r.oneOff), 0);
+
   let typical: Overview['typical'] = null;
   if (typicalMonths.length) {
     const each = typicalMonths.map(totalsFor);
@@ -126,6 +135,7 @@ export async function overview(requested?: string): Promise<Overview> {
       income: average(each.map((t) => t.income)),
       spending: average(each.map((t) => t.spending)),
       saving: average(each.map((t) => t.saving)),
+      oneOffs: average(typicalMonths.map(oneOffsIn)),
     };
   }
 
@@ -147,15 +157,19 @@ export async function overview(requested?: string): Promise<Overview> {
       )
     : null;
 
-  const categorySpend = (m: string, id: string) =>
-    -Number(byCategory.find((r) => r.month === m && r.categoryId === id)?.total ?? 0);
+  const row = (m: string, id: string) => byCategory.find((r) => r.month === m && r.categoryId === id);
+  const categorySpend = (m: string, id: string) => -Number(row(m, id)?.total ?? 0);
+  const categoryOneOffs = (m: string, id: string) => -Number(row(m, id)?.oneOff ?? 0);
   const categoryRows = categories
     .map((c) => ({
       id: c.id,
       name: c.name,
       fixed: c.fixed,
       spent: round(categorySpend(month, c.id)),
-      typical: typicalMonths.length ? average(typicalMonths.map((m) => categorySpend(m, c.id))) : null,
+      oneOffs: round(categoryOneOffs(month, c.id)),
+      typical: typicalMonths.length
+        ? average(typicalMonths.map((m) => categorySpend(m, c.id) - categoryOneOffs(m, c.id)))
+        : null,
     }))
     .filter((c) => c.spent !== 0 || (c.typical ?? 0) !== 0)
     .sort((a, b) => b.spent - a.spent);

@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { api } from '../api';
 import { InOutChart, monthLabel, PaceChart, type PaceReference } from '../components/MoneyCharts';
 import type { FinanceCategory, MoneyKind, MoneyRecap, MoneyTransaction, ReviewGroup } from '../types';
@@ -52,6 +52,7 @@ type View = 'overview' | 'list' | 'review';
 
 export function MoneyPage() {
   const [params, setParams] = useSearchParams();
+  const navigate = useNavigate();
   const raw = params.get('view');
   const view: View = raw === 'review' || raw === 'list' ? raw : 'overview';
   const month = /^\d{4}-\d{2}$/.test(params.get('month') ?? '') ? params.get('month')! : thisMonth();
@@ -127,7 +128,7 @@ export function MoneyPage() {
         </div>
       )}
       {view === 'overview' && (
-        <Overview month={month} onMonth={(m) => go({ month: m })} onCategory={(id) => go({ view: 'list', category: id })} />
+        <Overview month={month} onMonth={(m) => go({ month: m })} onCategory={(id) => navigate(`/money/c/${id}${month !== thisMonth() ? `?month=${month}` : ''}`)} />
       )}
       {view === 'list' && (
         <Transactions
@@ -238,8 +239,8 @@ function Overview({
       <h2 className="money-section-title">Where it went</h2>
       {(b || d.typical) && (
         <p className="muted small">
-          <i className="key key-tick" /> marks {b ? 'this month’s budget' : `a usual month (${span})`}. Tap a category to see its
-          charges.
+          <i className="key key-tick" /> marks {b ? 'this month’s budget' : `a usual month (${span})`}; gray is one-offs. Tap a category to
+          see what drives it.
         </p>
       )}
       {groups.map(({ title, rows }) =>
@@ -250,33 +251,44 @@ function Overview({
               <span>{usd(rows.reduce((n, c) => n + c.spent, 0), false)}</span>
             </h3>
             <ul>
-              {rows.map((c) => (
-                <li key={c.id}>
-                  <button type="button" className="money-cat" onClick={() => onCategory(c.id)}>
-                    <span className="money-cat-head">
-                      <span>{c.name}</span>
-                      <span>{c.spent < 0 ? `+${usd(c.spent, false)}` : usd(c.spent, false)}</span>
-                    </span>
-                    <span className="money-cat-track">
-                      <span className="money-cat-fill" style={{ width: `${(Math.max(0, c.spent) / scale) * 100}%` }} />
-                      {(markOf(c) ?? 0) > 0 && (
-                        <span className="money-cat-usual" style={{ left: `${((markOf(c) ?? 0) / scale) * 100}%` }} />
-                      )}
-                    </span>
-                    {b ? (
-                      <span className="muted small">
-                        {(budgetOf.get(c.id) ?? 0) > 0
-                          ? c.spent <= (budgetOf.get(c.id) ?? 0)
-                            ? `${usd((budgetOf.get(c.id) ?? 0) - c.spent, false)} left of ${usd(budgetOf.get(c.id) ?? 0, false)}`
-                            : `${usd(c.spent - (budgetOf.get(c.id) ?? 0), false)} over its ${usd(budgetOf.get(c.id) ?? 0, false)} budget`
-                          : 'no budget'}
+              {rows.map((c) => {
+                // The habit is what's measured; one-offs are shown on top of it, in gray.
+                const habit = c.spent - c.oneOffs;
+                const budget = budgetOf.get(c.id) ?? 0;
+                const oneOffNote = c.oneOffs > 0 ? ` · + ${usd(c.oneOffs, false)} one-off` : '';
+                return (
+                  <li key={c.id}>
+                    <button type="button" className="money-cat" onClick={() => onCategory(c.id)}>
+                      <span className="money-cat-head">
+                        <span>{c.name}</span>
+                        <span>{c.spent < 0 ? `+${usd(c.spent, false)}` : usd(c.spent, false)}</span>
                       </span>
-                    ) : (
-                      c.typical !== null && <span className="muted small">usual {usd(c.typical, false)}</span>
-                    )}
-                  </button>
-                </li>
-              ))}
+                      <span className="money-cat-track">
+                        <span className="money-cat-fill" style={{ width: `${(Math.max(0, habit) / scale) * 100}%` }} />
+                        {c.oneOffs > 0 && <span className="money-cat-oneoff" style={{ width: `${(c.oneOffs / scale) * 100}%` }} />}
+                        {(markOf(c) ?? 0) > 0 && (
+                          <span className="money-cat-usual" style={{ left: `${((markOf(c) ?? 0) / scale) * 100}%` }} />
+                        )}
+                      </span>
+                      {b ? (
+                        <span className="muted small">
+                          {budget > 0
+                            ? habit <= budget
+                              ? `${usd(budget - habit, false)} left of ${usd(budget, false)}`
+                              : `${usd(habit - budget, false)} over its ${usd(budget, false)} budget`
+                            : 'no budget'}
+                          {oneOffNote}
+                        </span>
+                      ) : (
+                        <span className="muted small">
+                          {c.typical !== null ? `usual ${usd(c.typical, false)}` : ''}
+                          {oneOffNote}
+                        </span>
+                      )}
+                    </button>
+                  </li>
+                );
+              })}
             </ul>
           </section>
         ) : null,
@@ -483,7 +495,7 @@ function Transactions({
 function useRefresh() {
   const queryClient = useQueryClient();
   return () => {
-    for (const key of ['money-txns', 'money-review', 'money-categories', 'money-overview', 'money-budget', 'money-today']) {
+    for (const key of ['money-txns', 'money-review', 'money-categories', 'money-overview', 'money-budget']) {
       queryClient.invalidateQueries({ queryKey: [key] });
     }
   };
@@ -535,6 +547,7 @@ function TransactionEditor({ txn, categories, onDone }: { txn: MoneyTransaction;
         onSave={(kind, categoryId) => save.mutate({ kind, categoryId })}
         onCancel={onDone}
       />
+      {txn.kind === 'SPENDING' && txn.amount < 0 && <OneOffToggle txn={txn} />}
       {txn.byHand && (
         <button type="button" className="btn btn-small" disabled={reset.isPending} onClick={() => reset.mutate()}>
           Sort it like the rest from {txn.merchant}
@@ -542,6 +555,25 @@ function TransactionEditor({ txn, categories, onDone }: { txn: MoneyTransaction;
       )}
       {(save.error || reset.error) && <p className="error">{(save.error ?? reset.error)!.message}</p>}
     </div>
+  );
+}
+
+/** Marks a charge as a one-off (a special occasion), apart from the category's habit. */
+function OneOffToggle({ txn }: { txn: MoneyTransaction }) {
+  const refresh = useRefresh();
+  const queryClient = useQueryClient();
+  const set = useMutation({
+    mutationFn: (oneOff: boolean) => api.setOneOff(txn.id, oneOff),
+    onSuccess: () => {
+      refresh();
+      queryClient.invalidateQueries({ queryKey: ['money-category'] });
+    },
+  });
+  return (
+    <label className="checkbox money-oneoff-toggle">
+      <input type="checkbox" checked={Boolean(txn.oneOff)} disabled={set.isPending} onChange={(e) => set.mutate(e.target.checked)} />
+      A one-off (a special occasion), not part of the usual habit
+    </label>
   );
 }
 

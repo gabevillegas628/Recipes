@@ -270,3 +270,108 @@ export function InOutChart({ data, onPick }: { data: MoneyOverview; onPick: (mon
     </div>
   );
 }
+
+// ---------- One category: habit and one-offs by month ----------
+
+const HABIT_H = 170;
+const HPAD = { top: 12, right: 4, bottom: 22, left: 40 };
+
+/**
+ * A category's months: the habit as the column, one-offs stacked on top in
+ * gray, and the budget (or usual month) as a line. Tap a month to look at it.
+ */
+export function HabitChart({
+  history,
+  selected,
+  line,
+  onPick,
+}: {
+  history: { month: string; habit: number; oneOffs: number; partial: boolean }[];
+  selected: string;
+  line: { value: number; label: string } | null;
+  onPick: (month: string) => void;
+}) {
+  const [ref, width] = useWidth<HTMLDivElement>();
+  const plotW = Math.max(0, width - HPAD.left - HPAD.right);
+  const plotH = HABIT_H - HPAD.top - HPAD.bottom;
+  const yTicks = ticks(Math.max(...history.map((m) => Math.max(0, m.habit) + m.oneOffs), line?.value ?? 0, 1));
+  const yMax = yTicks[yTicks.length - 1];
+  const band = history.length ? plotW / history.length : 0;
+  const barW = Math.max(4, Math.min(24, band - 8));
+  const y = (v: number) => HPAD.top + plotH - (Math.max(0, v) / yMax) * plotH;
+
+  /** A column segment from `from` to `to`, rounded on top when it's the top of the stack. */
+  const segment = (x0: number, from: number, to: number, roundTop: boolean) => {
+    const top = y(to);
+    const bottom = y(from);
+    if (bottom - top < 0.5) return '';
+    const r = roundTop ? Math.min(4, barW / 2, bottom - top) : 0;
+    return `M${x0},${bottom}V${top + r}Q${x0},${top} ${x0 + r},${top}H${x0 + barW - r}Q${x0 + barW},${top} ${x0 + barW},${top + r}V${bottom}Z`;
+  };
+  const anyOneOffs = history.some((m) => m.oneOffs > 0);
+
+  return (
+    <div className="chart">
+      <div ref={ref} className="chart-frame" style={{ height: HABIT_H }}>
+        {width > 0 && (
+          <svg width={width} height={HABIT_H} role="img" aria-label="Spending in this category by month">
+            {yTicks.map((t) => (
+              <g key={t}>
+                <line className="chart-grid" x1={HPAD.left} x2={HPAD.left + plotW} y1={y(t)} y2={y(t)} />
+                <text className="chart-tick" x={HPAD.left - 6} y={y(t) + 4} textAnchor="end">
+                  {compact(t)}
+                </text>
+              </g>
+            ))}
+            {history.map((m, i) => {
+              const x0 = HPAD.left + i * band + (band - barW) / 2;
+              const habit = Math.max(0, m.habit);
+              const isSelected = m.month === selected;
+              return (
+                <g key={m.month} className={`chart-month ${m.partial ? 'partial' : ''}`}>
+                  {isSelected && <rect className="chart-selected" x={HPAD.left + i * band + 1} y={HPAD.top} width={band - 2} height={plotH} rx={4} />}
+                  <path className="chart-bar chart-bar-out" d={segment(x0, 0, habit, m.oneOffs <= 0)} />
+                  {m.oneOffs > 0 && (
+                    // A 2px surface gap between the habit and the one-offs above it.
+                    <path className="chart-bar chart-bar-oneoff" d={segment(x0, habit + (2 * yMax) / plotH, habit + m.oneOffs, true)} />
+                  )}
+                  <text className={`chart-tick ${isSelected ? 'chart-tick-on' : ''}`} x={HPAD.left + i * band + band / 2} y={HABIT_H - 6} textAnchor="middle">
+                    {monthLabel(m.month, 'short').slice(0, band < 26 ? 1 : 3)}
+                  </text>
+                  <rect className="chart-hit" x={HPAD.left + i * band} y={0} width={band} height={HABIT_H} onClick={() => onPick(m.month)}>
+                    <title>{`${monthLabel(m.month)}: ${usd(m.habit)} habit${m.oneOffs ? `, ${usd(m.oneOffs)} one-offs` : ''}`}</title>
+                  </rect>
+                </g>
+              );
+            })}
+            {line && line.value > 0 && (
+              <g>
+                <line className="chart-target" x1={HPAD.left} x2={HPAD.left + plotW} y1={y(line.value)} y2={y(line.value)} />
+                {/* At the left, clear of the recent months people look at. */}
+                <text className="chart-target-label" x={HPAD.left + 4} y={y(line.value) - 5} textAnchor="start">
+                  {line.label} {compact(line.value)}
+                </text>
+              </g>
+            )}
+          </svg>
+        )}
+      </div>
+      <div className="chart-legend">
+        <span>
+          <i className="key key-out" /> Habit
+        </span>
+        {anyOneOffs && (
+          <span>
+            <i className="key key-oneoff" /> One-offs
+          </span>
+        )}
+        {line && line.value > 0 && (
+          <span>
+            <i className="key key-line key-target" /> {line.label}
+          </span>
+        )}
+        {history.some((m) => m.partial) && <span className="muted">Faded: missing some accounts</span>}
+      </div>
+    </div>
+  );
+}

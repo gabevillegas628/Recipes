@@ -3673,7 +3673,7 @@ html.has-timers .cook {
 
 .money-cat-track {
   position: relative;
-  display: block;
+  display: flex;
   height: 8px;
   border-radius: 4px;
   background: var(--border);
@@ -3681,6 +3681,7 @@ html.has-timers .cook {
 
 .money-cat-fill {
   display: block;
+  flex: none;
   height: 100%;
   border-radius: 4px;
   background: var(--series-out);
@@ -3878,10 +3879,6 @@ html.has-timers .cook {
 .chart-table th {
   font-weight: 600;
   color: var(--muted);
-}
-
-.today-card-wide {
-  grid-column: 1 / -1;
 }
 
 /* ---------- Budget ---------- */
@@ -4116,5 +4113,98 @@ html.has-timers .cook {
   font-size: 12px;
   font-weight: 600;
   vertical-align: 1px;
+}
+
+/* ---------- One-offs and the category page ---------- */
+
+.money-cat-oneoff {
+  display: block;
+  flex: none;
+  height: 100%;
+  margin-left: 2px;
+  border-radius: 0 4px 4px 0;
+  background: var(--muted);
+  opacity: 0.55;
+}
+
+.chart-bar-oneoff {
+  fill: var(--muted);
+  opacity: 0.55;
+}
+
+.key-oneoff {
+  background: var(--muted);
+  opacity: 0.55;
+}
+
+.chart-target {
+  stroke: var(--text);
+  stroke-width: 1.5;
+}
+
+.chart-target-label {
+  fill: var(--text);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.key-target {
+  background: var(--text);
+}
+
+.money-oneoff-toggle {
+  margin: 10px 0;
+  font-size: 15px;
+}
+
+.category-subtitle {
+  margin: 22px 0 6px;
+  font-size: 16px;
+}
+
+.category-bars,
+.category-days {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.category-bars li {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px 0;
+}
+
+.category-bar-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.category-bar-head span:last-child,
+.category-day-value {
+  font-variant-numeric: tabular-nums;
+}
+
+.category-days li {
+  display: grid;
+  grid-template-columns: 40px 1fr 104px;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 0;
+  font-size: 14px;
+}
+
+.category-day-name {
+  color: var(--muted);
+}
+
+.category-day-value {
+  text-align: right;
+}
+
+.category-oneoffs {
+  margin-top: 8px;
 }
 

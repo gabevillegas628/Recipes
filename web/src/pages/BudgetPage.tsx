@@ -37,7 +37,6 @@ export function BudgetPage() {
   const onPlan = (next: BudgetPlan) => {
     queryClient.setQueryData(['money-budget'], next);
     queryClient.invalidateQueries({ queryKey: ['money-overview'] });
-    queryClient.invalidateQueries({ queryKey: ['money-today'] });
   };
   const fit = useMutation({ mutationFn: api.fitBudget, onSuccess: onPlan });
   const reset = useMutation({ mutationFn: api.resetEverydayBudgets, onSuccess: onPlan });
@@ -72,6 +71,10 @@ export function BudgetPage() {
           <span>Saving</span>
           <span>−{usd(b.saving)}</span>
         </div>
+        <div className="budget-line">
+          <span>One-offs &amp; events</span>
+          <span>−{usd(b.oneOffs.planned)}</span>
+        </div>
         <div className="budget-line budget-subtotal">
           <span>Left for everyday spending</span>
           <span>{signed(t.forEveryday)}</span>
@@ -95,7 +98,7 @@ export function BudgetPage() {
           </p>
         )}
         {over && t.forEveryday <= 0 && (
-          <p className="muted small">Bills and saving alone take more than comes in, so everyday spending can’t fit until one of those changes.</p>
+          <p className="muted small">Bills, saving and one-offs alone take more than comes in, so everyday spending can’t fit until one of those changes.</p>
         )}
         <div className="settings-actions">
           {over && t.forEveryday > 0 && (
@@ -114,6 +117,7 @@ export function BudgetPage() {
 
       <Income plan={b} onPlan={onPlan} />
       <Saving plan={b} onPlan={onPlan} />
+      <OneOffRoom plan={b} onPlan={onPlan} />
       <Bills plan={b} onPlan={onPlan} fixedCategories={fixedCategories} />
       <Everyday plan={b} onPlan={onPlan} />
       <Recurring plan={b} onPlan={onPlan} />
@@ -218,6 +222,52 @@ function Saving({ plan: b, onPlan }: { plan: BudgetPlan; onPlan: (p: BudgetPlan)
         <button className="btn" disabled={typed === undefined || !changed || save.isPending}>
           Save
         </button>
+      </form>
+      {save.error && <p className="error">{save.error.message}</p>}
+    </section>
+  );
+}
+
+// ---------- One-offs ----------
+
+function OneOffRoom({ plan: b, onPlan }: { plan: BudgetPlan; onPlan: (p: BudgetPlan) => void }) {
+  const [text, setText] = useState('');
+  const save = useMutation({
+    mutationFn: (oneOffs: number | null) => api.setBudgetSettings({ oneOffs }),
+    onSuccess: (p) => {
+      setText('');
+      onPlan(p);
+    },
+  });
+  const typed = readAmount(text);
+  const o = b.oneOffs;
+
+  return (
+    <section className="budget-section">
+      <h2>
+        One-offs &amp; events <span>{usd(o.planned)} a month</span>
+      </h2>
+      <p className="muted small">
+        Room for special occasions (birthdays, parties, a big night out), kept apart from everyday habits. Mark a charge as a
+        one-off on its category’s page.
+        {o.usual !== null && ` Usual months spent ${usd(o.usual)} a month on them.`}
+      </p>
+      <form
+        className="budget-amount-form"
+        onSubmit={(e: FormEvent) => {
+          e.preventDefault();
+          if (typed !== undefined && typed !== null) save.mutate(typed);
+        }}
+      >
+        <input inputMode="decimal" placeholder="A different amount" value={text} onChange={(e) => setText(e.target.value)} aria-label="One-offs a month" />
+        <button className="btn" disabled={typed === undefined || typed === null || save.isPending}>
+          Use
+        </button>
+        {o.byHand && (
+          <button type="button" className="btn" disabled={save.isPending} onClick={() => save.mutate(null)}>
+            Use the usual
+          </button>
+        )}
       </form>
       {save.error && <p className="error">{save.error.message}</p>}
     </section>
@@ -553,6 +603,7 @@ function EverydayRow({ row: c, onPlan }: { row: BudgetPlan['categories'][number]
         <span className="muted small">
           {c.usual !== null ? `usual ${usd(c.usual)}` : 'no usual yet'}
           {c.from === 'hand' ? ' · set by you' : ''} · {usd(c.spent)} so far
+          {c.oneOffs > 0 ? ` + ${usd(c.oneOffs)} one-off` : ''}
         </span>
       </span>
       <span className="budget-input">

@@ -419,6 +419,9 @@ model FinanceTransaction {
   byHand       Boolean        @default(false)
   /// Sorting couldn't settle it (Zelle, cash, a merchant the AI wasn't sure of).
   needsLook    Boolean        @default(false)
+  /// A special occasion rather than a habit (a birthday dinner): true or false once decided, null until then.
+  /// Usual months and everyday budgets leave one-offs out.
+  oneOff       Boolean?
   createdAt    DateTime       @default(now())
   updatedAt    DateTime       @updatedAt
 
@@ -483,6 +486,8 @@ model FinanceBudgetSettings {
   income    Decimal? @db.Decimal(14, 2)
   /// Planned saving a month.
   saving    Decimal  @default(0) @db.Decimal(14, 2)
+  /// Set aside a month for one-offs (celebrations, events), typed in. Null to use the usual month's one-offs.
+  oneOffs   Decimal? @db.Decimal(14, 2)
   updatedAt DateTime @updatedAt
 }
 
