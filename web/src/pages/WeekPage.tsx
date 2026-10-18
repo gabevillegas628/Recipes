@@ -3,7 +3,6 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api, thumbUrl } from '../api';
 import { GroceryPicker } from '../components/GroceryPicker';
-import { LibraryTabs } from '../components/LibraryTabs';
 import { recipeQuery } from '../components/MealSwitcher';
 import { servingsLabel } from '../scale';
 import type { PlanItem } from '../types';
@@ -22,7 +21,7 @@ export function WeekPage() {
   return (
     <div className="page">
       <header className="list-header">
-        <LibraryTabs />
+        <h1 className="form-title">This week</h1>
       </header>
 
       {plan.error && <p className="error">{plan.error.message}</p>}

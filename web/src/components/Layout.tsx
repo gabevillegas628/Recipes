@@ -3,7 +3,7 @@ import { NavLink, Outlet, useLocation } from 'react-router-dom';
 
 /**
  * Five tabs: Today (home), Kitchen, Add in the middle, Money and Notes.
- * Kitchen opens a small menu: Recipes (recipes, meals, this week) or Groceries.
+ * Kitchen opens a small menu: Recipes, Meals, This week or Groceries.
  * Settings opens from Today.
  */
 export function Layout() {
@@ -14,7 +14,9 @@ export function Layout() {
   const tab = (active: boolean, extra = '') => `tab ${extra} ${active ? 'active' : ''}`;
   // Recipes, meals, this week, each recipe and groceries all live under Kitchen.
   const inKitchen = /^\/(recipes|meals|m\/|r\/|week|new|groceries)/.test(pathname);
-  const inRecipes = inKitchen && !pathname.startsWith('/groceries');
+  // Each recipe (and a new one) counts as Recipes; each meal as Meals.
+  const inRecipes = /^\/(recipes|r\/|new)/.test(pathname);
+  const inMeals = /^\/(meals|m\/)/.test(pathname);
 
   return (
     <div className="app">
@@ -42,6 +44,14 @@ export function Layout() {
             <NavLink to="/recipes" role="menuitem" className={inRecipes ? 'on' : ''}>
               <PotIcon />
               Recipes
+            </NavLink>
+            <NavLink to="/meals" role="menuitem" className={inMeals ? 'on' : ''}>
+              <PlateIcon />
+              Meals
+            </NavLink>
+            <NavLink to="/week" role="menuitem">
+              <CalendarIcon />
+              This week
             </NavLink>
             <NavLink to="/groceries" role="menuitem">
               <CartIcon />
@@ -95,6 +105,25 @@ function PotIcon() {
     <svg {...iconProps}>
       <path d="M4 10h16v6a4 4 0 0 1-4 4H8a4 4 0 0 1-4-4z" />
       <path d="M2 10h20M9 7c0-1.2 1.3-2 3-2s3 .8 3 2" />
+    </svg>
+  );
+}
+
+/** A plate with a fork and knife, for Meals. */
+function PlateIcon() {
+  return (
+    <svg {...iconProps}>
+      <circle cx="12" cy="12" r="5" />
+      <path d="M2.5 3v5a1.5 1.5 0 0 0 3 0V3M4 9.5V21M21 3c-1.5 1-2.5 3-2.5 6s1 3 2.5 3v9" />
+    </svg>
+  );
+}
+
+function CalendarIcon() {
+  return (
+    <svg {...iconProps}>
+      <rect x="3" y="5" width="18" height="16" rx="2" />
+      <path d="M3 10h18M8 3v4M16 3v4" />
     </svg>
   );
 }

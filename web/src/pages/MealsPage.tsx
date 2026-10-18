@@ -2,7 +2,6 @@ import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { api } from '../api';
 import { Collage } from '../components/Collage';
-import { LibraryTabs } from '../components/LibraryTabs';
 
 export function MealsPage() {
   const meals = useQuery({ queryKey: ['meals'], queryFn: api.meals });
@@ -10,7 +9,7 @@ export function MealsPage() {
   return (
     <div className="page">
       <header className="list-header">
-        <LibraryTabs />
+        <h1 className="form-title">Meals</h1>
       </header>
 
       {meals.error && <p className="error">{meals.error.message}</p>}
