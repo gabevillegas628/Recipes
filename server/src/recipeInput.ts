@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { normalizeCategories } from './categoryList.js';
 
 const section = z.object({
   title: z
@@ -45,10 +46,8 @@ export const recipeInput = z.object({
     .string()
     .regex(/^[0-9a-f-]{36}\.webp$/, 'Invalid uploaded image')
     .optional(),
-  tags: z
-    .array(z.string())
-    .default([])
-    .transform((tags) => [...new Set(tags.map((t) => t.trim().toLowerCase()).filter(Boolean))]),
+  /** Categories (categoryList.ts), in any case; anything else is dropped. None and Claude sorts it after saving. */
+  tags: z.array(z.string()).default([]).transform(normalizeCategories),
 });
 
 export type RecipeInput = z.infer<typeof recipeInput>;

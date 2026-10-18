@@ -233,14 +233,6 @@ function parseIngredients(value: Json): Section[] {
   return items.length ? [{ title: null, items }] : [];
 }
 
-function parseTags(recipe: JsonObject): string[] {
-  const tags = [...asArray(recipe.recipeCategory), ...asArray(recipe.recipeCuisine)]
-    .flatMap((t) => cleanText(t).split(','))
-    .map((t) => t.trim().toLowerCase())
-    .filter((t) => t && t.length <= 30);
-  return [...new Set(tags)].slice(0, 6);
-}
-
 export function fromSchemaRecipe(recipe: JsonObject, pageUrl: string): RecipeDraft {
   const image = pickImage(recipe.image) ?? pickImage(recipe.thumbnailUrl);
   let imageUrl: string | null = null;
@@ -267,6 +259,7 @@ export function fromSchemaRecipe(recipe: JsonObject, pageUrl: string): RecipeDra
     ingredients: parseIngredients(recipe.recipeIngredient ?? recipe.ingredients),
     instructions: parseInstructions(recipe.recipeInstructions),
     notes: null,
-    tags: parseTags(recipe),
+    // The site's own categories don't match ours; Claude sorts it after saving.
+    tags: [],
   };
 }

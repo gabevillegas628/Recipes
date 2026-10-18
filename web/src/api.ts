@@ -37,7 +37,6 @@ import type {
   RecipeInput,
   RecipeSummary,
   SearchResult,
-  TagCount,
   TodayCalendar,
   User,
   Weather,
@@ -77,10 +76,11 @@ export const api = {
     request<User>('/api/auth/login', json('POST', { email, password })),
   logout: () => request<{ ok: true }>('/api/auth/logout', { method: 'POST' }),
 
-  listRecipes: (params: { q?: string; tag?: string; favorite?: boolean }) => {
+  /** Recipes in every one of `tags`. */
+  listRecipes: (params: { q?: string; tags?: string[]; favorite?: boolean }) => {
     const search = new URLSearchParams();
     if (params.q) search.set('q', params.q);
-    if (params.tag) search.set('tag', params.tag);
+    for (const t of params.tags ?? []) search.append('tag', t);
     if (params.favorite) search.set('favorite', 'true');
     const qs = search.toString();
     return request<RecipeSummary[]>(`/api/recipes${qs ? `?${qs}` : ''}`);
@@ -93,7 +93,6 @@ export const api = {
   setFavorite: (id: string, favorite: boolean) =>
     request<{ favorite: boolean }>(`/api/recipes/${id}/favorite`, json('PATCH', { favorite })),
   deleteRecipe: (id: string) => request<void>(`/api/recipes/${id}`, { method: 'DELETE' }),
-  listTags: () => request<TagCount[]>('/api/tags'),
 
   importConfig: () => request<{ aiEnabled: boolean }>('/api/import/config'),
   importUrl: (url: string) => request<ImportResult>('/api/import/url', json('POST', { url })),

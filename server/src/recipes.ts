@@ -1,12 +1,13 @@
 import { prisma } from './db.js';
 import type { Prisma } from './generated/prisma/client.js';
 import { deleteImage, saveImageFromUrl, uploadExists } from './images.js';
+import { scheduleCategorize } from './categorize.js';
 import { scheduleIndex } from './ingredients.js';
 import type { RecipeInput } from './recipeInput.js';
 
 /**
  * Recipe writes shared by the REST routes, the import worker and (later) the MCP tools.
- * Handles tags and downloading images.
+ * Handles categories (tags) and downloading images; Claude sorts a recipe saved with none.
  */
 
 export const withTags = { tags: { select: { name: true }, orderBy: { name: 'asc' } } } as const;
@@ -32,7 +33,7 @@ export async function searchWhere(query: string): Promise<Prisma.RecipeWhereInpu
           { title: { contains: word, mode: 'insensitive' } },
           { description: { contains: word, mode: 'insensitive' } },
           { notes: { contains: word, mode: 'insensitive' } },
-          { tags: { some: { name: { contains: word.toLowerCase() } } } },
+          { tags: { some: { name: { contains: word, mode: 'insensitive' } } } },
           { id: { in: ingredientHits.map((r) => r.id) } },
         ],
       } satisfies Prisma.RecipeWhereInput;
@@ -77,6 +78,7 @@ export async function createRecipe(
     include: withTags,
   });
   scheduleIndex();
+  if (!input.tags.length) scheduleCategorize();
   return serialize(recipe);
 }
 
@@ -106,6 +108,7 @@ export async function updateRecipe(id: string, input: RecipeInput) {
   });
   if (image !== existing.image) await deleteImage(existing.image);
   scheduleIndex();
+  if (!input.tags.length) scheduleCategorize();
   return serialize(recipe);
 }
 

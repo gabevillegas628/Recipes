@@ -35,7 +35,6 @@ const extraction = z.object({
   ingredients: z.array(section),
   instructions: z.array(section),
   notes: z.string().nullable().describe('Tips, substitutions or storage notes from the recipe author'),
-  tags: z.array(z.string()).describe('2-5 short lowercase tags, e.g. "dinner", "chicken", "vegetarian"'),
 });
 
 const SYSTEM = `You extract recipes from web pages, pasted text and photos for a personal recipe box.
@@ -240,6 +239,7 @@ function draftFrom(result: z.infer<typeof written>, sourceUrl: string | null): R
     ingredients: result.ingredients,
     instructions: result.instructions,
     notes: result.notes,
-    tags: result.tags,
+    // Claude sorts it into the categories after saving (categorize.ts).
+    tags: [],
   };
 }

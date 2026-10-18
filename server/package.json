@@ -11,7 +11,8 @@
     "db:migrate": "prisma migrate dev && prisma generate",
     "db:studio": "prisma studio",
     "user:create": "tsx --env-file-if-exists=.env src/scripts/createUser.ts",
-    "simplefin:check": "tsx src/scripts/simplefinCheck.ts"
+    "simplefin:check": "tsx src/scripts/simplefinCheck.ts",
+    "recipes:resort": "tsx --env-file-if-exists=.env src/scripts/resortRecipes.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.128.0",

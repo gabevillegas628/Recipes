@@ -55,7 +55,6 @@ function RecipeView({ recipe }: { recipe: Recipe }) {
     mutationFn: () => api.deleteRecipe(recipe.id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['recipes'] });
-      queryClient.invalidateQueries({ queryKey: ['tags'] });
       navigate('/recipes', { replace: true });
     },
   });

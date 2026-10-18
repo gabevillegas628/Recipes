@@ -16,7 +16,11 @@ import {
 
 const listQuery = z.object({
   q: z.string().trim().optional(),
-  tag: z.string().trim().toLowerCase().optional(),
+  /** Categories, repeated for several: recipes in all of them. */
+  tag: z
+    .union([z.string(), z.array(z.string())])
+    .optional()
+    .transform((t) => (t === undefined ? [] : [t].flat()).map((s) => s.trim()).filter(Boolean)),
   favorite: z.enum(['true']).optional(),
 });
 
@@ -29,7 +33,7 @@ export async function recipeRoutes(app: FastifyInstance) {
     const { q, tag, favorite } = listQuery.parse(request.query);
 
     const where: Prisma.RecipeWhereInput = { AND: q ? await searchWhere(q) : [] };
-    if (tag) where.tags = { some: { name: tag } };
+    for (const name of tag) (where.AND as Prisma.RecipeWhereInput[]).push({ tags: { some: { name } } });
     if (favorite) where.favorite = true;
 
     const recipes = await prisma.recipe.findMany({
@@ -106,12 +110,4 @@ export async function recipeRoutes(app: FastifyInstance) {
     return reply.code(204).send();
   });
 
-  app.get('/api/tags', async () => {
-    const tags = await prisma.tag.findMany({
-      where: { recipes: { some: {} } },
-      orderBy: { name: 'asc' },
-      select: { name: true, _count: { select: { recipes: true } } },
-    });
-    return tags.map((t) => ({ name: t.name, count: t._count.recipes }));
-  });
 }

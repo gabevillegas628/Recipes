@@ -30,7 +30,6 @@ export function BulkImportPage() {
   const doneCount = jobs.data?.filter((j) => j.status === 'DONE').length ?? 0;
   useEffect(() => {
     queryClient.invalidateQueries({ queryKey: ['recipes'] });
-    queryClient.invalidateQueries({ queryKey: ['tags'] });
   }, [doneCount, queryClient]);
 
   const submit = useMutation({

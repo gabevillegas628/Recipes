@@ -163,11 +163,6 @@ export interface User {
   createdAt?: string;
 }
 
-export interface TagCount {
-  name: string;
-  count: number;
-}
-
 export type NoteKind = 'NOTE' | 'REMINDER' | 'APPOINTMENT';
 
 /** A note, reminder or appointment. All-day times sit at 12:00 UTC on their date. */

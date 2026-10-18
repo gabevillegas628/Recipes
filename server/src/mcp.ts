@@ -1,5 +1,6 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
+import { CATEGORY_GROUPS } from './categoryList.js';
 import { prisma } from './db.js';
 import type { Prisma } from './generated/prisma/client.js';
 import { ImportError } from './import/errors.js';
@@ -47,7 +48,9 @@ const recipeFields = {
   tags: z
     .array(z.string())
     .nullish()
-    .describe('2-5 short lowercase tags like "dinner", "chicken", "vegetarian", "quick"'),
+    .describe(
+      `Categories, only from these, every one that fits: ${CATEGORY_GROUPS.map((g) => `${g.name}: ${g.values.join(', ')}`).join('. ')}. Leave out and the app sorts it itself.`,
+    ),
   imageUrl: z
     .string()
     .nullish()
@@ -157,14 +160,14 @@ export function buildMcpServer(baseUrl: string) {
         "Search the user's recipe box by words in the title, description, ingredients or tags. Call with no query to list the most recent recipes. Use get_recipe for the full recipe.",
       inputSchema: {
         query: z.string().nullish().describe('Words to look for, e.g. "chickpea curry"'),
-        tag: z.string().nullish().describe('Only recipes with this tag'),
+        tag: z.string().nullish().describe('Only recipes in this category, e.g. "Soup & stew" or "Chicken"'),
         limit: z.number().int().min(1).max(50).nullish().describe('Default 20'),
       },
       annotations: { readOnlyHint: true },
     },
     async ({ query, tag, limit }) => {
       const and = await searchWhere(query ?? '');
-      if (tag) and.push({ tags: { some: { name: tag.trim().toLowerCase() } } });
+      if (tag) and.push({ tags: { some: { name: { equals: tag.trim(), mode: 'insensitive' } } } });
       const where: Prisma.RecipeWhereInput = { AND: and };
 
       const recipes = await prisma.recipe.findMany({

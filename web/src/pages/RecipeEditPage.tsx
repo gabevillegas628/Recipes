@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState, type FormEvent, type ReactNode } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import { CATEGORY_GROUPS, normalizeCategories } from '../../../server/src/categoryList';
 import { api, imageUrl } from '../api';
 import { PhotoInput } from '../components/PhotoInput';
 import { shrinkPhoto } from '../photos';
@@ -35,7 +36,8 @@ interface FormState {
   ingredients: string;
   instructions: string;
   notes: string;
-  tags: string;
+  /** Categories (categoryList.ts). */
+  tags: string[];
   sourceUrl: string;
   /** A new image to download on save. */
   imageUrl: string;
@@ -54,7 +56,7 @@ function toForm(r: Initial): FormState {
     ingredients: sectionsToText(r?.ingredients ?? []),
     instructions: sectionsToText(r?.instructions ?? []),
     notes: r?.notes ?? '',
-    tags: r?.tags.join(', ') ?? '',
+    tags: normalizeCategories(r?.tags ?? []),
     sourceUrl: r?.sourceUrl ?? '',
     imageUrl: r && 'imageUrl' in r ? (r.imageUrl ?? '') : '',
   };
@@ -112,7 +114,7 @@ export function RecipeForm({
         instructions: textToSections(form.instructions),
         notes: form.notes || null,
         favorite: recipe?.favorite ?? false,
-        tags: form.tags.split(','),
+        tags: form.tags,
         imageUrl: newImage ? newImage : removeImage ? null : undefined,
         uploadedImage: uploaded ?? undefined,
       };
@@ -121,7 +123,6 @@ export function RecipeForm({
     onSuccess: (saved) => {
       queryClient.setQueryData(['recipe', saved.id], saved);
       queryClient.invalidateQueries({ queryKey: ['recipes'] });
-      queryClient.invalidateQueries({ queryKey: ['tags'] });
       navigate(`/r/${saved.id}`, { replace: true });
     },
   });
@@ -220,10 +221,35 @@ export function RecipeForm({
         <textarea rows={3} value={form.notes} onChange={set('notes')} />
       </label>
 
-      <label className="field">
-        <span>Tags</span>
-        <input value={form.tags} onChange={set('tags')} placeholder="dinner, chicken, quick" />
-      </label>
+      <div className="field">
+        <span>Categories</span>
+        <small>
+          {form.tags.length ? 'Tap to add or remove.' : 'Pick some, or leave them all off and Claude sorts it after saving.'}
+        </small>
+        {CATEGORY_GROUPS.map((g) => (
+          <div key={g.key} className="category-pick">
+            <span className="category-pick-name">{g.name}</span>
+            <div className="chips wrap-chips">
+              {g.values.map((c) => {
+                const on = form.tags.includes(c);
+                return (
+                  <button
+                    key={c}
+                    type="button"
+                    className={`chip ${on ? 'chip-on' : ''}`}
+                    aria-pressed={on}
+                    onClick={() =>
+                      setForm((f) => ({ ...f, tags: on ? f.tags.filter((t) => t !== c) : normalizeCategories([...f.tags, c]) }))
+                    }
+                  >
+                    {c}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        ))}
+      </div>
 
       <label className="field">
         <span>Source URL</span>

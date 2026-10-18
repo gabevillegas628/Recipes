@@ -2,6 +2,7 @@ import { buildApp } from './app.js';
 import { kickCalendarSync } from './calendarSync.js';
 import { env } from './env.js';
 import { scheduleSort } from './groceries.js';
+import { scheduleCategorize } from './categorize.js';
 import { scheduleIndex } from './ingredients.js';
 import { classify } from './money/classify.js';
 import { recapDue } from './money/recap.js';
@@ -13,6 +14,8 @@ await app.listen({ port: env.port, host: '0.0.0.0' });
 scheduleSort();
 // Read the ingredients of recipes saved before the index existed, or changed since.
 scheduleIndex(30_000);
+// Sort any recipes with no categories (saved while the AI was down, or after a re-sort).
+scheduleCategorize(40_000);
 // Send anything saved while Google was unreachable, now and every few minutes.
 kickCalendarSync();
 setInterval(kickCalendarSync, 5 * 60 * 1000);
