@@ -128,12 +128,70 @@ export async function extractWithAi(
 
 const WRITE_SYSTEM = `You write recipes for a family's personal recipe box, on request: "a weeknight chili", "something with the leftover chicken and rice", "a gluten-free birthday cake".
 
-Write one dependable, well-tested-style recipe a home cook can follow on a phone in the kitchen: common grocery-store ingredients, US measurements, and clear steps, one action each, with temperatures, times and doneness cues. Honor every constraint in the request (ingredients to use up, diet, time, equipment, servings). With no serving count given, make 4 servings. Group ingredients and steps into sections (e.g. "For the sauce") only when the dish has distinct parts. Put useful tips, substitutions or make-ahead and storage notes in notes. Give honest prep and cook times.`;
+Write one dependable, well-tested-style recipe a home cook can follow on a phone in the kitchen: common grocery-store ingredients, US measurements, and clear steps, one action each, with temperatures, times and doneness cues. Honor every constraint in the request (ingredients to use up, diet, time, equipment, servings). With no serving count given, make 4 servings. Group ingredients and steps into sections (e.g. "For the sauce") only when the dish has distinct parts. Put useful tips, substitutions or make-ahead and storage notes in notes. Give honest prep and cook times. When a dish has been picked from ideas offered for the request, write that dish.`;
 
 const written = extraction.omit({ found: true });
 
-/** A new recipe, written by Claude from a request like "a weeknight chili". */
-export async function writeRecipe(request: string): Promise<RecipeDraft> {
+/** A dish to offer for a request, before writing the whole recipe. */
+export type RecipeIdea = { title: string; blurb: string };
+
+export const recipeIdea = z.object({
+  title: z.string().describe('The dish, as a recipe title, e.g. "Sheet-Pan Lemon Chicken"'),
+  blurb: z.string().describe('One short line, under 12 words, on what it is like and why it fits'),
+});
+
+/** How to pick the ideas; shared with Capture, which offers them while sorting. */
+export const IDEAS_GUIDE = `Offer three dishes that fit the request, different enough to choose between: different main ingredients, cuisines or styles, so that if one doesn't suit (a disliked ingredient, a diet), another does. Read the situation for what fits (cold weather, a crowd, a weeknight), but don't build every idea around something mentioned only in passing. When the request names one specific dish ("a weeknight chili recipe", "Mom's style pot roast"), offer just that one.`;
+
+const IDEAS_SYSTEM = `You suggest dishes for a family's recipe box, on request: "a nice soup for a cold night", "something with the leftover chicken and rice". ${IDEAS_GUIDE} Never repeat a dish already offered.`;
+
+/** A few dishes for a request, without writing them out: cheap, for "other ideas". */
+export async function suggestRecipes(request: string, offered: string[]): Promise<RecipeIdea[]> {
+  if (!client) throw new ImportError("Suggesting recipes needs AI, which isn't set up (no ANTHROPIC_API_KEY).");
+
+  const response = await client.beta.messages.parse({
+    model: env.anthropicModel,
+    max_tokens: 2000,
+    betas: ['server-side-fallback-2026-07-01'],
+    fallbacks: 'default',
+    output_config: { effort: 'low', format: zodOutputFormat(z.object({ ideas: z.array(recipeIdea) })) },
+    system: IDEAS_SYSTEM,
+    messages: [
+      {
+        role: 'user',
+        content: `<request>\n${request.slice(0, 5000)}\n</request>${
+          offered.length ? `\n\nAlready offered, so suggest others: ${offered.join('; ')}` : ''
+        }`,
+      },
+    ],
+  });
+
+  console.info(
+    JSON.stringify({
+      msg: 'ai recipe ideas',
+      model: response.model,
+      stopReason: response.stop_reason,
+      inputTokens: response.usage.input_tokens,
+      outputTokens: response.usage.output_tokens,
+    }),
+  );
+
+  if (response.stop_reason === 'refusal') throw new ImportError('The AI declined to suggest recipes for that.');
+  const ideas = cleanIdeas(response.parsed_output?.ideas ?? []);
+  if (!ideas.length) throw new ImportError("The AI couldn't come up with recipes for that. Try saying it another way.");
+  return ideas;
+}
+
+/** Trimmed, untitled ones dropped, at most four. */
+export function cleanIdeas(ideas: RecipeIdea[]): RecipeIdea[] {
+  return ideas
+    .map((i) => ({ title: i.title.trim(), blurb: i.blurb.trim() }))
+    .filter((i) => i.title)
+    .slice(0, 4);
+}
+
+/** A new recipe, written by Claude from a request like "a weeknight chili", or the idea picked for it. */
+export async function writeRecipe(request: string, idea?: RecipeIdea): Promise<RecipeDraft> {
   if (!client) throw new ImportError("Writing recipes needs AI, which isn't set up (no ANTHROPIC_API_KEY).");
 
   const response = await client.beta.messages.parse({
@@ -143,7 +201,14 @@ export async function writeRecipe(request: string): Promise<RecipeDraft> {
     fallbacks: 'default',
     output_config: { effort: 'low', format: zodOutputFormat(written) },
     system: WRITE_SYSTEM,
-    messages: [{ role: 'user', content: `<request>\n${request.slice(0, 5000)}\n</request>` }],
+    messages: [
+      {
+        role: 'user',
+        content: `<request>\n${request.slice(0, 5000)}\n</request>${
+          idea ? `\n\nPicked from the ideas offered: ${idea.title}. ${idea.blurb}` : ''
+        }`,
+      },
+    ],
   });
 
   console.info(

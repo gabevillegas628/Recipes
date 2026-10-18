@@ -207,6 +207,12 @@ export interface NoteInput {
   recurrence: string | null;
 }
 
+/** A dish Claude offers for a recipe request, before writing it out. */
+export interface RecipeIdea {
+  title: string;
+  blurb: string;
+}
+
 /** What capture read out of the input: local dates and times, not yet saved. */
 export interface NoteDraft {
   kind: NoteKind;
@@ -225,6 +231,7 @@ export interface NoteDraft {
 export type CaptureResult =
   | { kind: 'note'; note: NoteDraft; slot?: TaskSlot }
   | { kind: 'recipe'; recipe: ImportResult }
+  | { kind: 'recipeIdeas'; request: string; ideas: RecipeIdea[] }
   | { kind: 'groceries'; items: string[] }
   | { kind: 'findTime'; find: FindTimeResult };
 

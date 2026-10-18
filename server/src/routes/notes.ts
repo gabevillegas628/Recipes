@@ -1,6 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk';
 import multipart from '@fastify/multipart';
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { requireAuth } from '../auth.js';
 import { capture, captureEnabled, findTimeForReminder } from '../capture.js';
@@ -8,6 +8,7 @@ import { FindTimeError } from '../findTimeService.js';
 import { GoogleApiError, GoogleAuthError } from '../google.js';
 import { prisma } from '../db.js';
 import { ImportError } from '../import/errors.js';
+import { suggestRecipes, writeRecipe } from '../import/ai.js';
 import { FetchError } from '../import/safeFetch.js';
 import {
   createNote,
@@ -25,6 +26,25 @@ import {
 
 const idParams = z.object({ id: z.string() });
 const MAX_PHOTOS = 4;
+
+const idea = z.object({ title: z.string().trim().min(1).max(200), blurb: z.string().max(500) });
+const ideasBody = z.object({ request: z.string().trim().min(1).max(5000), offered: z.array(z.string().max(200)).max(30).default([]) });
+const writeBody = z.object({ request: z.string().trim().min(1).max(5000), idea });
+
+/** Unreadable input and Claude being down, as messages for the person; anything else is rethrown. */
+function aiTrouble(err: unknown, request: FastifyRequest, reply: FastifyReply) {
+  if (err instanceof ImportError || err instanceof FetchError) {
+    return reply.code(422).send({ error: err.message });
+  }
+  // Claude outages, overload and rate limits (the SDK has already retried these).
+  if (err instanceof Anthropic.APIError && (err.status === undefined || err.status === 429 || err.status >= 500)) {
+    request.log.warn({ err }, 'claude unavailable');
+    return reply.code(503).send({
+      error: "The AI service is having trouble right now. Your text is still here, so try again in a few minutes.",
+    });
+  }
+  throw err;
+}
 
 export async function noteRoutes(app: FastifyInstance) {
   await app.register(multipart, { limits: { fileSize: 25 * 1024 * 1024, files: MAX_PHOTOS } });
@@ -56,17 +76,30 @@ export async function noteRoutes(app: FastifyInstance) {
       const me = request.userId ? await prisma.user.findUnique({ where: { id: request.userId }, select: { name: true } }) : null;
       return await capture(text, photos, now || new Date().toUTCString(), me?.name ?? null);
     } catch (err) {
-      if (err instanceof ImportError || err instanceof FetchError) {
-        return reply.code(422).send({ error: err.message });
-      }
-      // Claude outages, overload and rate limits (the SDK has already retried these).
-      if (err instanceof Anthropic.APIError && (err.status === undefined || err.status === 429 || err.status >= 500)) {
-        request.log.warn({ err }, 'claude unavailable');
-        return reply.code(503).send({
-          error: "The AI service is having trouble right now. Your text is still here, so try again in a few minutes.",
-        });
-      }
-      throw err;
+      return aiTrouble(err, request, reply);
+    }
+  });
+
+  /** Other dishes for a recipe request, besides those already offered. */
+  app.post('/api/capture/recipe-ideas', async (request, reply) => {
+    const parsed = ideasBody.safeParse(request.body);
+    if (!parsed.success) return reply.code(400).send({ error: 'What kind of recipe?' });
+    try {
+      return { ideas: await suggestRecipes(parsed.data.request, parsed.data.offered) };
+    } catch (err) {
+      return aiTrouble(err, request, reply);
+    }
+  });
+
+  /** Writes out the dish picked from the ideas, for the recipe review. Saves nothing. */
+  app.post('/api/capture/write-recipe', async (request, reply) => {
+    const parsed = writeBody.safeParse(request.body);
+    if (!parsed.success) return reply.code(400).send({ error: 'Which recipe?' });
+    try {
+      const draft = await writeRecipe(parsed.data.request, parsed.data.idea);
+      return { draft, method: 'generated', duplicateOf: null };
+    } catch (err) {
+      return aiTrouble(err, request, reply);
     }
   });
 

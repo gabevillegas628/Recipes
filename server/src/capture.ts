@@ -5,7 +5,7 @@ import { env } from './env.js';
 import { saveImage } from './images.js';
 import type { RecipeDraft, ImportMethod } from './import/draft.js';
 import { ImportError } from './import/errors.js';
-import { writeRecipe } from './import/ai.js';
+import { cleanIdeas, IDEAS_GUIDE, recipeIdea, writeRecipe, type RecipeIdea } from './import/ai.js';
 import { extractFromPhotos, extractFromText, extractFromUrl, preparePhotos } from './import/extract.js';
 import { FetchError } from './import/safeFetch.js';
 import { FindTimeError, personFor, runFindTime, type FindTimeInput, type FindTimeResult } from './findTimeService.js';
@@ -43,6 +43,7 @@ const classification = z.object({
   endTime: z.string().nullable().describe('HH:MM, 24-hour, when the appointment ends, if stated'),
   location: z.string().nullable().describe('Appointments only: the place or address, as given'),
   groceryItems: z.array(z.string()).describe('Groceries only: one item per entry, with amounts. Empty otherwise.'),
+  recipeIdeas: z.array(recipeIdea).describe('writeRecipe only: dishes to offer before writing one. Empty otherwise.'),
   group: z.string().describe('Notes only: the group to file it under, from the existing groups when one fits. "" otherwise.'),
   repeat: z
     .object({
@@ -103,7 +104,8 @@ Then fill in the fields:
 - date and time: resolve relative dates ("next Tuesday", "the 14th", "tomorrow at 3") against the current date given below. When a flyer gives a month and day with no year, use the next time that date comes up. For reminders, see above. If only a time is given for a reminder, use today, or tomorrow if that time has passed.
 - repeat: only when it recurs ("every Tuesday", "the first Monday of each month", "every other week", "daily until Friday"). date is then the first occurrence on or after today.
 - group (notes only): what the note is about, as a short plural-free heading people would file it under: "Medical" (prescriptions, doses, doctors' instructions), "Work", "Ideas", "Gifts", "House", "Kids". Use one of the existing groups listed below whenever it fits, spelled exactly as listed, even if the fit is loose; only start a new one when none does. "" for anything that isn't a note.
-- For a recipe, a recipe to write or a grocery list, only kind and title matter (plus groceryItems for groceries).
+- For a recipe, a recipe to write or a grocery list, only kind and title matter (plus groceryItems for groceries, and recipeIdeas for a recipe to write).
+- recipeIdeas (writeRecipe only): ${IDEAS_GUIDE}
 - findTime: title is what the appointment will be called ("Eye appointment: Evan"); details and location as for appointments. In schedule:
   - people: who has to be there, by household name. "Me" or "I" is the person typing; "us" or "we" is the two adults. For a child's appointment, list just the child; the app adds a parent to take them.
   - from and to: the days to look at. "The week of 11/2" is that Monday to the Sunday after; "next week" is next Monday to Sunday; "this month" runs from today; with no dates given, the next two weeks. Never before today.
@@ -139,6 +141,7 @@ type RecipeResult = {
 export type CaptureResult =
   | { kind: 'note'; note: NoteDraft; slot?: Slot }
   | { kind: 'recipe'; recipe: RecipeResult }
+  | { kind: 'recipeIdeas'; request: string; ideas: RecipeIdea[] }
   | { kind: 'groceries'; items: string[] }
   | { kind: 'findTime'; find: FindTimeResult };
 
@@ -196,7 +199,10 @@ export async function capture(text: string, photos: Buffer[], now: string, userN
 
   if (result.kind === 'recipe') return { kind: 'recipe', recipe: await recipeFrom(text, photos) };
   if (result.kind === 'writeRecipe' && text) {
-    return { kind: 'recipe', recipe: { draft: await writeRecipe(text), method: 'generated', duplicateOf: null } };
+    // A few to pick from first; one specific dish asked for is written straight away.
+    const ideas = cleanIdeas(result.recipeIdeas);
+    if (ideas.length > 1) return { kind: 'recipeIdeas', request: text, ideas };
+    return { kind: 'recipe', recipe: { draft: await writeRecipe(text, ideas[0]), method: 'generated', duplicateOf: null } };
   }
   if (result.kind === 'findTime' && result.schedule) return { kind: 'findTime', find: await findTimeFrom(result, household) };
   if (result.kind === 'groceries' && result.groceryItems.length > 0) {

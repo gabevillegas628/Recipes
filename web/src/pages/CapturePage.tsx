@@ -8,14 +8,14 @@ import { FindTimeResults } from '../components/FindTimeResults';
 import { NoteForm } from '../components/NoteForm';
 import { dayLabel, inputFromValues, localDate, nowInWords, valuesFromDraft, type FormKind, type NoteValues } from '../notes';
 import { shrinkPhoto } from '../photos';
-import type { FindTimeInput, FindTimeResult, NoteDraft, TaskSlot } from '../types';
+import type { FindTimeInput, FindTimeResult, NoteDraft, RecipeIdea, TaskSlot } from '../types';
 import { extractUrl, PhotoPicker } from './ImportPage';
 
 /**
  * The Add tab: type, dictate, paste or photograph anything, and AI sorts it into
  * an appointment, reminder, note, recipe or grocery list, finds a time for
  * something, or writes a recipe asked for. Notes get a quick check before saving; recipes open in the usual
- * recipe review; grocery lists show the items to add; a time search shows options,
+ * recipe review (a recipe asked for offers a few dishes first, and the one picked is written out); grocery lists show the items to add; a time search shows options,
  * and the one picked becomes an appointment to check.
  */
 export function CapturePage() {
@@ -26,6 +26,8 @@ export function CapturePage() {
   const [draft, setDraft] = useState<NoteDraft | null>(null);
   const [groceries, setGroceries] = useState<string | null>(null);
   const [found, setFound] = useState<FindTimeResult | null>(null);
+  // Dishes offered for a recipe request, and every one offered so far, so "other ideas" are new.
+  const [ideas, setIdeas] = useState<{ request: string; ideas: RecipeIdea[]; offered: string[] } | null>(null);
   // A task's auto-picked time, and other times for it when asked.
   const [slot, setSlot] = useState<TaskSlot | null>(null);
   const [otherTimes, setOtherTimes] = useState<FindTimeResult | null>(null);
@@ -55,6 +57,9 @@ export function CapturePage() {
       api.capture(text, await Promise.all(photos.map((p) => shrinkPhoto(p))), nowInWords()),
     onSuccess: (result) => {
       if (result.kind === 'recipe') navigate('/import', { state: { result: result.recipe } });
+      else if (result.kind === 'recipeIdeas') {
+        setIdeas({ request: result.request, ideas: result.ideas, offered: result.ideas.map((i) => i.title) });
+      }
       else if (result.kind === 'groceries') setGroceries(result.items.join('\n'));
       else if (result.kind === 'findTime') setFound(result.find);
       else {
@@ -62,6 +67,16 @@ export function CapturePage() {
         setSlot(result.slot ?? null);
       }
     },
+  });
+
+  const writeRecipe = useMutation({
+    mutationFn: (idea: RecipeIdea) => api.writeRecipe(ideas!.request, idea),
+    onSuccess: (recipe) => navigate('/import', { state: { result: recipe } }),
+  });
+  const moreIdeas = useMutation({
+    mutationFn: () => api.recipeIdeas(ideas!.request, ideas!.offered),
+    onSuccess: ({ ideas: more }) =>
+      setIdeas((now) => now && { ...now, ideas: more, offered: [...now.offered, ...more.map((i) => i.title)] }),
   });
 
   const pickAnother = useMutation({ mutationFn: api.findTime, onSuccess: setOtherTimes });
@@ -89,6 +104,7 @@ export function CapturePage() {
     setDraft(null);
     setGroceries(null);
     setFound(null);
+    setIdeas(null);
     setSlot(null);
     setOtherTimes(null);
     setManual(false);
@@ -96,6 +112,8 @@ export function CapturePage() {
     setByHand(null);
     pickAnother.reset();
     findByHand.reset();
+    writeRecipe.reset();
+    moreIdeas.reset();
     sort.reset();
     save.reset();
     addGroceries.reset();
@@ -232,6 +250,37 @@ export function CapturePage() {
         }}
         onCancel={reset}
       />
+    );
+  }
+
+  if (ideas) {
+    const busy = writeRecipe.isPending || moreIdeas.isPending;
+    return (
+      <div className="page">
+        <h1 className="form-title">Which one?</h1>
+        <p className="muted small find-summary">Tap one and Claude writes it out for you to look over.</p>
+        <ul className="find-options">
+          {ideas.ideas.map((idea) => (
+            <li key={idea.title}>
+              <button type="button" className="find-option" disabled={busy} onClick={() => writeRecipe.mutate(idea)}>
+                <span className="find-day">{idea.title}</span>
+                <span className="find-reason">
+                  {writeRecipe.isPending && writeRecipe.variables === idea ? 'Writing it…' : idea.blurb}
+                </span>
+              </button>
+            </li>
+          ))}
+        </ul>
+        {(writeRecipe.error ?? moreIdeas.error) && <p className="error">{(writeRecipe.error ?? moreIdeas.error)!.message}</p>}
+        <div className="form-actions">
+          <button type="button" className="btn" onClick={reset}>
+            Back
+          </button>
+          <button type="button" className="btn" disabled={busy} onClick={() => moreIdeas.mutate()}>
+            {moreIdeas.isPending ? 'Thinking…' : 'Other ideas'}
+          </button>
+        </div>
+      </div>
     );
   }
 

@@ -33,6 +33,7 @@ import type {
   ImportJob,
   ImportResult,
   Recipe,
+  RecipeIdea,
   RecipeInput,
   RecipeSummary,
   SearchResult,
@@ -162,6 +163,10 @@ export const api = {
     photos.forEach((p, i) => form.append('photo', p, `photo-${i + 1}.jpg`));
     return request<CaptureResult>('/api/capture', { method: 'POST', body: form });
   },
+  recipeIdeas: (text: string, offered: string[]) =>
+    request<{ ideas: RecipeIdea[] }>('/api/capture/recipe-ideas', json('POST', { request: text, offered })),
+  writeRecipe: (text: string, idea: RecipeIdea) =>
+    request<ImportResult>('/api/capture/write-recipe', json('POST', { request: text, idea })),
 
   /** From the start of today, or of `date` ("YYYY-MM-DD") for that many days. */
   today: (date?: string, days?: number) => {
