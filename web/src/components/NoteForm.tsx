@@ -5,6 +5,7 @@ import { api, imageUrl } from '../api';
 import { busyOn, hhmm, minutesOf, nearestFree, overlaps, type Busy, type Span } from '../freeTime';
 import { formKindOf, localDate, monthlyPositions, NO_REPEAT, type FormKind, type NoteValues, type RepeatValues } from '../notes';
 import { shrinkPhoto } from '../photos';
+import { ListTextarea } from './ListTextarea';
 import { PhotoInput } from './PhotoInput';
 
 const KINDS: { kind: FormKind; label: string }[] = [
@@ -210,10 +211,17 @@ export function NoteForm({
         </label>
       )}
 
-      <label className="field">
-        <span>Details</span>
-        <textarea rows={v.kind === 'NOTE' ? 8 : 4} value={v.body} onChange={(e) => set('body', e.target.value)} />
-      </label>
+      {v.kind === 'NOTE' ? (
+        <div className="field">
+          <label htmlFor="note-details">Details</label>
+          <ListTextarea id="note-details" rows={8} value={v.body} onChange={(body) => set('body', body)} />
+        </div>
+      ) : (
+        <label className="field">
+          <span>Details</span>
+          <textarea rows={4} value={v.body} onChange={(e) => set('body', e.target.value)} />
+        </label>
+      )}
 
       {photo && (
         <div className="note-photo">

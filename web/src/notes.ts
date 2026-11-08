@@ -78,7 +78,52 @@ function localTime(d: Date): string {
 
 /** The first non-blank line of a note's details, for a one-line preview. */
 export function firstLine(body: string | null | undefined): string {
-  return body?.split('\n').find((l) => l.trim())?.trim() ?? '';
+  const line = body?.split('\n').find((l) => l.trim());
+  return line ? parseLine(line).text.trim() : '';
+}
+
+// ---------- Lists in a note's details ----------
+
+/**
+ * One line of a note's details. Plain text, with a few line prefixes read as lists:
+ * "- " or "* " is a bullet, "1. " a numbered item, "- [ ] " / "- [x] " a checklist item.
+ */
+export type BodyLine =
+  | { type: 'text'; text: string }
+  | { type: 'bullet' | 'number' | 'check'; text: string; indent: number; marker: string; checked: boolean };
+
+const LIST_LINE = /^(\s*)([-*•]|\d{1,3}[.)])\s+(?:\[([ xX]?)\](?:\s+|$))?(.*)$/;
+
+export function parseLine(line: string): BodyLine {
+  const m = LIST_LINE.exec(line);
+  if (!m) return { type: 'text', text: line };
+  const [, space, marker, box, text] = m;
+  const numbered = /\d/.test(marker);
+  const indent = Math.floor(space.replace(/\t/g, '  ').length / 2);
+  if (box !== undefined && !numbered) return { type: 'check', text, indent, marker, checked: box.trim() !== '' };
+  return { type: numbered ? 'number' : 'bullet', text: box !== undefined ? `[${box}] ${text}` : text, indent, marker, checked: false };
+}
+
+/** Ticks or unticks the checklist item on line `index` of a note's details. */
+export function toggleCheck(body: string, index: number): string {
+  const lines = body.split('\n');
+  const line = lines[index];
+  if (line === undefined || parseLine(line).type !== 'check') return body;
+  lines[index] = line.replace(/\[([ xX]?)\]/, (_, box: string) => (box.trim() ? '[ ]' : '[x]'));
+  return lines.join('\n');
+}
+
+/**
+ * What a new line should start with after pressing Enter on `line`, so a list carries on:
+ * "- [x] milk" gives "- [ ] ", "2. eggs" gives "3. ". Null for a plain line.
+ */
+export function continueList(line: string): string | null {
+  const parsed = parseLine(line);
+  if (parsed.type === 'text') return null;
+  const space = /^\s*/.exec(line)![0];
+  if (parsed.type === 'check') return `${space}${parsed.marker} [ ] `;
+  if (parsed.type === 'number') return `${space}${parseInt(parsed.marker, 10) + 1}${parsed.marker.slice(-1)} `;
+  return `${space}${parsed.marker} `;
 }
 
 /** The calendar day an instant falls on, as "YYYY-MM-DD". */

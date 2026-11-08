@@ -1,7 +1,7 @@
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { api } from '../api';
-import { dayOf, localDate, repeatLabel } from '../notes';
+import { dayOf, firstLine, localDate, repeatLabel } from '../notes';
 import type { Note, SearchResult } from '../types';
 
 type Hit =
@@ -83,7 +83,7 @@ function when(day: string, time: string | null) {
 function NoteHit({ note }: { note: Note }) {
   const date = note.startsAt ? when(dayOf(note.startsAt, note.allDay), note.allDay ? null : note.startsAt) : null;
   const repeats = repeatLabel(note);
-  const meta = [KIND[note.kind], date, note.location, note.kind === 'NOTE' ? note.body?.split('\n').find((l) => l.trim()) : null]
+  const meta = [KIND[note.kind], date, note.location, note.kind === 'NOTE' ? firstLine(note.body) : null]
     .filter(Boolean)
     .join(' · ');
   return (

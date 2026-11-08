@@ -493,7 +493,9 @@ export function buildMcpServer(baseUrl: string) {
       inputSchema: {
         kind: z.enum(NOTE_KINDS),
         title: z.string().describe('Short, scannable title, e.g. "Dentist: Maya"'),
-        details: z.string().nullish().describe('Anything else worth keeping: what to bring, phone numbers, links'),
+        details: z.string().nullish().describe(
+            'Anything else worth keeping: what to bring, phone numbers, links. In a note, lines starting "- " show as bullets, "1. " as numbered, and "- [ ] " / "- [x] " as a checklist people can tick',
+          ),
         startsAt: when.describe('When the appointment starts or the reminder is due. ' + when.description),
         endsAt: when.describe(
           "When an appointment ends, if known. For a reminder, a time later the same day makes it a block set aside for doing the task, shown busy on the calendar. " +

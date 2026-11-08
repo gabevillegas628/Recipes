@@ -2,7 +2,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { api, imageUrl } from '../api';
 import { LinkedText, mapsUrl } from '../components/LinkedText';
-import { comingUpOn, dayLabel, dayOf, isOverdue, isTodo, reminderDue, repeatLabel, timeLabel } from '../notes';
+import { NoteBody } from '../components/NoteBody';
+import { comingUpOn, dayLabel, dayOf, isOverdue, isTodo, reminderDue, repeatLabel, timeLabel, toggleCheck } from '../notes';
 import type { Note, NoteKind } from '../types';
 
 const KIND_LABELS: Record<NoteKind, string> = { APPOINTMENT: 'Appointment', REMINDER: 'Reminder', NOTE: 'Note' };
@@ -22,6 +23,19 @@ export function NotePage() {
       queryClient.setQueryData(['note', id], updated);
       queryClient.invalidateQueries({ queryKey: ['notes'] });
     },
+  });
+  // Ticking a checklist item in a note's details: shown at once, saved behind it.
+  // Each tick works from the latest copy, so quick taps don't undo each other.
+  const check = useMutation({
+    mutationFn: (index: number) => {
+      const current = queryClient.getQueryData<Note>(['note', id]);
+      if (!current?.body) throw new Error('Note not loaded');
+      const body = toggleCheck(current.body, index);
+      queryClient.setQueryData<Note>(['note', id], { ...current, body });
+      return api.updateNote(id, { body });
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['notes'] }),
+    onError: () => queryClient.invalidateQueries({ queryKey: ['note', id] }),
   });
   const remove = useMutation({
     mutationFn: () => api.deleteNote(id),
@@ -77,11 +91,14 @@ export function NotePage() {
         </p>
       )}
 
-      {n.body && (
-        <p className="note-body">
-          <LinkedText text={n.body} />
-        </p>
-      )}
+      {n.body &&
+        (n.kind === 'NOTE' ? (
+          <NoteBody body={n.body} onToggle={(index) => check.mutate(index)} />
+        ) : (
+          <p className="note-body">
+            <LinkedText text={n.body} />
+          </p>
+        ))}
 
       {photo && (
         <div className="note-photo">
@@ -91,7 +108,9 @@ export function NotePage() {
         </div>
       )}
 
-      {(toggle.error ?? remove.error) && <p className="error">{(toggle.error ?? remove.error)!.message}</p>}
+      {(toggle.error ?? check.error ?? remove.error) && (
+        <p className="error">{(toggle.error ?? check.error ?? remove.error)!.message}</p>
+      )}
 
       <div className="actions">
         <Link to={`/n/${n.id}/edit`} className="btn btn-primary">
