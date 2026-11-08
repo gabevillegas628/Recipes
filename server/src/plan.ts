@@ -3,16 +3,28 @@ import { itemKey, rememberedItems, scheduleSort, totalSources } from './grocerie
 
 /**
  * "This week" and the grocery list: shared by the REST routes and the MCP tools.
- * Planned recipes drop off 7 days after they were added, so the week never piles up
- * and a plan made on the weekend survives into the week it's for.
+ * A cooked recipe drops off 7 days after it was added (or a day after it was cooked, if
+ * that's later), so the week never piles up and a plan made on the weekend survives into
+ * the week it's for. A recipe not cooked yet carries over until it's cooked or removed,
+ * up to 4 weeks, and adding it again starts it fresh.
  */
 
 export const PLAN_DAYS = 7;
+/** How long an uncooked recipe can carry over before it drops off anyway. */
+export const PLAN_MAX_DAYS = 28;
+
+const DAY = 24 * 60 * 60 * 1000;
 
 async function archiveOldPlanItems() {
-  const cutoff = new Date(Date.now() - PLAN_DAYS * 24 * 60 * 60 * 1000);
+  const now = Date.now();
   await prisma.planItem.updateMany({
-    where: { archivedAt: null, createdAt: { lt: cutoff } },
+    where: {
+      archivedAt: null,
+      OR: [
+        { cookedAt: { not: null, lt: new Date(now - DAY) }, createdAt: { lt: new Date(now - PLAN_DAYS * DAY) } },
+        { cookedAt: null, createdAt: { lt: new Date(now - PLAN_MAX_DAYS * DAY) } },
+      ],
+    },
     data: { archivedAt: new Date() },
   });
 }
@@ -41,7 +53,10 @@ export async function getPlan() {
   });
 }
 
-/** Adds a recipe to this week, or updates its servings if it's already there. */
+/**
+ * Adds a recipe to this week. If it's already there, it's updated and starts fresh:
+ * its week restarts from today and it's back to not cooked.
+ */
 export async function addToPlan(
   recipeId: string,
   scale: number,
@@ -54,7 +69,7 @@ export async function addToPlan(
     return prisma.planItem.update({
       where: { id: existing.id },
       // Adding a single recipe keeps it in whatever meal it was planned with.
-      data: { scale, ...(mealId ? { mealId } : {}) },
+      data: { scale, createdAt: new Date(), cookedAt: null, ...(mealId ? { mealId } : {}) },
     });
   }
   return prisma.planItem.create({ data: { recipeId, scale, addedById: userId, mealId } });

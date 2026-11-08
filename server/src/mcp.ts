@@ -254,7 +254,7 @@ export function buildMcpServer(baseUrl: string) {
     {
       title: 'Get this week',
       description:
-        'List the recipes planned for this week (recipes drop off 7 days after being added), with whether each has been cooked.',
+        'List the recipes planned for this week (cooked recipes drop off 7 days after being added; uncooked ones carry over until cooked or removed, up to 4 weeks; adding one again restarts its week), with whether each has been cooked.',
       inputSchema: {},
       annotations: { readOnlyHint: true },
     },

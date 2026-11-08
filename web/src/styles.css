@@ -4485,3 +4485,9 @@ div.note-body li.note-check {
 .category-options {
   margin: 12px 0 16px;
 }
+
+/* A recipe on This week that wasn't cooked last week and carried over. */
+.carried-over {
+  color: var(--accent);
+  font-weight: 600;
+}

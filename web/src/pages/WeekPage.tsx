@@ -17,6 +17,7 @@ export function WeekPage() {
 
   const items = plan.data ?? [];
   const left = items.filter((i) => !i.cookedAt).length;
+  const carried = items.filter((i) => carriedOver(i)).length;
 
   return (
     <div className="page">
@@ -30,8 +31,8 @@ export function WeekPage() {
         <div className="empty">
           <p>Nothing planned yet.</p>
           <p className="muted">
-            Tap <strong>Add to this week</strong> on any recipe. Recipes drop off by themselves 7 days
-            after you add them.
+            Tap <strong>Add to this week</strong> on any recipe. Cooked recipes drop off by themselves 7
+            days after you add them; ones you haven’t made yet carry over.
           </p>
           <div className="settings-actions week-empty-actions">
             <Link to="/week/plan" className="btn btn-primary">
@@ -48,6 +49,7 @@ export function WeekPage() {
         <>
           <p className="muted week-summary">
             {left === 0 ? 'All cooked. Nice.' : `${left} of ${items.length} left to make`}
+            {carried > 0 && ` · ${carried} carried over`}
           </p>
           <ul className="recipe-list">
             {groupByMeal(items).map((block) =>
@@ -74,7 +76,10 @@ export function WeekPage() {
               Start new week
             </button>
           </div>
-          <p className="muted small">Recipes drop off by themselves 7 days after they were added.</p>
+          <p className="muted small">
+            Cooked recipes drop off 7 days after they were added. Ones not made yet carry over (up to 4 weeks);
+            adding one again starts its week over.
+          </p>
         </>
       )}
 
@@ -88,6 +93,20 @@ export function WeekPage() {
       )}
     </div>
   );
+}
+
+const WEEK = 7 * 24 * 60 * 60 * 1000;
+
+/** Not cooked yet and added over a week ago: carried over from an earlier week. */
+function carriedOver(item: PlanItem): boolean {
+  return !item.cookedAt && Date.now() - new Date(item.createdAt).getTime() > WEEK;
+}
+
+/** "from last week", "from 2 weeks ago", or null for this week's recipes. */
+function carriedLabel(item: PlanItem): string | null {
+  if (!carriedOver(item)) return null;
+  const weeks = Math.floor((Date.now() - new Date(item.createdAt).getTime()) / WEEK);
+  return weeks <= 1 ? 'from last week' : `from ${weeks} weeks ago`;
 }
 
 type Block = { meal: PlanItem['meal']; items: PlanItem[] };
@@ -157,6 +176,8 @@ function PlanRow({ item, onChange, inMeal = false }: { item: PlanItem; onChange:
 
   const amount = item.scale === 1 ? null : servingsLabel(item.recipe.servings, item.scale);
   const img = thumbUrl(item.recipe.image);
+  const carried = carriedLabel(item);
+  const meta = [amount, item.addedBy ? `added by ${item.addedBy.name}` : null].filter(Boolean).join(' · ');
 
   return (
     <li className={`plan-row ${cooked ? 'cooked' : ''} ${inMeal ? 'in-meal' : ''}`}>
@@ -173,7 +194,9 @@ function PlanRow({ item, onChange, inMeal = false }: { item: PlanItem; onChange:
         <div className="recipe-row-body">
           <div className="recipe-row-title">{item.recipe.title}</div>
           <div className="recipe-row-meta">
-            {[amount, item.addedBy ? `added by ${item.addedBy.name}` : null].filter(Boolean).join(' · ')}
+            {carried && <span className="carried-over">{carried}</span>}
+            {carried && meta && ' · '}
+            {meta}
           </div>
         </div>
       </Link>
