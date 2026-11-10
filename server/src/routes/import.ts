@@ -4,8 +4,8 @@ import { z } from 'zod';
 import { requireAuth } from '../auth.js';
 import { prisma } from '../db.js';
 import { aiEnabled } from '../import/ai.js';
-import { ImportError } from '../import/errors.js';
-import { extractFromPhotos, extractFromText, extractFromUrl } from '../import/extract.js';
+import { ImportError, RecipeNotInPostError } from '../import/errors.js';
+import { extractFromPhotos, extractFromText, extractFromUrl, writeFromInstagram } from '../import/extract.js';
 import { FetchError } from '../import/safeFetch.js';
 import { findExistingRecipe, kickImportWorker } from '../import/worker.js';
 
@@ -13,7 +13,8 @@ const MAX_BULK_URLS = 500;
 
 function sendImportError(reply: FastifyReply, err: unknown) {
   if (err instanceof ImportError || err instanceof FetchError) {
-    return reply.code(422).send({ error: err.message });
+    // canWrite: the post names a dish without its recipe, so the app can offer to have Claude write one.
+    return reply.code(422).send({ error: err.message, ...(err instanceof RecipeNotInPostError ? { canWrite: true } : {}) });
   }
   throw err;
 }
@@ -64,6 +65,21 @@ export async function importRoutes(app: FastifyInstance) {
     try {
       const [result, duplicateOf] = await Promise.all([
         extractFromUrl(parsed.data.url),
+        findExistingRecipe(parsed.data.url),
+      ]);
+      return { ...result, duplicateOf };
+    } catch (err) {
+      return sendImportError(reply, err);
+    }
+  });
+
+  /** Claude writes a recipe for the dish in a post that didn't include one. Nothing is saved. */
+  app.post('/api/import/write', async (request, reply) => {
+    const parsed = z.object({ url: z.string().trim() }).safeParse(request.body);
+    if (!parsed.success || !isHttpUrl(parsed.data.url)) return reply.code(400).send({ error: 'Which post?' });
+    try {
+      const [result, duplicateOf] = await Promise.all([
+        writeFromInstagram(parsed.data.url),
         findExistingRecipe(parsed.data.url),
       ]);
       return { ...result, duplicateOf };

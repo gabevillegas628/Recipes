@@ -47,6 +47,8 @@ export class ApiError extends Error {
   constructor(
     public status: number,
     message: string,
+    /** The rest of the error response, e.g. canWrite on a failed import. */
+    public data: Record<string, unknown> = {},
   ) {
     super(message);
   }
@@ -64,7 +66,7 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   });
   if (res.status === 204) return undefined as T;
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new ApiError(res.status, data.error ?? `Request failed (${res.status})`);
+  if (!res.ok) throw new ApiError(res.status, data.error ?? `Request failed (${res.status})`, data);
   return data as T;
 }
 
@@ -96,6 +98,8 @@ export const api = {
 
   importConfig: () => request<{ aiEnabled: boolean }>('/api/import/config'),
   importUrl: (url: string) => request<ImportResult>('/api/import/url', json('POST', { url })),
+  /** Claude writes the recipe for a post that names a dish without its recipe. */
+  importWrite: (url: string) => request<ImportResult>('/api/import/write', json('POST', { url })),
   importText: (text: string, url?: string) =>
     request<ImportResult>('/api/import/text', json('POST', { text, url })),
   importPhotos: (photos: Blob[]) => {

@@ -4491,3 +4491,12 @@ div.note-body li.note-check {
   color: var(--accent);
   font-weight: 600;
 }
+
+/* Other ways in when a link wouldn't import (ImportPage). */
+.import-fallback {
+  margin: 4px 0 16px;
+}
+
+.import-fallback .settings-actions {
+  margin: 8px 0;
+}

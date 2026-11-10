@@ -1,9 +1,9 @@
 import * as cheerio from 'cheerio';
 import sharp from 'sharp';
 import { saveImage } from '../images.js';
-import { aiEnabled, extractWithAi, pageText } from './ai.js';
+import { aiEnabled, extractWithAi, pageText, writeRecipe } from './ai.js';
 import { hasContent, type ImportMethod, type RecipeDraft } from './draft.js';
-import { ImportError, NoRecipeFoundError } from './errors.js';
+import { ImportError, NoRecipeFoundError, RecipeNotInPostError } from './errors.js';
 import {
   canonicalInstagramUrl,
   fetchInstagramPost,
@@ -194,10 +194,32 @@ async function readInstagram(code: string, log: Record<string, unknown>): Promis
   } catch (err) {
     if (err instanceof NoRecipeFoundError) {
       log.stage = 'ai-no-recipe';
-      throw new ImportError(NOT_IN_CAPTION);
+      throw new RecipeNotInPostError(NOT_IN_CAPTION);
     }
     throw err;
   }
+}
+
+/**
+ * When an Instagram post names a dish but not its recipe: Claude writes one for that dish,
+ * going by whatever the caption says about it. Keeps the post as the source and its picture.
+ */
+export async function writeFromInstagram(input: string): Promise<Extracted> {
+  const code = instagramShortcode(new URL(normalizeUrl(input)));
+  if (!code) throw new ImportError('That isn’t an Instagram post link.');
+  const { post } = await fetchInstagramPost(code).catch(() => ({ post: null }));
+  if (!post?.caption) throw new ImportError("Couldn't read this Instagram post's caption, so there's nothing to go on.");
+
+  const sourceUrl = canonicalInstagramUrl(code);
+  const draft = await writeRecipe(
+    `The dish in this Instagram post${post.author ? ` by @${post.author}` : ''}. The post doesn't include its recipe, so write one for the dish it shows, following any details the caption gives (ingredients, toppings, sides, method). Caption:\n\n${post.caption}`,
+  );
+  logInstagram({ code, outcome: 'written', title: draft.title });
+  const credit = `Written by Claude from ${post.author ? `@${post.author}'s` : 'an'} Instagram post, which didn't include the recipe. It isn't the creator's own.`;
+  return {
+    draft: { ...draft, sourceUrl, imageUrl: post.imageUrl, notes: [draft.notes, credit].filter(Boolean).join('\n\n') },
+    method: 'generated',
+  };
 }
 
 /**

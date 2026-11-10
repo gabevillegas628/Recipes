@@ -1,7 +1,7 @@
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { Link, useLocation, useSearchParams } from 'react-router-dom';
-import { api } from '../api';
+import { api, ApiError } from '../api';
 import { PhotoInput } from '../components/PhotoInput';
 import { shrinkPhoto } from '../photos';
 import type { ImportResult } from '../types';
@@ -24,6 +24,9 @@ export function ImportPage() {
   const handedOver = (useLocation().state as { result?: ImportResult } | null)?.result ?? null;
   const [result, setResult] = useState<ImportResult | null>(handedOver);
 
+  // The link that wouldn't import, while trying another way to get its recipe.
+  const [fallbackFrom, setFallbackFrom] = useState<string | null>(null);
+
   const config = useQuery({ queryKey: ['import-config'], queryFn: api.importConfig });
 
   const fromUrl = useMutation({
@@ -36,7 +39,16 @@ export function ImportPage() {
   });
   const fromPhotos = useMutation({
     mutationFn: async () => api.importPhotos(await Promise.all(photos.map((p) => shrinkPhoto(p)))),
-    onSuccess: (r) => setResult({ ...r, draft: { ...r.draft, uploadedImage: r.uploadedImage } }),
+    // Screenshots of a post that wouldn't import keep the post as the source.
+    onSuccess: (r) =>
+      setResult({
+        ...r,
+        draft: { ...r.draft, sourceUrl: r.draft.sourceUrl ?? fallbackFrom, uploadedImage: r.uploadedImage },
+      }),
+  });
+  const written = useMutation({
+    mutationFn: (link: string) => api.importWrite(link),
+    onSuccess: setResult,
   });
 
   // Auto-start when opened with ?url=
@@ -55,6 +67,15 @@ export function ImportPage() {
     fromUrl.reset();
     fromText.reset();
     fromPhotos.reset();
+    written.reset();
+    setFallbackFrom(null);
+  }
+
+  /** From a link that failed: paste its text or add screenshots, keeping the link as the source. */
+  function tryInstead(next: 'text' | 'photo') {
+    setFallbackFrom(url.trim());
+    fromUrl.reset();
+    setMode(next);
   }
 
   if (result) {
@@ -89,8 +110,12 @@ export function ImportPage() {
     );
   }
 
-  const pending = fromUrl.isPending || fromText.isPending || fromPhotos.isPending;
-  const error = fromUrl.error ?? fromText.error ?? fromPhotos.error;
+  const pending = fromUrl.isPending || fromText.isPending || fromPhotos.isPending || written.isPending;
+  const error = fromUrl.error ?? fromText.error ?? fromPhotos.error ?? written.error;
+  // A link that didn't import: offer the other ways in.
+  const failedLink = mode === 'url' && (fromUrl.isError || written.isError);
+  const canWrite =
+    config.data?.aiEnabled !== false && fromUrl.error instanceof ApiError && fromUrl.error.data.canWrite === true;
 
   function submit(e: FormEvent) {
     e.preventDefault();
@@ -107,7 +132,10 @@ export function ImportPage() {
         <button
           type="button"
           className={mode === 'url' ? 'on' : ''}
-          onClick={() => setMode('url')}
+          onClick={() => {
+            setMode('url');
+            setFallbackFrom(null);
+          }}
         >
           From a link
         </button>
@@ -129,7 +157,16 @@ export function ImportPage() {
 
       <form className="form" onSubmit={submit}>
         {mode === 'photo' && (
-          <PhotoPicker photos={photos} onChange={setPhotos} aiEnabled={config.data?.aiEnabled !== false} />
+          <PhotoPicker
+            photos={photos}
+            onChange={setPhotos}
+            aiEnabled={config.data?.aiEnabled !== false}
+            hint={
+              fallbackFrom
+                ? 'Screenshots of the post or video where the ingredients and steps show. Up to 4.'
+                : undefined
+            }
+          />
         )}
         {mode === 'url' ? (
           <label className="field">
@@ -166,9 +203,34 @@ export function ImportPage() {
 
         {error && <p className="error">{error.message}</p>}
 
+        {failedLink && !pending && (
+          <div className="import-fallback">
+            <p className="muted small">Other ways to get it:</p>
+            <div className="settings-actions">
+              {canWrite && (
+                <button type="button" className="btn" onClick={() => written.mutate(url.trim())}>
+                  Have Claude write it
+                </button>
+              )}
+              <button type="button" className="btn" onClick={() => tryInstead('text')}>
+                Paste text
+              </button>
+              <button type="button" className="btn" onClick={() => tryInstead('photo')}>
+                Add screenshots
+              </button>
+            </div>
+            {canWrite && (
+              <p className="muted small">
+                Claude writes a recipe for the dish in the post, going by what the caption says. It won’t be the
+                creator’s exact recipe.
+              </p>
+            )}
+          </div>
+        )}
+
         <div className="form-actions">
           <button className="btn btn-primary" disabled={pending || (mode === 'photo' && photos.length === 0)}>
-            {pending ? (mode === 'photo' ? 'Reading photo…' : 'Importing…') : mode === 'photo' ? 'Read recipe' : 'Import'}
+            {written.isPending ? 'Writing recipe…' : pending ? (mode === 'photo' ? 'Reading photo…' : 'Importing…') : mode === 'photo' ? 'Read recipe' : 'Import'}
           </button>
         </div>
       </form>
