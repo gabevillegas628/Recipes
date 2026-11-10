@@ -10,7 +10,7 @@ import {
   instagramShortcode,
   recipeLinksIn,
 } from './instagram.js';
-import { safeFetch } from './safeFetch.js';
+import { FetchError, safeFetch } from './safeFetch.js';
 import { fromJsonLd, fromMicrodata } from './schemaOrg.js';
 
 type Extracted = { draft: RecipeDraft; method: ImportMethod };
@@ -104,33 +104,87 @@ async function extractFromWebPage(sourceUrl: string): Promise<Extracted> {
 const NOT_IN_CAPTION =
   "This post's caption doesn't include the recipe. Creators often put it in the comments, on their website, or send it by DM. If you can get the text, use Paste text.";
 
+const CAPTION_UNREADABLE =
+  "Couldn't read this post's caption: Instagram may have shown a login page instead. Open the post, copy the caption, and use Paste text.";
+
+/** One line in the server logs for each Instagram import, to see why ones fail. */
+function logInstagram(entry: Record<string, unknown>) {
+  console.warn(JSON.stringify({ msg: 'instagram import', ...entry }));
+}
+
 /**
  * 1. Links in the caption (a blog post) usually have the complete recipe: try those first.
  * 2. Otherwise have AI read the recipe out of the caption itself.
  */
 async function extractFromInstagram(code: string): Promise<Extracted> {
-  const post = await fetchInstagramPost(code).catch(() => null);
-  if (!post) {
+  const log: Record<string, unknown> = { code };
+  try {
+    const result = await readInstagram(code, log);
+    logInstagram({ ...log, outcome: 'ok', method: result.method });
+    return result;
+  } catch (err) {
+    logInstagram({
+      ...log,
+      outcome: 'failed',
+      error: err instanceof Error ? err.message : String(err),
+      ...(err instanceof FetchError && err.status ? { httpStatus: err.status } : {}),
+    });
+    throw err;
+  }
+}
+
+async function readInstagram(code: string, log: Record<string, unknown>): Promise<Extracted> {
+  let fetched: Awaited<ReturnType<typeof fetchInstagramPost>>;
+  try {
+    fetched = await fetchInstagramPost(code);
+  } catch (err) {
+    log.stage = 'fetch';
+    if (err instanceof FetchError && err.status) log.httpStatus = err.status;
+    log.fetchError = err instanceof Error ? err.message : String(err);
     throw new ImportError("Couldn't read this Instagram post. It may be private or deleted.");
   }
+  const { post, page } = fetched;
+  Object.assign(log, page, {
+    author: post?.author ?? null,
+    captionLength: post?.caption.length ?? 0,
+    captionStart: post?.caption.slice(0, 200) ?? '',
+    image: Boolean(post?.imageUrl),
+  });
+  if (!post) {
+    log.stage = 'parse';
+    throw new ImportError(
+      page.loginWall ? CAPTION_UNREADABLE : "Couldn't read this Instagram post. It may be private or deleted.",
+    );
+  }
 
-  for (const link of recipeLinksIn(post.caption)) {
+  const links = recipeLinksIn(post.caption);
+  const tried: { link: string; error: string }[] = [];
+  log.linksTried = tried;
+  for (const link of links) {
     try {
       const result = await extractFromWebPage(normalizeUrl(link));
       result.draft.imageUrl ??= post.imageUrl;
+      log.stage = 'link';
+      log.link = link;
       return result;
-    } catch {
+    } catch (err) {
       // Not a recipe page; fall back to the caption.
+      tried.push({ link, error: err instanceof Error ? err.message : String(err) });
     }
   }
 
-  if (!post.caption) throw new ImportError(NOT_IN_CAPTION);
+  if (!post.caption) {
+    log.stage = 'caption-empty';
+    throw new ImportError(CAPTION_UNREADABLE);
+  }
   if (!aiEnabled) {
+    log.stage = 'ai-off';
     throw new ImportError(
       'Reading recipes from Instagram captions needs AI extraction, which isn’t set up (ANTHROPIC_API_KEY).',
     );
   }
 
+  log.stage = 'ai';
   const sourceUrl = canonicalInstagramUrl(code);
   const context = `Instagram post${post.author ? ` by @${post.author}` : ''}. Caption:\n\n${post.caption}`;
   try {
@@ -138,7 +192,10 @@ async function extractFromInstagram(code: string): Promise<Extracted> {
     draft.imageUrl = post.imageUrl;
     return { draft, method: 'ai' };
   } catch (err) {
-    if (err instanceof NoRecipeFoundError) throw new ImportError(NOT_IN_CAPTION);
+    if (err instanceof NoRecipeFoundError) {
+      log.stage = 'ai-no-recipe';
+      throw new ImportError(NOT_IN_CAPTION);
+    }
     throw err;
   }
 }

@@ -22,14 +22,38 @@ export interface InstagramPost {
   imageUrl: string | null;
 }
 
-export async function fetchInstagramPost(code: string): Promise<InstagramPost | null> {
-  const page = await safeFetch(`https://www.instagram.com/p/${code}/embed/captioned/`, {
+/** What the embed page looked like, for the logs when an import goes wrong. */
+export interface InstagramPage {
+  /** Where the request ended up after redirects (a login page, if Instagram sent us there). */
+  finalUrl: string;
+  bytes: number;
+  title: string;
+  /** Instagram showed a login wall instead of the post. */
+  loginWall: boolean;
+  /** The caption block the reader looks for was on the page (even if empty). */
+  captionElement: boolean;
+  /** The page has caption text tucked in its scripts, a sign the layout moved. */
+  captionInScripts: boolean;
+}
+
+export async function fetchInstagramPost(code: string): Promise<{ post: InstagramPost | null; page: InstagramPage }> {
+  const res = await safeFetch(`https://www.instagram.com/p/${code}/embed/captioned/`, {
     accept: 'text/html',
     maxBytes: 8 * 1024 * 1024,
   });
-  const $ = cheerio.load(page.body.toString('utf8'));
+  const html = res.body.toString('utf8');
+  const $ = cheerio.load(html);
 
   const caption = $('.Caption').first();
+  const page: InstagramPage = {
+    finalUrl: res.url,
+    bytes: res.body.length,
+    title: $('title').first().text().trim().slice(0, 120),
+    loginWall: /\/accounts\/login/.test(res.url) || $('input[name="password"]').length > 0,
+    captionElement: caption.length > 0,
+    captionInScripts: /edge_media_to_caption|\\?"caption\\?"\s*:/.test(html),
+  };
+
   const author = caption.find('.CaptionUsername').first().text().trim() || null;
   caption.find('.CaptionUsername, .CaptionComments').remove();
   caption.find('br').replaceWith('\n');
@@ -42,8 +66,8 @@ export async function fetchInstagramPost(code: string): Promise<InstagramPost | 
     .trim();
 
   const imageUrl = $('img.EmbeddedMediaImage').attr('src') ?? null;
-  if (!text && !imageUrl) return null;
-  return { author, caption: text, imageUrl };
+  if (!text && !imageUrl) return { post: null, page };
+  return { post: { author, caption: text, imageUrl }, page };
 }
 
 const IGNORED_LINK_HOSTS =
