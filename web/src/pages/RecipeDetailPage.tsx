@@ -6,6 +6,7 @@ import { AddToMeal } from '../components/AddToMeal';
 import { GroceryPicker } from '../components/GroceryPicker';
 import { MealSwitcher, recipeQuery, useMealParam } from '../components/MealSwitcher';
 import { ServingsControl } from '../components/ServingsControl';
+import { ShareSheet } from '../components/ShareSheet';
 import { StepText } from '../components/StepText';
 import { scaleIngredient } from '../scale';
 import { formatMinutes } from '../sections';
@@ -34,6 +35,7 @@ function RecipeView({ recipe }: { recipe: Recipe }) {
   const [scale, setScale] = useState(() => Number(params.get('scale')) || 1);
   const [picking, setPicking] = useState(false);
   const [choosingMeal, setChoosingMeal] = useState(false);
+  const [sharing, setSharing] = useState(false);
 
   const favorite = useMutation({
     mutationFn: () => api.setFavorite(recipe.id, !recipe.favorite),
@@ -133,6 +135,9 @@ function RecipeView({ recipe }: { recipe: Recipe }) {
         <Link to={`/week/plan?recipe=${recipe.id}`} className="btn">
           Plan meals around this
         </Link>
+        <button type="button" className="btn" onClick={() => setSharing(true)}>
+          Share
+        </button>
         <Link to={`/r/${recipe.id}/edit`} className="btn">
           Edit
         </Link>
@@ -196,6 +201,7 @@ function RecipeView({ recipe }: { recipe: Recipe }) {
         />
       )}
       {choosingMeal && <AddToMeal recipeId={recipe.id} onClose={() => setChoosingMeal(false)} />}
+      {sharing && <ShareSheet recipe={recipe} scale={scale} onClose={() => setSharing(false)} />}
     </article>
   );
 }

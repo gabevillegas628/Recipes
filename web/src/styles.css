@@ -1657,6 +1657,27 @@ html.has-timers .cook {
   padding: 0;
 }
 
+.share-sheet .banner {
+  margin: 16px 0 0;
+}
+
+.share-link {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg);
+  color: var(--text);
+  font-size: 15px;
+}
+
+.share-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 10px 0 4px;
+}
+
 .meal-choice {
   display: flex;
   flex-direction: column;

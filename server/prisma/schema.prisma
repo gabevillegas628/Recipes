@@ -53,6 +53,8 @@ model Recipe {
   favorite        Boolean            @default(false)
   /// Set when the recipe was extracted by AI rather than structured data; cleared on the next manual save.
   needsReview     Boolean            @default(false)
+  /// Secret for the public read-only page at /s/<shareToken>. Null when not shared.
+  shareToken      String?            @unique
   tags            Tag[]
   createdBy       User?              @relation(fields: [createdById], references: [id], onDelete: SetNull)
   createdById     String?

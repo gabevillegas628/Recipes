@@ -16,6 +16,7 @@ import { moneyRoutes } from './routes/money.js';
 import { noteRoutes } from './routes/notes.js';
 import { planRoutes } from './routes/plan.js';
 import { recipeRoutes } from './routes/recipes.js';
+import { shareRoutes } from './routes/share.js';
 import { todayRoutes } from './routes/today.js';
 import { userRoutes } from './routes/users.js';
 import { weatherRoutes } from './routes/weather.js';
@@ -46,6 +47,7 @@ export async function buildApp() {
   app.get('/api/health', async () => ({ ok: true }));
   await app.register(authRoutes);
   await app.register(recipeRoutes);
+  await app.register(shareRoutes);
   await app.register(importRoutes);
   await app.register(mcpRoutes);
   await app.register(imageRoutes);

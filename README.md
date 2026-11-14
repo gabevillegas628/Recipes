@@ -47,6 +47,13 @@ Bulk imports are queued as `ImportJob` rows and processed one at a time by an in
 - **This week:** recipes on the plan remember their serving size and drop off 7 days after being added.
 - **Groceries:** add from a recipe or the whole week, unticking what you already have, or type or paste items (one per line or comma, so a list copied from a text works). Items are saved at once, then tidied and sorted into store sections by Claude in the background (`server/src/groceries.ts`, Haiku by default via `GROCERY_MODEL`). Items bought before reuse their remembered aisle and name without an AI call. Lines for the same item ("2 lb carrots", "3 carrots") show as one row, and Claude estimates one amount to buy in store units ("about 3.5 lb", "2 sticks", "2 (32 oz) cartons"; `GROCERY_TOTALS_MODEL`, Sonnet 5 by default). The original lines stay visible under it. Without an API key items stay unsorted. The list polls every few seconds so both phones stay in sync.
 
+## Sharing
+
+**Share** on a recipe opens a sheet with two options:
+
+- **Link:** "Make a link" gives the recipe an unguessable token (`Recipe.shareToken`), and `/s/<token>` shows a read-only page to anyone, with no login. It shows the photo, times, ingredients and steps, but not notes. The server renders it as plain HTML (`server/src/share.ts`), with preview tags for Messages and schema.org `Recipe` JSON-LD, so the link imports cleanly into recipe apps, this one included. "Stop sharing" clears the token, and old links then show "This link isn't available".
+- **Text:** the recipe written out as plain text, with amounts at the current servings. On a phone both options open the share sheet; on a desktop they copy to the clipboard.
+
 ## Claude connector (MCP)
 
 The server exposes an MCP endpoint at `/mcp/<token>` with these tools:

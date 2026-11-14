@@ -95,6 +95,9 @@ export const api = {
   setFavorite: (id: string, favorite: boolean) =>
     request<{ favorite: boolean }>(`/api/recipes/${id}/favorite`, json('PATCH', { favorite })),
   deleteRecipe: (id: string) => request<void>(`/api/recipes/${id}`, { method: 'DELETE' }),
+  /** The recipe's public link token, created the first time. */
+  shareRecipe: (id: string) => request<{ shareToken: string }>(`/api/recipes/${id}/share`, { method: 'POST' }),
+  unshareRecipe: (id: string) => request<void>(`/api/recipes/${id}/share`, { method: 'DELETE' }),
 
   importConfig: () => request<{ aiEnabled: boolean }>('/api/import/config'),
   importUrl: (url: string) => request<ImportResult>('/api/import/url', json('POST', { url })),

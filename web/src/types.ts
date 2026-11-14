@@ -27,6 +27,8 @@ export interface Recipe extends RecipeSummary {
   ingredients: Section[];
   instructions: Section[];
   notes: string | null;
+  /** Set while the recipe has a public link at /s/<shareToken>. */
+  shareToken: string | null;
   updatedAt: string;
 }
 
@@ -36,7 +38,7 @@ export interface PrepPlan {
   bowls: { step: number; label: string; items: { ingredient: number; note: string | null }[] }[];
 }
 
-export type RecipeInput = Omit<Recipe, 'id' | 'image' | 'needsReview' | 'createdAt' | 'updatedAt'> & {
+export type RecipeInput = Omit<Recipe, 'id' | 'image' | 'needsReview' | 'shareToken' | 'createdAt' | 'updatedAt'> & {
   /** Omit to keep the current image, a URL to download a new one, or null to remove it. */
   imageUrl?: string | null;
   /** A photo already uploaded with api.uploadImage. */
