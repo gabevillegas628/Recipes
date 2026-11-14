@@ -98,6 +98,8 @@ export const api = {
   /** The recipe's public link token, created the first time. */
   shareRecipe: (id: string) => request<{ shareToken: string }>(`/api/recipes/${id}/share`, { method: 'POST' }),
   unshareRecipe: (id: string) => request<void>(`/api/recipes/${id}/share`, { method: 'DELETE' }),
+  shareMeal: (id: string) => request<{ shareToken: string }>(`/api/meals/${id}/share`, { method: 'POST' }),
+  unshareMeal: (id: string) => request<void>(`/api/meals/${id}/share`, { method: 'DELETE' }),
 
   importConfig: () => request<{ aiEnabled: boolean }>('/api/import/config'),
   importUrl: (url: string) => request<ImportResult>('/api/import/url', json('POST', { url })),

@@ -49,10 +49,11 @@ Bulk imports are queued as `ImportJob` rows and processed one at a time by an in
 
 ## Sharing
 
-**Share** on a recipe opens a sheet with two options:
+**Share** on a recipe or a meal opens a sheet with three options:
 
-- **Link:** "Make a link" gives the recipe an unguessable token (`Recipe.shareToken`), and `/s/<token>` shows a read-only page to anyone, with no login. It shows the photo, times, ingredients and steps, but not notes. The server renders it as plain HTML (`server/src/share.ts`), with preview tags for Messages and schema.org `Recipe` JSON-LD, so the link imports cleanly into recipe apps, this one included. "Stop sharing" clears the token, and old links then show "This link isn't available".
-- **Text:** the recipe written out as plain text, with amounts at the current servings. On a phone both options open the share sheet; on a desktop they copy to the clipboard.
+- **Link:** "Make a link" gives the recipe or meal an unguessable token (`shareToken`), and `/s/<token>` shows a read-only page to anyone, with no login. It shows photos, times, ingredients and steps, but not notes. A meal's page has every recipe in full, each marked with its amount within the meal ("Make 2× this recipe"). The server renders these as plain HTML (`server/src/share.ts`), with preview tags for Messages and schema.org `Recipe` JSON-LD, so a recipe link imports cleanly into recipe apps, this one included. "Stop sharing" clears the token, and old links then show "This link isn't available".
+- **Send as text:** the recipe, or every recipe in the meal, written out as plain text, with amounts at the current servings. On a phone this and "Send link" open the share sheet; on a desktop they copy to the clipboard.
+- **Print:** a recipe prints from its own page, with buttons, the tab bar and timer styling stripped by the print stylesheet. A meal opens `/m/:id/print`, which lays out every recipe at its scaled amounts, one per page, and opens the print dialog. "Save as PDF" in that dialog makes a file to send.
 
 ## Claude connector (MCP)
 

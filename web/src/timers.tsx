@@ -215,7 +215,10 @@ export function TimerChip({ seconds, text, label }: { seconds: number; text: str
       }}
       title={`Start a ${formatDuration(seconds)} timer`}
     >
-      ⏱ {text}
+      <span className="timer-chip-icon" aria-hidden="true">
+        ⏱{' '}
+      </span>
+      {text}
     </button>
   );
 }

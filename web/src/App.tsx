@@ -8,6 +8,7 @@ import { CookModePage } from './pages/CookModePage';
 import { GroceriesPage } from './pages/GroceriesPage';
 import { MealEditPage } from './pages/MealEditPage';
 import { MealPage } from './pages/MealPage';
+import { MealPrintPage } from './pages/MealPrintPage';
 import { MealsPage } from './pages/MealsPage';
 import { BudgetPage } from './pages/BudgetPage';
 import { CategoryPage } from './pages/CategoryPage';
@@ -41,6 +42,7 @@ export function App() {
       {/* Full screen, outside the tab bar layout. */}
       <Route path="r/:id/prep" element={<PrepPage />} />
       <Route path="r/:id/cook" element={<CookModePage />} />
+      <Route path="m/:id/print" element={<MealPrintPage />} />
       <Route element={<Layout />}>
         <Route index element={<TodayPage user={me.data} />} />
         <Route path="recipes" element={<RecipeListPage />} />

@@ -122,6 +122,8 @@ export interface Meal {
   name: string;
   notes: string | null;
   servings: number | null;
+  /** Set while the meal has a public link at /s/<shareToken>. */
+  shareToken: string | null;
   recipes: { scale: number; recipe: PlannedRecipe }[];
 }
 

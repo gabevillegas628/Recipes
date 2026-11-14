@@ -203,6 +203,8 @@ model Meal {
   notes       String?
   /// How many people the meal serves as defined; the meal's servings stepper scales from this.
   servings    Int?
+  /// Secret for the public read-only page at /s/<shareToken>. Null when not shared.
+  shareToken  String?      @unique
   recipes     MealRecipe[]
   planItems   PlanItem[]
   createdBy   User?        @relation(fields: [createdById], references: [id], onDelete: SetNull)

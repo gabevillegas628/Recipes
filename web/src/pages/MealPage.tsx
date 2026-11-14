@@ -1,11 +1,12 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { api, thumbUrl } from '../api';
 import { Collage } from '../components/Collage';
 import { GroceryPicker } from '../components/GroceryPicker';
 import { recipeQuery } from '../components/MealSwitcher';
 import { ServingsControl } from '../components/ServingsControl';
+import { recipeText, ShareSheet } from '../components/ShareSheet';
 import { servingsLabel } from '../scale';
 import type { Meal } from '../types';
 
@@ -24,6 +25,26 @@ function MealView({ meal }: { meal: Meal }) {
   const [factor, setFactor] = useState(1);
   const [picking, setPicking] = useState(false);
   const [added, setAdded] = useState(false);
+  const [sharing, setSharing] = useState(false);
+  const navigate = useNavigate();
+
+  // Full recipes (steps and all) for "Send as text", loaded once the sheet opens.
+  const full = useQueries({
+    queries: meal.recipes.map(({ recipe }) => ({
+      queryKey: ['recipe', recipe.id],
+      queryFn: () => api.getRecipe(recipe.id),
+      enabled: sharing,
+    })),
+  });
+  const mealText = full.every((q) => q.data)
+    ? [
+        meal.name,
+        ...meal.recipes.map(({ scale }, i) => recipeText(full[i].data!, scale * factor)),
+      ].join('\n\n————————\n\n')
+    : null;
+
+  const setShareToken = (shareToken: string | null) =>
+    queryClient.setQueryData<Meal>(['meal', meal.id], (m) => m && { ...m, shareToken });
 
   const plan = useMutation({
     mutationFn: () => api.addMealToPlan(meal.id, factor),
@@ -53,6 +74,9 @@ function MealView({ meal }: { meal: Meal }) {
         </button>
         <button type="button" className="btn" onClick={() => setPicking(true)} disabled={meal.recipes.length === 0}>
           Add groceries
+        </button>
+        <button type="button" className="btn" onClick={() => setSharing(true)}>
+          Share
         </button>
         <Link to={`/m/${meal.id}/edit`} className="btn">
           Edit
@@ -104,6 +128,19 @@ function MealView({ meal }: { meal: Meal }) {
         <GroceryPicker
           recipes={meal.recipes.map(({ recipe, scale }) => ({ ...recipe, scale: scale * factor }))}
           onClose={() => setPicking(false)}
+        />
+      )}
+      {sharing && (
+        <ShareSheet
+          kind="meal"
+          title={meal.name}
+          shareToken={meal.shareToken}
+          createLink={() => api.shareMeal(meal.id).then(({ shareToken }) => setShareToken(shareToken))}
+          stopSharing={() => api.unshareMeal(meal.id).then(() => setShareToken(null))}
+          text={mealText}
+          scaled={factor !== 1 || meal.recipes.some((r) => r.scale !== 1)}
+          onPrint={() => navigate(`/m/${meal.id}/print${factor !== 1 ? `?scale=${factor}` : ''}`)}
+          onClose={() => setSharing(false)}
         />
       )}
     </article>

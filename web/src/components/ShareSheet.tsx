@@ -1,6 +1,5 @@
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation } from '@tanstack/react-query';
 import { useState } from 'react';
-import { api } from '../api';
 import { baseServings, scaleIngredient } from '../scale';
 import { formatMinutes } from '../sections';
 import type { Recipe } from '../types';
@@ -51,25 +50,40 @@ async function shareOrCopy(data: { title: string; text?: string; url?: string })
   return 'copied';
 }
 
-/** Sheet on a recipe page: send a public link, or the recipe as text. */
-export function ShareSheet({ recipe, scale, onClose }: { recipe: Recipe; scale: number; onClose: () => void }) {
-  const queryClient = useQueryClient();
+/**
+ * Sheet on a recipe or meal page: send a public link, the content as text, or print it.
+ * The page owns the data: it passes the current token and how to make or clear one.
+ */
+export function ShareSheet({
+  kind,
+  title,
+  shareToken,
+  createLink,
+  stopSharing,
+  text,
+  scaled,
+  onPrint,
+  onClose,
+}: {
+  kind: 'recipe' | 'meal';
+  title: string;
+  shareToken: string | null;
+  createLink: () => Promise<unknown>;
+  stopSharing: () => Promise<unknown>;
+  /** The text to send; null while it's still loading. */
+  text: string | null;
+  /** Whether amounts differ from the recipe as written. */
+  scaled: boolean;
+  onPrint: () => void;
+  onClose: () => void;
+}) {
   const [status, setStatus] = useState<string | null>(null);
-  const link = recipe.shareToken ? `${location.origin}/s/${recipe.shareToken}` : null;
+  const link = shareToken ? `${location.origin}/s/${shareToken}` : null;
 
-  const setToken = (shareToken: string | null) =>
-    queryClient.setQueryData<Recipe>(['recipe', recipe.id], (r) => r && { ...r, shareToken });
-
-  const create = useMutation({
-    mutationFn: () => api.shareRecipe(recipe.id),
-    onSuccess: ({ shareToken }) => setToken(shareToken),
-  });
+  const create = useMutation({ mutationFn: createLink });
   const stop = useMutation({
-    mutationFn: () => api.unshareRecipe(recipe.id),
-    onSuccess: () => {
-      setToken(null);
-      setStatus('Sharing stopped. The old link no longer works.');
-    },
+    mutationFn: stopSharing,
+    onSuccess: () => setStatus('Sharing stopped. The old link no longer works.'),
   });
 
   // Share right from the tap: iPhone only opens the share sheet during a user gesture.
@@ -84,6 +98,7 @@ export function ShareSheet({ recipe, scale, onClose }: { recipe: Recipe; scale: 
   };
 
   const error = create.error ?? stop.error;
+  const what = kind === 'meal' ? 'the meal, with every recipe in it' : 'the recipe';
 
   return (
     <div className="cook-sheet-backdrop" onClick={onClose}>
@@ -98,18 +113,13 @@ export function ShareSheet({ recipe, scale, onClose }: { recipe: Recipe; scale: 
         <h3>Link</h3>
         {link ? (
           <>
-            <p className="muted small">Anyone with this link can see the recipe, without logging in. Your notes aren’t included.</p>
+            <p className="muted small">Anyone with this link can see {what}, without logging in. Your notes aren’t included.</p>
             <input className="share-link" readOnly value={link} onFocus={(e) => e.currentTarget.select()} aria-label="Share link" />
             <div className="share-actions">
-              <button type="button" className="btn btn-primary" onClick={() => send({ title: recipe.title, url: link }, 'Link')}>
+              <button type="button" className="btn btn-primary" onClick={() => send({ title, url: link }, 'Link')}>
                 Send link
               </button>
-              <button
-                type="button"
-                className="btn btn-danger"
-                onClick={() => stop.mutate()}
-                disabled={stop.isPending}
-              >
+              <button type="button" className="btn btn-danger" onClick={() => stop.mutate()} disabled={stop.isPending}>
                 Stop sharing
               </button>
             </div>
@@ -117,24 +127,41 @@ export function ShareSheet({ recipe, scale, onClose }: { recipe: Recipe; scale: 
         ) : (
           <>
             <p className="muted small">
-              A link anyone can open, no login needed. It shows the photo, ingredients and steps, not your notes.
-              You can turn it off later.
+              A link anyone can open to see {what}, no login needed. It shows photos, ingredients and steps, not your
+              notes. You can turn it off later.
             </p>
             <div className="share-actions">
-              <button type="button" className="btn btn-primary" onClick={() => create.mutate()} disabled={create.isPending}>
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={() => {
+                  setStatus(null);
+                  create.mutate();
+                }}
+                disabled={create.isPending}
+              >
                 {create.isPending ? 'Making link…' : 'Make a link'}
               </button>
             </div>
           </>
         )}
 
-        <h3>Text</h3>
+        <h3>Text or paper</h3>
         <p className="muted small">
-          The recipe written out{scale !== 1 ? ', with the amounts you’ve scaled to' : ''}, for a message or email.
+          {kind === 'meal' ? 'Every recipe' : 'The recipe'} written out
+          {scaled ? ', with the amounts you’ve scaled to' : ''}, for a message, email or printing.
         </p>
         <div className="share-actions">
-          <button type="button" className="btn" onClick={() => send({ title: recipe.title, text: recipeText(recipe, scale) }, 'Recipe')}>
-            Send as text
+          <button
+            type="button"
+            className="btn"
+            onClick={() => text && send({ title, text }, kind === 'meal' ? 'Meal' : 'Recipe')}
+            disabled={!text}
+          >
+            {text ? 'Send as text' : 'Loading…'}
+          </button>
+          <button type="button" className="btn" onClick={onPrint}>
+            Print
           </button>
         </div>
 

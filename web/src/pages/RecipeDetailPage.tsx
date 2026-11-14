@@ -6,7 +6,7 @@ import { AddToMeal } from '../components/AddToMeal';
 import { GroceryPicker } from '../components/GroceryPicker';
 import { MealSwitcher, recipeQuery, useMealParam } from '../components/MealSwitcher';
 import { ServingsControl } from '../components/ServingsControl';
-import { ShareSheet } from '../components/ShareSheet';
+import { recipeText, ShareSheet } from '../components/ShareSheet';
 import { StepText } from '../components/StepText';
 import { scaleIngredient } from '../scale';
 import { formatMinutes } from '../sections';
@@ -44,6 +44,9 @@ function RecipeView({ recipe }: { recipe: Recipe }) {
       queryClient.invalidateQueries({ queryKey: ['recipes'] });
     },
   });
+
+  const setShareToken = (shareToken: string | null) =>
+    queryClient.setQueryData<Recipe>(['recipe', recipe.id], (r) => r && { ...r, shareToken });
 
   const togglePlan = useMutation({
     mutationFn: () =>
@@ -201,7 +204,23 @@ function RecipeView({ recipe }: { recipe: Recipe }) {
         />
       )}
       {choosingMeal && <AddToMeal recipeId={recipe.id} onClose={() => setChoosingMeal(false)} />}
-      {sharing && <ShareSheet recipe={recipe} scale={scale} onClose={() => setSharing(false)} />}
+      {sharing && (
+        <ShareSheet
+          kind="recipe"
+          title={recipe.title}
+          shareToken={recipe.shareToken}
+          createLink={() => api.shareRecipe(recipe.id).then(({ shareToken }) => setShareToken(shareToken))}
+          stopSharing={() => api.unshareRecipe(recipe.id).then(() => setShareToken(null))}
+          text={recipeText(recipe, scale)}
+          scaled={scale !== 1}
+          onPrint={() => {
+            setSharing(false);
+            // Let the sheet close before the print dialog snapshots the page.
+            setTimeout(() => window.print(), 50);
+          }}
+          onClose={() => setSharing(false)}
+        />
+      )}
     </article>
   );
 }
