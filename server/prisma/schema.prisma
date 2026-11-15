@@ -446,7 +446,7 @@ enum FinanceKind {
 model FinanceCategory {
   id           String               @id @default(cuid())
   name         String               @unique
-  /// Fixed costs (insurance, car payments) vs. flexible ones (groceries, dining).
+  /// Fixed costs (insurance, car payments) vs. flexible ones (groceries & dining).
   fixed        Boolean              @default(false)
   position     Int                  @default(0)
   merchants    FinanceMerchant[]
