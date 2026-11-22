@@ -9,7 +9,13 @@ export function StepText({ text, recipeTitle }: { text: string; recipeTitle: str
         part.type === 'text' ? (
           <span key={i}>{part.text}</span>
         ) : (
-          <TimerChip key={i} seconds={part.seconds} text={part.text} label={recipeTitle} />
+          <TimerChip
+            key={i}
+            seconds={part.seconds}
+            maxSeconds={part.maxSeconds}
+            text={part.text}
+            label={recipeTitle}
+          />
         ),
       )}
     </>
